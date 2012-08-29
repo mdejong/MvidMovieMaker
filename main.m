@@ -2,25 +2,6 @@
 
 #import "CGFrameBuffer.h"
 
-#import "NSDataExtensions.h"
-
-#import "EasyArchive.h"
-#import "MovieArchive.h"
-
-#import "FlatMovieFile.h"
-
-// When defined, this define will enable logic that rewrites white pixels (all bits on)
-// as 0xFFFF instead of 0x7FFF. This logic assumes that the decoder is set to ignore
-// the high bit.
-
-//#define REWRITE_WHITE_PIXLES
-
-//#define NO_DUPLICATE_FRAMES
-
-BOOL run_bzip2(NSString *bzPath, NSString *uncompressedPath, BOOL uncompress);
-
-NSData* exec_diff_or_patch(NSString *frame1, NSString *frame2, NSString *delta_path, int isPatch);
-
 int _imageWidth = -1;
 int _imageHeight = -1;
 
@@ -28,30 +9,12 @@ CGSize _movieDimensions;
 
 NSMutableArray *src_filenames;
 
-NSMutableArray *raw_filenames;
-
-NSMutableArray *rle_filenames;
-
-NSUInteger *crcs;
-
 NSString *movie_prefix;
 
-NSMutableArray *all_patch_filenames;
-NSUInteger *all_patch_crcs;
+#define EMIT_DELTA
 
-NSMutableArray *repeated_patch_data;
-
-#define EMIT_RLE_TIFF 1
-#define EMIT_PNG 1
-
-NSString *raw_directory = nil;
-NSString *rle_directory = nil;
-#ifdef EMIT_RLE_TIFF
-NSString *tiff_directory = nil;
-#endif // EMIT_RLE_TIFF
+#ifdef EMIT_DELTA
 NSString *delta_directory = nil;
-#ifdef EMIT_PNG
-NSString *png_directory = nil;
 #endif
 
 // This method will format a frame number integer like "1" into a string like "0001"
@@ -72,32 +35,6 @@ NSString* format_frame_number(int frameIndex) {
 }
 
 int process_frame_file(char *filename, int frameIndex) {
-	if (raw_directory == nil) {
-		raw_directory = [NSString stringWithFormat:@"RAW"];
-		[[NSFileManager defaultManager] createDirectoryAtPath:raw_directory attributes:nil];
-	}
-	if (rle_directory == nil) {
-		rle_directory = [NSString stringWithFormat:@"RLE"];
-		[[NSFileManager defaultManager] createDirectoryAtPath:rle_directory attributes:nil];
-	}
-#ifdef EMIT_RLE_TIFF
-	if (tiff_directory == nil) {
-		tiff_directory = [NSString stringWithFormat:@"TIFF"];
-		[[NSFileManager defaultManager] createDirectoryAtPath:tiff_directory attributes:nil];
-	}
-#endif // EMIT_RLE_TIFF
-
-#ifdef EMIT_PNG
-	if (png_directory == nil) {
-		png_directory = [NSString stringWithFormat:@"PNG"];
-		[[NSFileManager defaultManager] createDirectoryAtPath:png_directory attributes:nil];
-	}
-#endif // EMIT_PNG
-
-	if (delta_directory == nil) {
-		delta_directory = [NSString stringWithFormat:@"DELTA"];
-		[[NSFileManager defaultManager] createDirectoryAtPath:delta_directory attributes:nil];
-	}
 
 	// Push pool after creating global resources
 
@@ -200,43 +137,6 @@ int process_frame_file(char *filename, int frameIndex) {
 
 	CGFrameBuffer *cgBuffer = [[CGFrameBuffer alloc] initWithDimensions:renderWidth height:renderHeight];	
 	[cgBuffer renderView:imageView];
-
-	// Create another graphics buffer to render the scaled image into with the
-	// proper rotation applied.
-
-/*
-
-	// FIXME: image not rendered with rotation already applied because this significantly
-    // increses that size of the RLE encoded data. The specific input movie is causing
-    // this. It is likely that for other movies this would not be an issue. Just comment
-    //	out this logic for now.
-
-	if (isLandscapeOrientation) {
-		int tmp = renderWidth;
-		renderWidth = renderHeight;
-		renderHeight = tmp;
-
-		CGFrameBuffer *rotatedCGFrameBuffer = [[CGFrameBuffer alloc] initWithDimensions:renderWidth height:renderHeight];
-
-		CGImageRef scaledImageRef = [cgBuffer createCGImageRef];		
-
-		[rotatedCGFrameBuffer renderCGImage:scaledImageRef];
-
-		CGImageRelease(scaledImageRef);
-
-		[cgBuffer release];
-		cgBuffer = rotatedCGFrameBuffer;
-		rotatedCGFrameBuffer = nil;
-
-		// FIXME: When rotating the images on render, need to also update the width and height
-		// values encoded into the movie file. If we encode with mixed values then the images
-		// appears 2 or 3 times over.
-		
-	} else {
-		// no need to render a portrait image with rotation
-	}
-
- */
  
 	if (initMovieDimensions) {
 		_movieDimensions.width = renderWidth;
@@ -1432,7 +1332,7 @@ void create_movie_archive() {
 }
 
 int main (int argc, const char * argv[]) {
-    NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
+  NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
 	crcs = NULL;
 
 	if (argc == 3 && strcmp(argv[1], "-extract") == 0) {
@@ -1463,9 +1363,11 @@ int main (int argc, const char * argv[]) {
 		create_movie_archive();
 	}
 
-	if (crcs != NULL)
+	if (crcs != NULL) {
 		free(crcs);
-    [pool drain];
-    return 0;
+  }
+  
+  [pool drain];
+  return 0;
 }
 

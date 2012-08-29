@@ -7,16 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CDAEB66415EDB6FB005A148B /* BufferedFileHandle.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65015EDB6FB005A148B /* BufferedFileHandle.m */; };
 		CDAEB66515EDB6FB005A148B /* CGFrameBuffer.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */; };
-		CDAEB66615EDB6FB005A148B /* EasyArchive.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65515EDB6FB005A148B /* EasyArchive.m */; };
-		CDAEB66715EDB6FB005A148B /* FlatMovieFile.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65715EDB6FB005A148B /* FlatMovieFile.m */; };
 		CDAEB66815EDB6FB005A148B /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65915EDB6FB005A148B /* main.m */; };
-		CDAEB66915EDB6FB005A148B /* MakeFlatMovieMain.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65A15EDB6FB005A148B /* MakeFlatMovieMain.m */; };
-		CDAEB66A15EDB6FB005A148B /* MovieArchive.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65C15EDB6FB005A148B /* MovieArchive.m */; };
-		CDAEB66B15EDB6FB005A148B /* MovieFrame.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65E15EDB6FB005A148B /* MovieFrame.m */; };
-		CDAEB66C15EDB6FB005A148B /* NSDataExtensions.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB66015EDB6FB005A148B /* NSDataExtensions.m */; };
-		CDAEB66D15EDB6FB005A148B /* NSDataFileHandle.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB66215EDB6FB005A148B /* NSDataFileHandle.m */; };
+		CDE1791715EDB8BC00537024 /* runlength.c in Sources */ = {isa = PBXBuildFile; fileRef = CDE1791615EDB8BC00537024 /* runlength.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -32,28 +25,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		CDAEB64F15EDB6FB005A148B /* BufferedFileHandle.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BufferedFileHandle.h; sourceTree = SOURCE_ROOT; };
-		CDAEB65015EDB6FB005A148B /* BufferedFileHandle.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BufferedFileHandle.m; sourceTree = SOURCE_ROOT; };
-		CDAEB65115EDB6FB005A148B /* bzlib.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bzlib.h; sourceTree = SOURCE_ROOT; };
 		CDAEB65215EDB6FB005A148B /* CGFrameBuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CGFrameBuffer.h; sourceTree = SOURCE_ROOT; };
 		CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CGFrameBuffer.m; sourceTree = SOURCE_ROOT; };
-		CDAEB65415EDB6FB005A148B /* EasyArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = EasyArchive.h; sourceTree = SOURCE_ROOT; };
-		CDAEB65515EDB6FB005A148B /* EasyArchive.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = EasyArchive.m; sourceTree = SOURCE_ROOT; };
-		CDAEB65615EDB6FB005A148B /* FlatMovieFile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = FlatMovieFile.h; sourceTree = SOURCE_ROOT; };
-		CDAEB65715EDB6FB005A148B /* FlatMovieFile.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FlatMovieFile.m; sourceTree = SOURCE_ROOT; };
 		CDAEB65815EDB6FB005A148B /* main.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = main.h; sourceTree = SOURCE_ROOT; };
 		CDAEB65915EDB6FB005A148B /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = SOURCE_ROOT; };
-		CDAEB65A15EDB6FB005A148B /* MakeFlatMovieMain.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MakeFlatMovieMain.m; sourceTree = SOURCE_ROOT; };
-		CDAEB65B15EDB6FB005A148B /* MovieArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MovieArchive.h; sourceTree = SOURCE_ROOT; };
-		CDAEB65C15EDB6FB005A148B /* MovieArchive.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MovieArchive.m; sourceTree = SOURCE_ROOT; };
-		CDAEB65D15EDB6FB005A148B /* MovieFrame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MovieFrame.h; sourceTree = SOURCE_ROOT; };
-		CDAEB65E15EDB6FB005A148B /* MovieFrame.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MovieFrame.m; sourceTree = SOURCE_ROOT; };
-		CDAEB65F15EDB6FB005A148B /* NSDataExtensions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NSDataExtensions.h; sourceTree = SOURCE_ROOT; };
-		CDAEB66015EDB6FB005A148B /* NSDataExtensions.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = NSDataExtensions.m; sourceTree = SOURCE_ROOT; };
-		CDAEB66115EDB6FB005A148B /* NSDataFileHandle.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NSDataFileHandle.h; sourceTree = SOURCE_ROOT; };
-		CDAEB66215EDB6FB005A148B /* NSDataFileHandle.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = NSDataFileHandle.m; sourceTree = SOURCE_ROOT; };
 		CDAEB66315EDB6FB005A148B /* runlength.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = runlength.h; sourceTree = SOURCE_ROOT; };
 		CDD41E7C15EDB1A6008B77A1 /* mvidmoviemaker */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = mvidmoviemaker; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDE1791615EDB8BC00537024 /* runlength.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = runlength.c; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,27 +64,12 @@
 		CDD41E7F15EDB1A6008B77A1 /* MvidMovieMaker */ = {
 			isa = PBXGroup;
 			children = (
-				CDAEB64F15EDB6FB005A148B /* BufferedFileHandle.h */,
-				CDAEB65015EDB6FB005A148B /* BufferedFileHandle.m */,
-				CDAEB65115EDB6FB005A148B /* bzlib.h */,
 				CDAEB65215EDB6FB005A148B /* CGFrameBuffer.h */,
 				CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */,
-				CDAEB65415EDB6FB005A148B /* EasyArchive.h */,
-				CDAEB65515EDB6FB005A148B /* EasyArchive.m */,
-				CDAEB65615EDB6FB005A148B /* FlatMovieFile.h */,
-				CDAEB65715EDB6FB005A148B /* FlatMovieFile.m */,
 				CDAEB65815EDB6FB005A148B /* main.h */,
 				CDAEB65915EDB6FB005A148B /* main.m */,
-				CDAEB65A15EDB6FB005A148B /* MakeFlatMovieMain.m */,
-				CDAEB65B15EDB6FB005A148B /* MovieArchive.h */,
-				CDAEB65C15EDB6FB005A148B /* MovieArchive.m */,
-				CDAEB65D15EDB6FB005A148B /* MovieFrame.h */,
-				CDAEB65E15EDB6FB005A148B /* MovieFrame.m */,
-				CDAEB65F15EDB6FB005A148B /* NSDataExtensions.h */,
-				CDAEB66015EDB6FB005A148B /* NSDataExtensions.m */,
-				CDAEB66115EDB6FB005A148B /* NSDataFileHandle.h */,
-				CDAEB66215EDB6FB005A148B /* NSDataFileHandle.m */,
 				CDAEB66315EDB6FB005A148B /* runlength.h */,
+				CDE1791615EDB8BC00537024 /* runlength.c */,
 			);
 			path = MvidMovieMaker;
 			sourceTree = "<group>";
@@ -161,16 +124,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CDAEB66415EDB6FB005A148B /* BufferedFileHandle.m in Sources */,
 				CDAEB66515EDB6FB005A148B /* CGFrameBuffer.m in Sources */,
-				CDAEB66615EDB6FB005A148B /* EasyArchive.m in Sources */,
-				CDAEB66715EDB6FB005A148B /* FlatMovieFile.m in Sources */,
 				CDAEB66815EDB6FB005A148B /* main.m in Sources */,
-				CDAEB66915EDB6FB005A148B /* MakeFlatMovieMain.m in Sources */,
-				CDAEB66A15EDB6FB005A148B /* MovieArchive.m in Sources */,
-				CDAEB66B15EDB6FB005A148B /* MovieFrame.m in Sources */,
-				CDAEB66C15EDB6FB005A148B /* NSDataExtensions.m in Sources */,
-				CDAEB66D15EDB6FB005A148B /* NSDataFileHandle.m in Sources */,
+				CDE1791715EDB8BC00537024 /* runlength.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
