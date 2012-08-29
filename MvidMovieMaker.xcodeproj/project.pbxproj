@@ -1,0 +1,210 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CDD41E8115EDB1A6008B77A1 /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = CDD41E8015EDB1A6008B77A1 /* main.c */; };
+		CDD41E8315EDB1A6008B77A1 /* MvidMovieMaker.1 in CopyFiles */ = {isa = PBXBuildFile; fileRef = CDD41E8215EDB1A6008B77A1 /* MvidMovieMaker.1 */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CDD41E7A15EDB1A6008B77A1 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+				CDD41E8315EDB1A6008B77A1 /* MvidMovieMaker.1 in CopyFiles */,
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		CDD41E7C15EDB1A6008B77A1 /* mvidmoviemaker */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = mvidmoviemaker; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDD41E8015EDB1A6008B77A1 /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
+		CDD41E8215EDB1A6008B77A1 /* MvidMovieMaker.1 */ = {isa = PBXFileReference; lastKnownFileType = text.man; path = MvidMovieMaker.1; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CDD41E7915EDB1A6008B77A1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CDD41E7115EDB1A6008B77A1 = {
+			isa = PBXGroup;
+			children = (
+				CDD41E7F15EDB1A6008B77A1 /* MvidMovieMaker */,
+				CDD41E7D15EDB1A6008B77A1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CDD41E7D15EDB1A6008B77A1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CDD41E7C15EDB1A6008B77A1 /* mvidmoviemaker */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CDD41E7F15EDB1A6008B77A1 /* MvidMovieMaker */ = {
+			isa = PBXGroup;
+			children = (
+				CDD41E8015EDB1A6008B77A1 /* main.c */,
+				CDD41E8215EDB1A6008B77A1 /* MvidMovieMaker.1 */,
+			);
+			path = MvidMovieMaker;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		CDD41E7B15EDB1A6008B77A1 /* MvidMovieMaker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CDD41E8615EDB1A6008B77A1 /* Build configuration list for PBXNativeTarget "MvidMovieMaker" */;
+			buildPhases = (
+				CDD41E7815EDB1A6008B77A1 /* Sources */,
+				CDD41E7915EDB1A6008B77A1 /* Frameworks */,
+				CDD41E7A15EDB1A6008B77A1 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MvidMovieMaker;
+			productName = MvidMovieMaker;
+			productReference = CDD41E7C15EDB1A6008B77A1 /* mvidmoviemaker */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CDD41E7315EDB1A6008B77A1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0430;
+			};
+			buildConfigurationList = CDD41E7615EDB1A6008B77A1 /* Build configuration list for PBXProject "MvidMovieMaker" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = CDD41E7115EDB1A6008B77A1;
+			productRefGroup = CDD41E7D15EDB1A6008B77A1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CDD41E7B15EDB1A6008B77A1 /* MvidMovieMaker */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CDD41E7815EDB1A6008B77A1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDD41E8115EDB1A6008B77A1 /* main.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		CDD41E8415EDB1A6008B77A1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.7;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		CDD41E8515EDB1A6008B77A1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.7;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		CDD41E8715EDB1A6008B77A1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = mvidmoviemaker;
+				VERSION_INFO_BUILDER = mvidmoviemaker;
+			};
+			name = Debug;
+		};
+		CDD41E8815EDB1A6008B77A1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = mvidmoviemaker;
+				VERSION_INFO_BUILDER = mvidmoviemaker;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CDD41E7615EDB1A6008B77A1 /* Build configuration list for PBXProject "MvidMovieMaker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CDD41E8415EDB1A6008B77A1 /* Debug */,
+				CDD41E8515EDB1A6008B77A1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CDD41E8615EDB1A6008B77A1 /* Build configuration list for PBXNativeTarget "MvidMovieMaker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CDD41E8715EDB1A6008B77A1 /* Debug */,
+				CDD41E8815EDB1A6008B77A1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CDD41E7315EDB1A6008B77A1 /* Project object */;
+}
