@@ -14,7 +14,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "CDD41E7B15EDB1A6008B77A1"
-               BuildableName = "MvidMovieMaker"
+               BuildableName = "mvidmoviemaker"
                BlueprintName = "MvidMovieMaker"
                ReferencedContainer = "container:MvidMovieMaker.xcodeproj">
             </BuildableReference>
@@ -32,7 +32,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "CDD41E7B15EDB1A6008B77A1"
-            BuildableName = "MvidMovieMaker"
+            BuildableName = "mvidmoviemaker"
             BlueprintName = "MvidMovieMaker"
             ReferencedContainer = "container:MvidMovieMaker.xcodeproj">
          </BuildableReference>
@@ -51,7 +51,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "CDD41E7B15EDB1A6008B77A1"
-            BuildableName = "MvidMovieMaker"
+            BuildableName = "mvidmoviemaker"
             BlueprintName = "MvidMovieMaker"
             ReferencedContainer = "container:MvidMovieMaker.xcodeproj">
          </BuildableReference>
@@ -69,7 +69,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "CDD41E7B15EDB1A6008B77A1"
-            BuildableName = "MvidMovieMaker"
+            BuildableName = "mvidmoviemaker"
             BlueprintName = "MvidMovieMaker"
             ReferencedContainer = "container:MvidMovieMaker.xcodeproj">
          </BuildableReference>
