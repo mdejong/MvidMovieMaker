@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		CDAEB66515EDB6FB005A148B /* CGFrameBuffer.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */; };
 		CDAEB66815EDB6FB005A148B /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65915EDB6FB005A148B /* main.m */; };
+		CDD23BA415EFCFDC0021D00C /* libapng.c in Sources */ = {isa = PBXBuildFile; fileRef = CDD23BA215EFCFDC0021D00C /* libapng.c */; };
+		CDD23BA715EFD3F80021D00C /* libz.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = CDD23BA615EFD3F80021D00C /* libz.dylib */; };
 		CDE1791715EDB8BC00537024 /* runlength.c in Sources */ = {isa = PBXBuildFile; fileRef = CDE1791615EDB8BC00537024 /* runlength.c */; };
 		CDE6D04B15EE6E570084FFAA /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDE6D04A15EE6E570084FFAA /* Cocoa.framework */; };
 /* End PBXBuildFile section */
@@ -30,6 +32,9 @@
 		CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CGFrameBuffer.m; sourceTree = SOURCE_ROOT; };
 		CDAEB65915EDB6FB005A148B /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = SOURCE_ROOT; };
 		CDAEB66315EDB6FB005A148B /* runlength.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = runlength.h; sourceTree = SOURCE_ROOT; };
+		CDD23BA215EFCFDC0021D00C /* libapng.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = libapng.c; sourceTree = SOURCE_ROOT; };
+		CDD23BA315EFCFDC0021D00C /* libapng.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = libapng.h; sourceTree = SOURCE_ROOT; };
+		CDD23BA615EFD3F80021D00C /* libz.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libz.dylib; path = usr/lib/libz.dylib; sourceTree = SDKROOT; };
 		CDD41E7C15EDB1A6008B77A1 /* mvidmoviemaker */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = mvidmoviemaker; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDE1791615EDB8BC00537024 /* runlength.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = runlength.c; sourceTree = SOURCE_ROOT; };
 		CDE6D04A15EE6E570084FFAA /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
@@ -40,6 +45,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDD23BA715EFD3F80021D00C /* libz.dylib in Frameworks */,
 				CDE6D04B15EE6E570084FFAA /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -47,11 +53,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		CDD41E7115EDB1A6008B77A1 = {
+		CDD23BA815EFD4060021D00C /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				CDE6D04A15EE6E570084FFAA /* Cocoa.framework */,
+				CDD23BA615EFD3F80021D00C /* libz.dylib */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		CDD41E7115EDB1A6008B77A1 = {
+			isa = PBXGroup;
+			children = (
 				CDD41E7F15EDB1A6008B77A1 /* MvidMovieMaker */,
+				CDD23BA815EFD4060021D00C /* Frameworks */,
 				CDD41E7D15EDB1A6008B77A1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -71,6 +86,8 @@
 				CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */,
 				CDAEB66315EDB6FB005A148B /* runlength.h */,
 				CDE1791615EDB8BC00537024 /* runlength.c */,
+				CDD23BA315EFCFDC0021D00C /* libapng.h */,
+				CDD23BA215EFCFDC0021D00C /* libapng.c */,
 				CDAEB65915EDB6FB005A148B /* main.m */,
 			);
 			path = MvidMovieMaker;
@@ -129,6 +146,7 @@
 				CDAEB66515EDB6FB005A148B /* CGFrameBuffer.m in Sources */,
 				CDAEB66815EDB6FB005A148B /* main.m in Sources */,
 				CDE1791715EDB8BC00537024 /* runlength.c in Sources */,
+				CDD23BA415EFCFDC0021D00C /* libapng.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
