@@ -252,11 +252,15 @@ BOOL fileExists(NSString *filePath) {
 //
 // To create a .mvid video file from a series of PNG images:
 //
-// mvidmoviemaker out.mvid FRAMES/Frame001.png
+// mvidmoviemaker movie.mvid FRAMES/Frame001.png 15
 //
 // To extract the contents of an .mvid movie to PNG images:
 //
 // mvidmoviemaker --extract out.mvid
+
+#define USAGE \
+  "usage: mvidmoviemaker FILE.mvid FIRSTFRAME.png FRAMERATE ?KEYFRAME?" "\n" \
+  "or   : mvidmoviemaker -extract FILE.mvid" "\n"
 
 int main (int argc, const char * argv[]) {
   NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
@@ -266,21 +270,30 @@ int main (int argc, const char * argv[]) {
 
     char *mvidFilename = (char *)argv[2];
 		extract_movie_frames(mvidFilename);
-	} else if (argc == 3) {
-    // User will pass in the name of the output movie and the name
-    // of the first file in the image sequence. This makes it posible
-    // to know the format of the frame numbers because all the filenames
-    // need to match the format of the first frame filename.
+	} else if (argc == 4 || argc == 5) {
+    // FILE.mvid : name of output file that will contain all the video frames
+    // FIRSTFRAME.png : name of first frame file of input PNG files. All
+    //   video frames must exist in the same directory
+    // FRAMERATE is a floating point framerate value. Common values
+    // include 1.0 FPS, 15 FPS, 29.97 FPS, and 30 FPS.
+    // KEYFRAME is the number of frames until the next keyframe in the
+    //   resulting movie file. The default of 10,000 ensures that
+    //   the resulting movie would only contain the initial keyframe.
 
     char *mvidFilenameCstr = (char*)argv[1];
     char *firstFilenameCstr = (char*)argv[2];
+    char *framerateCstr = (char*)argv[3];
+    char *keyframeCstr = "10000";
+    if (argc == 5) {
+      keyframeCstr = (char*)argv[4];
+    }
     
-    NSString *mvidFilename = [NSString stringWithCString:mvidFilenameCstr];
+    NSString *mvidFilename = [NSString stringWithUTF8String:mvidFilenameCstr];
     
     BOOL isMvid = [mvidFilename hasSuffix:@".mvid"];
     
     if (isMvid == FALSE) {
-      fprintf(stderr, "usage mvidmoviemaker FILE.mvid FIRSTFRAME.png");
+      fprintf(stderr, USAGE);
       exit(1);
     }
     
@@ -289,7 +302,7 @@ int main (int argc, const char * argv[]) {
     // This makes it possible to pass the 25th frame ofa 50 frame animation
     // and generate an animation 25 frames in duration.
     
-    NSString *firstFilename = [NSString stringWithCString:firstFilenameCstr];
+    NSString *firstFilename = [NSString stringWithUTF8String:firstFilenameCstr];
     
     if (fileExists(firstFilename) == FALSE) {
       fprintf(stderr, "error: first filename \"%s\" does not exist", firstFilenameCstr);
@@ -324,7 +337,7 @@ int main (int argc, const char * argv[]) {
       if (c >= '0' && c <= '9') {
         numericStartIndex = i;
       }
-    }    
+    }
     if (numericStartIndex == -1 || numericStartIndex == 0) {
       fprintf(stderr, "error: could not find frame number in first filename \"%s\"", firstFilenameCstr);
       exit(1);
@@ -388,7 +401,40 @@ int main (int argc, const char * argv[]) {
       fprintf(stderr, "error: could not find last frame number");
       exit(1);
     }
+    
+    // FRAMERATE is a floating point number that indicates the delay between frames.
+    // This framerate value is a constant that does not change over the course of the
+    // movie, though it is possible that a certain frame could repeat a number of times.
+        
+    NSString *framerateStr = [NSString stringWithUTF8String:framerateCstr];
 
+    if ([framerateStr length] == 0) {
+      fprintf(stderr, "error: FRAMERATE is invalid \"%s\"", firstFilenameCstr);
+      exit(1);
+    }
+    
+    float framerateNum = [framerateStr floatValue];
+    if (framerateNum <= 0.0f || framerateNum >= 90.0f) {
+      fprintf(stderr, "error: FRAMERATE is invalid \"%f\"", framerateNum);
+      exit(1);
+    }
+    
+    // KEYFRAME : integer that indicates a keyframe should be emitted every N frames
+    
+    NSString *keyframeStr = [NSString stringWithUTF8String:keyframeCstr];
+
+    if ([keyframeStr length] == 0) {
+      fprintf(stderr, "error: KEYFRAME is invalid \"%s\"", keyframeCstr);
+      exit(1);
+    }
+    
+    int keyframeNum = [keyframeStr intValue];
+    if (keyframeNum <= 0) {
+      keyframeNum = 10000;
+    }
+    
+    // FIXME: Open .mvid and pass in the framerate to setup the header.
+    
     // We now know the start and end integer values of the frame filename range.
 
 		int frameIndex = 0;
@@ -397,8 +443,8 @@ int main (int argc, const char * argv[]) {
       fprintf(stdout, "loading %s as frame %d\n", [framePath UTF8String], frameIndex+1);
 			fflush(stdout);
       
-			process_frame_file(framePath, frameIndex++);
-      
+			process_frame_file(framePath, frameIndex);
+      frameIndex++;
     }
 
     // Done writing .mvid file
@@ -407,7 +453,7 @@ int main (int argc, const char * argv[]) {
     fflush(stdout);
     
 	} else if (argc == 2) {
-    fprintf(stderr, "usage mvidmoviemaker FILE.mvid FIRSTFRAME.png");
+    fprintf(stderr, USAGE);
     exit(1);
   }
   
