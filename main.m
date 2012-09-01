@@ -89,8 +89,10 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
 	NSImageView *imageView = [[[NSImageView alloc] initWithFrame:viewRect] autorelease];
 	imageView.image = img;
 
-	CGFrameBuffer *cgBuffer = [[[CGFrameBuffer alloc] initWithDimensions:imageWidth height:imageHeight] autorelease];	
-	[cgBuffer renderView:imageView];
+	CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:imageWidth height:imageHeight];
+  
+	BOOL worked = [cgBuffer renderView:imageView];
+  assert(worked);
 
   /*
 	// RLE encode the RAW data and save to the RLE directory.
@@ -109,6 +111,27 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
 	[rle_filenames addObject:rlePath];
    */
   
+  if (FALSE) {
+    // Dump output frames from rendered captured view, to make sure the logic is working
+
+    
+    CGImageRef imgRef = [cgBuffer createCGImageRef];
+    
+    NSImage *imgRendered = [[[NSImage alloc] initWithCGImage:imgRef size:CGSizeMake(cgBuffer.width, cgBuffer.height)] autorelease];
+    
+    NSBitmapImageRep *imgRenderedBitmapRep = [[imgRendered representations] objectAtIndex:0];
+    
+    NSData *data;
+    data = [imgRenderedBitmapRep representationUsingType:NSPNGFileType
+                              properties:nil];
+    
+    NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame0.4%d", frameIndex+1];
+    
+    [data writeToFile:dumpFilename atomically:NO];
+    
+    CGImageRelease(imgRef);    
+  }
+  
   // The CGFrameBuffer now contains the rendered pixels in the expected output format. Write to MVID frame.
 
   if (TRUE) {
@@ -119,7 +142,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
     
     [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];    
   }
-    
+  
 	// free up resources
   
   [pool drain];
@@ -180,7 +203,7 @@ int is_duplicate_of_previous_frame(int frameIndex)
 // the current directory.
 
 void extract_movie_frames(char *archive_filename) {
-	BOOL worked;
+	//BOOL worked;
 	return;
 }
 

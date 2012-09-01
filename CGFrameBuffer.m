@@ -26,40 +26,86 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
 
 @implementation CGFrameBuffer
 
-@synthesize pixels, numBytes, width, height;
-@synthesize frameIndex, idc;
+@synthesize pixels = m_pixels;
+@synthesize numBytes = m_numBytes;
+@synthesize width = m_width;
+@synthesize height = m_height;
+@synthesize bitsPerPixel = m_bitsPerPixel;
+@synthesize bytesPerPixel = m_bytesPerPixel;
+//@synthesize isLockedByDataProvider = m_isLockedByDataProvider;
+@synthesize lockedByImageRef = m_lockedByImageRef;
 
-- (id) initWithDimensions:(NSInteger)inWidth height:(NSInteger)inHeight
++ (CGFrameBuffer*) cGFrameBufferWithBppDimensions:(NSInteger)bitsPerPixel
+                                            width:(NSInteger)width
+                                           height:(NSInteger)height
 {
-	NSAssert(inWidth > 0, @"invalid width");
-	NSAssert(inHeight > 0, @"invalid height");
+  CGFrameBuffer *obj = [[CGFrameBuffer alloc] initWithBppDimensions:bitsPerPixel width:width height:height];
+  [obj autorelease];
+  return obj;
+}
 
+- (id) initWithBppDimensions:(NSInteger)bitsPerPixel
+                       width:(NSInteger)width
+                      height:(NSInteger)height;
+{
 	// Ensure that memory is allocated in terms of whole words, the
 	// bitmap context won't make use of the extra half-word.
-
-	size_t numPixels = inWidth * inHeight;
+  
+	size_t numPixels = width * height;
 	size_t numPixelsToAllocate = numPixels;
-
+  
 	if ((numPixels % 2) != 0) {
 		numPixelsToAllocate++;
 	}
-
-	int inNumBytes = numPixelsToAllocate * BYTES_PER_PIXEL;
-	char* buffer = (char*) malloc(inNumBytes);
-
-	if (buffer == NULL)
-		return nil;
-
-	memset(buffer, 0, inNumBytes);
-
-  if (self = [super init]) {
-    self->pixels = buffer;
-    self->numBytes = inNumBytes;
-    self->width = inWidth;
-    self->height = inHeight;
+  
+  // 16bpp -> 2 bytes per pixel, 24bpp and 32bpp -> 4 bytes per pixel
+  
+  int bytesPerPixel;
+  if (bitsPerPixel == 16) {
+    bytesPerPixel = 2;
+  } else if (bitsPerPixel == 24 || bitsPerPixel == 32) {
+    bytesPerPixel = 4;
+  } else {
+    NSAssert(FALSE, @"bitsPerPixel is invalid");
   }
-
+  
+	int inNumBytes = numPixelsToAllocate * bytesPerPixel;
+    
+	char* buffer;
+  size_t allocNumBytes;
+  
+  allocNumBytes = inNumBytes;
+  buffer = (char*) malloc(allocNumBytes);
+  if (buffer) {
+    bzero(buffer, allocNumBytes);
+  }  
+  
+	if (buffer == NULL) {
+		return nil;
+  }
+  
+  if ((self = [super init])) {
+    self->m_bitsPerPixel = bitsPerPixel;
+    self->m_bytesPerPixel = bytesPerPixel;
+    self->m_pixels = buffer;
+    self->m_numBytes = allocNumBytes;
+    self->m_width = width;
+    self->m_height = height;
+  } else {
+    free(buffer);
+  }
+  
 	return self;
+}
+
+- (void)dealloc {
+	NSAssert(self->m_isLockedByDataProvider == FALSE, @"dealloc: buffer still locked by data provider");
+  
+	if (self->m_pixels != NULL) {
+		free(self->m_pixels);
+  }
+  
+  [super dealloc];
 }
 
 - (BOOL) renderView:(UIView*)view
@@ -72,158 +118,141 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
 	// transformation has been applied. Once the bitmap
 	// context has been captured, it should be rendered with
 	// no transformations. Also note that the colorspace
-	// is always ARGBwith no alpha, the bitmap capture happens
+	// is always ARGB with no alpha, the bitmap capture happens
 	// *after* any colors in the image have been converted to RGB pixels.
-
-//	size_t w = view.layer.bounds.size.width;
-//	size_t h = view.layer.bounds.size.height;
-
+  
 	size_t w = view.frame.size.width;
 	size_t h = view.frame.size.height;
-
-	if ((self.width != w) || (self.height != h)) {
-		return FALSE;
-	}
-
-	size_t bytesPerRow = width * BYTES_PER_PIXEL;
+  
+  if ((self.width != w) || (self.height != h)) {
+  		return FALSE;
+  }
+  
+  size_t bitsPerComponent;
+  size_t numComponents;
+  size_t bitsPerPixel;
+  size_t bytesPerRow;
+  
+  if (self.bitsPerPixel == 16) {
+    bitsPerComponent = 5;
+    //    numComponents = 3;
+    bitsPerPixel = 16;
+    bytesPerRow = self.width * (bitsPerPixel / 8);    
+  } else if (self.bitsPerPixel == 24 || self.bitsPerPixel == 32) {
+    bitsPerComponent = 8;
+    numComponents = 4;
+    bitsPerPixel = bitsPerComponent * numComponents;
+    bytesPerRow = self.width * (bitsPerPixel / 8);
+  } else {
+    NSAssert(FALSE, @"unmatched bitsPerPixel");
+  }
+  
 	CGBitmapInfo bitmapInfo = [self getBitmapInfo];
-
+  
 	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-
-	NSAssert(pixels != NULL, @"pixels must not be NULL");
-
-//	NSAssert(isLockedByDataProvider == FALSE, @"renderView: pixel buffer locked by data provider");
-
+  
+	NSAssert(self.pixels != NULL, @"pixels must not be NULL");
+  
+	NSAssert(self.isLockedByDataProvider == FALSE, @"renderView: pixel buffer locked by data provider");
+  
 	CGContextRef bitmapContext =
-		CGBitmapContextCreate(pixels, width, height, BITS_PER_COMPONENT, bytesPerRow, colorSpace, bitmapInfo);
-
+    CGBitmapContextCreate(self.pixels, self.width, self.height, bitsPerComponent, bytesPerRow, colorSpace, bitmapInfo);
+  
 	CGColorSpaceRelease(colorSpace);
-
+  
 	if (bitmapContext == NULL) {
 		return FALSE;
 	}
-
+  
+  // FIXME: A lot of memory is being allocated to render into this bitmapContext. But, the bitmap
+  // should already be tied to memory that does the backing.
+	
+  // Would it be faster/possible to create a CGIMage ref directly from the image data (PNG)
+  // and then render to the bitmapContext? Would that avoid all the memory allocation?
+  // That should do the color space conversion but what about the scaling/rotation? For
+  // full screen images, they should only be oriented one way anyway, the way that the
+  // wider side indicates.
+  
 	// Translation matrix that maps CG space to view space
-
-//	CGContextTranslateCTM(bitmapContext, 0.0, height);
-//	CGContextScaleCTM(bitmapContext, 1.0, -1.0);
-
-// FIXME: A lot of memory is being allocated to render into this bitmapContext. But, the bitmap
-// should already be tied to memory that does the backing.
-	
-// Would it be faster/possible to create a CGIMage ref directly from the image data (PNG)
-// and then render to the bitmapContext? Would that avoid all the memory allocation?
-// That should do the color space conversion but what about the scaling/rotation? For
-// full screen images, they should only be oriented one way anyway, the way that the
-// wider side indicates.
-
-	// Broken!
-//	[view.layer renderInContext:bitmapContext];
-
+  
+	//CGContextTranslateCTM(bitmapContext, 0.0, self.height);
+	//CGContextScaleCTM(bitmapContext, 1.0, -1.0);
+	//[view.layer renderInContext:bitmapContext];
+  
 	NSRect bounds = NSRectFromCGRect(CGRectMake( 0.0f, 0.0f, w, h ));
-
+  
 	NSGraphicsContext *bitmapGraphicsContext =
-		[NSGraphicsContext graphicsContextWithGraphicsPort:bitmapContext flipped:FALSE]; 
-	
-	[view displayRectIgnoringOpacity:bounds inContext:bitmapGraphicsContext];
+  [NSGraphicsContext graphicsContextWithGraphicsPort:bitmapContext flipped:FALSE]; 
 
+  // Draw reciever and any subviews. The Ignoring Opacity this simply means that
+  // the drawing operation will draw only considering the view and any windows
+  // that it contains.
+  
+  [view displayRectIgnoringOpacity:bounds inContext:bitmapGraphicsContext];
+  
 	CGContextRelease(bitmapContext);
-
-	return TRUE;
-}
-
-- (BOOL) renderCGImage:(CGImageRef)cgImageRef
-{
-	// Render the contents of an image to pixels.
-
-	size_t w = CGImageGetWidth(cgImageRef);
-	size_t h = CGImageGetHeight(cgImageRef);
-
-	BOOL isRotated = FALSE;
-
-	if ((self.width == w) && (self.height == h)) {
-		// width and height match
-	} else if ((self.width == h) && (self.height == w)) {
-		// rotated 90
-		isRotated = TRUE;
-	} else {
-		return FALSE;
-	}
-	
-	size_t bytesPerRow = width * BYTES_PER_PIXEL;
-	CGBitmapInfo bitmapInfo = [self getBitmapInfo];
-	
-	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-	
-	NSAssert(pixels != NULL, @"pixels must not be NULL");
-
-	//	NSAssert(isLockedByDataProvider == FALSE, @"renderView: pixel buffer locked by data provider");
-
-	CGContextRef bitmapContext =
-		CGBitmapContextCreate(pixels, width, height, BITS_PER_COMPONENT, bytesPerRow, colorSpace, bitmapInfo);
-	
-	CGColorSpaceRelease(colorSpace);
-	
-	if (bitmapContext == NULL) {
-		return FALSE;
-	}
-
-	CGRect bounds = CGRectMake( 0.0f, 0.0f, width, height );
-
-	if (isRotated) {
-		// Rotate a landscape image 90 degrees CW so that it is
-		// rendered in a portrait orientation by default.
-		// Translate rotation center point up so that image
-		// is rotated about the upper left hand corner of screen.
-
-		CGContextTranslateCTM(bitmapContext, 0, height);
-		CGContextRotateCTM(bitmapContext, -M_PI / 2);
-		bounds = CGRectMake( 0.0f, 0.0f, height, width );
-	}
-
-	CGContextDrawImage(bitmapContext, bounds, cgImageRef);
-	
-	CGContextRelease(bitmapContext);
-	
+  
 	return TRUE;
 }
 
 - (CGImageRef) createCGImageRef
 {
 	// Load pixel data as a core graphics image object.
-
-	size_t bytesPerRow = width * BYTES_PER_PIXEL; // ARGB = 2 bytes per pixel (16 bits)
-
+  
+  NSAssert(self.width > 0 && self.height > 0, @"width or height is zero");
+  
+  size_t bitsPerComponent;
+  size_t numComponents;
+  size_t bitsPerPixel;
+  size_t bytesPerRow;
+  
+  if (self.bitsPerPixel == 16) {
+    bitsPerComponent = 5;
+    //    numComponents = 3;
+    bitsPerPixel = 16;
+    bytesPerRow = self.width * (bitsPerPixel / 8);    
+  } else if (self.bitsPerPixel == 24 || self.bitsPerPixel == 32) {
+    bitsPerComponent = 8;
+    numComponents = 4;
+    bitsPerPixel = bitsPerComponent * numComponents;
+    bytesPerRow = self.width * (bitsPerPixel / 8);
+  } else {
+    NSAssert(FALSE, @"unmatched bitsPerPixel");
+  }  
+  
 	CGBitmapInfo bitmapInfo = [self getBitmapInfo];
-
+  
 	CGDataProviderReleaseDataCallback releaseData = CGFrameBufferProviderReleaseData;
-
+  
+  void *pixelsPtr = self.pixels;
+  
 	CGDataProviderRef dataProviderRef = CGDataProviderCreateWithData(self,
-																	 pixels,
-																	 width * height * BYTES_PER_PIXEL,
-																	 releaseData);
-
+                                                                   pixelsPtr,
+                                                                   self.width * self.height * (bitsPerPixel / 8),
+                                                                   releaseData);
+  
 	BOOL shouldInterpolate = FALSE; // images at exact size already
-
+  
 	CGColorRenderingIntent renderIntent = kCGRenderingIntentDefault;
-
+  
 	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-
-	CGImageRef inImageRef = CGImageCreate(width, height, BITS_PER_COMPONENT, BITS_PER_PIXEL, bytesPerRow,
-										  colorSpace, bitmapInfo, dataProviderRef, NULL,
-										  shouldInterpolate, renderIntent);
-
+  
+	CGImageRef inImageRef = CGImageCreate(self.width, self.height, bitsPerComponent, bitsPerPixel, bytesPerRow,
+                                        colorSpace, bitmapInfo, dataProviderRef, NULL,
+                                        shouldInterpolate, renderIntent);
+  
 	CGDataProviderRelease(dataProviderRef);
-
+  
 	CGColorSpaceRelease(colorSpace);
-
+  
 	if (inImageRef != NULL) {
 		self.isLockedByDataProvider = TRUE;
+		self->m_lockedByImageRef = inImageRef; // Don't retain, just save pointer
 	}
-
+  
 	return inImageRef;
 }
-
+ 
 - (void) createBitmapImageFromImage:(NSImage*)image
 {
 	NSSize imageSize = [image size];
@@ -252,16 +281,21 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
 // the location of the pixel, the old value (the one in this frame)
 // and the new value (the one in the new frame).
 
+// FIXME: need 16 and 32 bpp versions of this logic
+
 - (NSArray*) calculateDeltaPixels:(CGFrameBuffer*)otherFrame
 {
 	NSMutableArray *deltaPixels = [NSMutableArray arrayWithCapacity:1024];
 	
-	NSAssert(width == otherFrame.width, @"frame widths don't match");
-	NSAssert(height == otherFrame.height, @"frame heights don't match");
+	NSAssert(self.width == otherFrame.width, @"frame widths don't match");
+	NSAssert(self.height == otherFrame.height, @"frame heights don't match");
 
-	uint16_t *pixelData = (uint16_t*) pixels;
-	uint16_t *other_pixelData = (uint16_t*) otherFrame->pixels;
+	uint16_t *pixelData = (uint16_t*) self.pixels;
+	uint16_t *other_pixelData = (uint16_t*) otherFrame.pixels;
 
+  int width = self.width;
+  int height = self.height;
+  
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
 			uint16_t pixel = pixelData[(width * y) + x];
@@ -283,216 +317,24 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
 	return deltaPixels;
 }
 
-// Given an array of delta pixels that applies to this image, calculate a
-// set of damage regions (DeltaBounds objects) that indicate the
-// bounds of the delta pixels.
-
-- (NSArray*) calculateDamageBounds:(NSArray*)deltaPixels
-{
-	DeltaPixel *damagePixels[width][height];
-	memset(&damagePixels, 0, sizeof(damagePixels));
-
-	// Iterate over all the damage pixels and fill in values
-
-	for (DeltaPixel *deltaPixel in deltaPixels) {
-		damagePixels[deltaPixel->x][deltaPixel->y] = deltaPixel;
-	}
-
-	// Iterate over damage pixels and use array info to determine if a
-	// pixel defines the upper left corner of a damage region or the
-	// lower right corner.
-
-	NSMutableArray *damageBounds = [NSMutableArray arrayWithCapacity:1024];
-
-	for (DeltaPixel *deltaPixel in deltaPixels) {
-		// Check for a pixel that defines the left edge or a damage
-		// region. For a given pixel check the 8 around it.
-
-		// 1 2 3
-		// 4 P 5
-		// 6 7 8
-
-		NSUInteger x = deltaPixel->x;
-		NSUInteger y = deltaPixel->y;
-		
-		NSUInteger left = x;
-		NSUInteger right = x;
-		NSUInteger top = y;
-		NSUInteger bottom = y;
-
-		// If a damage region is already defined for a pixel around
-		// this one, then use that region. Otherwise, create a
-		// new damage region.
-
-		NSMutableArray *otherPixels = [NSMutableArray arrayWithCapacity:8];
-		
-		// 1 2 3
-
-		if (x > 0 && y > 0 && damagePixels[x-1][y-1] != NULL) {
-			left = x-1;
-			top = y-1;
-
-			DeltaPixel *otherPixel = damagePixels[x-1][y-1];
-			if (otherPixel->deltaBounds != nil) {
-				deltaPixel->deltaBounds = otherPixel->deltaBounds;
-			} else {
-				[otherPixels addObject:otherPixel];
-			}
-		}
-		if (y > 0 && damagePixels[x][y-1] != NULL) {
-			top = y-1;
-
-			DeltaPixel *otherPixel = damagePixels[x][y-1];
-			if (otherPixel->deltaBounds != nil) {
-				deltaPixel->deltaBounds = otherPixel->deltaBounds;
-			} else {
-				[otherPixels addObject:otherPixel];
-			}
-		}
-		if (x < width-1 && y > 0 && damagePixels[x+1][y-1] != NULL) {
-			right = x+1;
-			top = y-1;
-			
-			DeltaPixel *otherPixel = damagePixels[x+1][y-1];
-			if (otherPixel->deltaBounds != nil) {
-				deltaPixel->deltaBounds = otherPixel->deltaBounds;
-			} else {
-				[otherPixels addObject:otherPixel];
-			}			
-		}
-
-		// 4 P 5
-		
-		if (x > 0 && damagePixels[x-1][y] != NULL) {
-			left = x-1;
-
-			DeltaPixel *otherPixel = damagePixels[x-1][y];
-			if (otherPixel->deltaBounds != nil) {
-				deltaPixel->deltaBounds = otherPixel->deltaBounds;
-			} else {
-				[otherPixels addObject:otherPixel];
-			}			
-		}
-		if (x < width-1 && damagePixels[x+1][y] != NULL) {
-			right = x+1;
-
-			DeltaPixel *otherPixel = damagePixels[x+1][y];
-			if (otherPixel->deltaBounds != nil) {
-				deltaPixel->deltaBounds = otherPixel->deltaBounds;
-			} else {
-				[otherPixels addObject:otherPixel];
-			}			
-		}
-
-		// 6 7 8
-		
-		if (x > 0 && y < height-1 && damagePixels[x-1][y+1] != NULL) {
-			left = x-1;
-			bottom = y+1;
-
-			DeltaPixel *otherPixel = damagePixels[x-1][y+1];
-			if (otherPixel->deltaBounds != nil) {
-				deltaPixel->deltaBounds = otherPixel->deltaBounds;
-			} else {
-				[otherPixels addObject:otherPixel];
-			}			
-		}
-		if (y < height-1 && damagePixels[x][y+1] != NULL) {
-			left = x-1;
-			bottom = y+1;
-
-			DeltaPixel *otherPixel = damagePixels[x][y+1];
-			if (otherPixel->deltaBounds != nil) {
-				deltaPixel->deltaBounds = otherPixel->deltaBounds;
-			} else {
-				[otherPixels addObject:otherPixel];
-			}			
-		}
-		if (x < width-1 && y < height-1 && damagePixels[x+1][y+1] != NULL) {
-			left = x-1;
-			bottom = y+1;
-
-			DeltaPixel *otherPixel = damagePixels[x+1][y+1];
-			if (otherPixel->deltaBounds != nil) {
-				deltaPixel->deltaBounds = otherPixel->deltaBounds;
-			} else {
-				[otherPixels addObject:otherPixel];
-			}			
-		}
-
-		// If no damage region was found near this one, then this must be the
-		// first pixel in the damage region.
-
-		if (deltaPixel->deltaBounds == nil) {
-			DeltaBounds *newDeltaBounds = [[DeltaBounds alloc] init];
-			[damageBounds addObject:newDeltaBounds];
-			[newDeltaBounds release];
-
-			newDeltaBounds->x = x;
-			newDeltaBounds->y = y;
-			newDeltaBounds->width = 1;
-			newDeltaBounds->height = 1;
-
-			// the pixel contains a pointer but does not hold a ref
-
-			deltaPixel->deltaBounds = newDeltaBounds;
-			
-			// Update the damage region pointer for any nearby pixels
-
-			for (DeltaPixel *otherPixel in otherPixels) {
-				otherPixel->deltaBounds = newDeltaBounds;
-			}
-		} else {
-			// A bound was found at a nearby pixel, update any bounds
-			// that might be changed by this pixel.
-			
-			DeltaBounds *currentBounds = deltaPixel->deltaBounds;
-
-			// The left edge can move to the left if another pixel farther
-			// to the left is found in a row below a pervious one.
-
-			if (left < currentBounds->x) {
-				int currentRight = currentBounds->x + currentBounds->width;
-				currentBounds->x = left;
-				currentBounds->width = currentRight - currentBounds->x;
-			}
-			if ((currentBounds->x + currentBounds->width) < right) {
-				currentBounds->width = right - currentBounds->x;
-			}
-
-			// The upper Y bound for a damage region can't move upward
-			// since columns are scanned first.
-
-			NSAssert(top >= currentBounds->y, @"can't be smaller than existing damage region Y");
-
-			if ((currentBounds->y + currentBounds->height) < bottom) {
-				currentBounds->height = bottom - currentBounds->y;
-			}			
-		}
-	}
-
-	return damageBounds;	
-}
-
 - (CGBitmapInfo) getBitmapInfo
 {
-/*
-	CGBitmapInfo bitmapInfo = kCGBitmapByteOrderDefault;
-	bitmapInfo |= kCGImageAlphaNoneSkipLast;		// 32 bit RGBA where the A is ignored
-	//bitmapInfo |= kCGImageAlphaLast;				// 32 bit RGBA
-	//bitmapInfo |= kCGImageAlphaPremultipliedLast;	// 32 bit RGBA where A is pre-multiplied alpha
-
-*/
-
-	CGBitmapInfo bitmapInfo = kCGBitmapByteOrder16Little;
-	bitmapInfo |= kCGImageAlphaNoneSkipFirst;
-
+	CGBitmapInfo bitmapInfo = 0;
+  if (self.bitsPerPixel == 16) {
+    bitmapInfo = kCGBitmapByteOrder16Host | kCGImageAlphaNoneSkipFirst;
+  } else if (self.bitsPerPixel == 24) {
+    bitmapInfo |= kCGBitmapByteOrder32Host | kCGImageAlphaNoneSkipFirst;
+  } else if (self.bitsPerPixel == 32) {
+    bitmapInfo |= kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst;
+  } else {
+    assert(0);
+  }
 	return bitmapInfo;
 }
 
 - (NSData*) copyData
 {
-	return [NSData dataWithBytes:pixels length:numBytes];
+	return [NSData dataWithBytes:self.pixels length:self.numBytes];
 }
 
 // These properties are implemented explicitly to aid
@@ -503,40 +345,43 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
 
 - (BOOL) isLockedByDataProvider
 {
-	return self->isLockedByDataProvider;
+	return self->m_isLockedByDataProvider;
 }
 
 - (void) setIsLockedByDataProvider:(BOOL)newValue
 {
-	NSAssert(isLockedByDataProvider == !newValue,
-			 @"isLockedByDataProvider property can only be switched");
-
-	self->isLockedByDataProvider = newValue;
-
-	if (isLockedByDataProvider) {
+	NSAssert(m_isLockedByDataProvider == !newValue,
+           @"isLockedByDataProvider property can only be switched");
+  
+	self->m_isLockedByDataProvider = newValue;
+  
+	if (m_isLockedByDataProvider) {
 		[self retain]; // retain extra ref to self
 	} else {
-		[self release]; // release extra ref to self	
+#ifdef DEBUG_LOGGING
+		if (TRUE)
+#else
+      if (FALSE)
+#endif
+      {
+        // Catch the case where the very last ref to
+        // an object is dropped fby CoreGraphics
+        
+        int refCount = [self retainCount];
+        
+        if (refCount == 1) {
+          // About to drop last ref to this frame buffer
+          
+          NSLog(@"dropping last ref to CGFrameBuffer held by DataProvider");
+        }
+        
+        [self release];
+      } else {
+        // Regular logic for non-debug situations
+        
+        [self release]; // release extra ref to self
+      }
 	}
-}
-
-- (BOOL) isLockedByReadyQueue
-{
-	return self->isLockedByReadyQueue;
-}
-
-- (void) setIsLockedByReadyQueue:(BOOL)newValue
-{
-	self->isLockedByReadyQueue = newValue;
-}
-
-- (void)dealloc {
-	NSAssert(isLockedByDataProvider == FALSE, @"dealloc: buffer still locked by data provider");
-
-	if (pixels != NULL)
-		free(pixels);
-
-    [super dealloc];
 }
 
 @end
