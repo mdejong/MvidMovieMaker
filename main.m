@@ -14,6 +14,20 @@ NSString *movie_prefix;
 NSString *delta_directory = nil;
 #endif
 
+
+// Input is a ABGR, Output is ARGB
+
+static inline
+uint32_t abgr_to_argb(uint32_t pixel)
+{
+  uint32_t alpha = (pixel >> 24) & 0xFF;
+  uint32_t blue = (pixel >> 16) & 0xFF;
+  uint32_t green = (pixel >> 8) & 0xFF;
+  uint32_t red = (pixel >> 0) & 0xFF;
+  
+  return (alpha << 24) | (red << 16) | (green << 8) | blue;
+}
+
 // This method is invoked with a path that contains the frame
 // data and the offset into the frame array that this specific
 // frame data is found at.
@@ -29,6 +43,10 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
 	//BOOL success;
+  
+  if (FALSE) {
+    filenameStr = @"Test.png";
+  }
 
 	NSData *image_data = [NSData dataWithContentsOfFile:filenameStr];
 	if (image_data == nil) {
@@ -226,9 +244,13 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
       assert(0);
     }
     
-    char *planesPtr;
-    //char *planesPtr = (char*) cgBuffer.pixels;
+    unsigned char **planesPtr;
     planesPtr = NULL;
+
+    /*
+    
+    //unsigned char *planes[] = { (char*) cgBuffer.pixels };
+    //unsigned char **planesPtr = &planes;
     
     NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:planesPtr
                                                             pixelsWide:cgBuffer.width
@@ -240,9 +262,46 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
                                                         colorSpaceName:NSDeviceRGBColorSpace
                                                            bytesPerRow:cgBuffer.bytesPerPixel*cgBuffer.width
                                                           bitsPerPixel:cgBuffer.bitsPerPixel] autorelease];
-    char *buffer = (char*)imgBitmap.bitmapData;
+    //char *buffer = (char*)imgBitmap.bitmapData;
+    //memcpy(buffer, cgBuffer.pixels, cgBuffer.numBytes);
+     
+    */
     
-    memcpy(buffer, cgBuffer.pixels, cgBuffer.numBytes);
+    // pixel format : BGRA
+    
+    NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:planesPtr
+                                                                           pixelsWide:cgBuffer.width
+                                                                           pixelsHigh:cgBuffer.height
+                                                                        bitsPerSample:bitsPerSample
+                                                                      samplesPerPixel:samplesPerPixel
+                                                                             hasAlpha:alpha
+                                                                             isPlanar:FALSE
+                                                                       colorSpaceName:NSDeviceRGBColorSpace
+                                                                         bitmapFormat:(NSAlphaNonpremultipliedBitmapFormat)
+                                                                          bytesPerRow:cgBuffer.bytesPerPixel*cgBuffer.width
+                                                                         bitsPerPixel:cgBuffer.bitsPerPixel] autorelease];
+    
+    // Copy pixels to bitmap storage but invert the BGRA format pixels to RGBA format
+    
+    if (cgBuffer.bitsPerPixel == 16) {
+      uint16_t *inPtr  = (uint16_t*) cgBuffer.pixels;
+      uint16_t *outPtr = (uint16_t*) imgBitmap.bitmapData;
+      
+      for (int i = 0; i < (cgBuffer.width * cgBuffer.height); i++) {
+        uint16_t value = inPtr[i];
+        outPtr[i] = value;
+      }
+    } else {
+      uint32_t *inPtr  = (uint32_t*) cgBuffer.pixels;
+      uint32_t *outPtr = (uint32_t*) imgBitmap.bitmapData;
+      
+      for (int i = 0; i < (cgBuffer.width * cgBuffer.height); i++) {
+        uint32_t value = inPtr[i];
+        // BGRA -> RGBA
+        value = abgr_to_argb(value);
+        outPtr[i] = value;
+      }      
+    }
     
     NSData *data;
     data = [imgBitmap representationUsingType:NSPNGFileType
