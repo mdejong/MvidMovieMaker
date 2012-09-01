@@ -132,6 +132,129 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
     CGImageRelease(imgRef);    
   }
   
+  /*
+  
+  if (TRUE)
+  {
+    CGImageRef imgRef = [cgBuffer createCGImageRef];
+
+    NSImage *imgRendered = [[[NSImage alloc] initWithCGImage:imgRef size:CGSizeMake(cgBuffer.width, cgBuffer.height)] autorelease];
+    
+    //NSBitmapImageRep *imgRenderedBitmapRep = [[imgRendered representations] objectAtIndex:0];
+    
+    NSRect rect = NSMakeRect(0, 0, cgBuffer.width, cgBuffer.height);
+
+    NSBitmapImageRep *myJPEGRep;
+    
+    //myJPEGRep = [[[NSBitmapImageRep alloc] initWithFocusedViewRect:rect] autorelease];
+ 
+    //myJPEGRep = [[[NSBitmapImageRep alloc] initWithSize:rect.size] autorelease];
+    
+    //NSImage *imageRerendered = [[[NSImage alloc] initWithSize:rect.size] autorelease];
+    
+    //myJPEGRep = [[imageRerendered representations] objectAtIndex:0];
+    
+    NSCompositingOperation compOp = NSCompositeDestinationOver;
+    
+    [imageRerendered lockFocus];
+    [imgRendered drawInRect:rect
+                   fromRect:rect
+                  operation:compOp
+                   fraction:1.0];
+    [imageRerendered unlockFocus];
+    
+    NSData *myJPEGData;
+    myJPEGData = [myJPEGRep representationUsingType:NSJPEGFileType
+                                         properties:nil];
+    
+    NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame0.4%d", frameIndex+1];
+
+    [myJPEGData writeToFile:dumpFilename atomically:NO];
+  }
+   
+   */
+
+  // Render CGImageRef into NSImage and then save a PNG
+  
+  if (FALSE)
+  {
+    CGImageRef imgRef = [cgBuffer createCGImageRef];
+    
+    NSRect rect = NSMakeRect(0, 0, cgBuffer.width, cgBuffer.height);
+    CGRect cgRect = CGRectMake(0, 0, cgBuffer.width, cgBuffer.height);
+    
+    NSImage* imgRendered = [[NSImage alloc] initWithSize:rect.size];
+    
+    [imgRendered lockFocus];
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    CGContextDrawImage(ctx, cgRect, imgRef);
+    [imgRendered unlockFocus];
+    
+    NSBitmapImageRep *imgRenderedBitmapRep = [[imgRendered representations] objectAtIndex:0];
+    
+    NSData *myData;
+    myData = [imgRenderedBitmapRep representationUsingType:NSPNGFileType
+                                                properties:nil];
+    
+    NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame0.4%d.png", frameIndex+1];
+    
+    [myData writeToFile:dumpFilename atomically:NO];
+  }
+  
+  // Copy the pixels from the cgBuffer into a NSImage
+  
+  if (TRUE) {
+    
+    //CGImageRef imgRef = [cgBuffer createCGImageRef];
+
+    NSInteger samplesPerPixel;
+    NSInteger bitsPerSample;
+    BOOL alpha;
+    if (cgBuffer.bitsPerPixel == 16) {
+      samplesPerPixel = 3;
+      bitsPerSample = 5;
+      alpha = FALSE;
+    } else if (cgBuffer.bitsPerPixel == 24) {
+      samplesPerPixel = 3;
+      bitsPerSample = 8;
+      alpha = FALSE;
+    } else if (cgBuffer.bitsPerPixel == 32) {
+      samplesPerPixel = 4;
+      bitsPerSample = 8;
+      alpha = TRUE;
+    } else {
+      assert(0);
+    }
+    
+    char *planesPtr;
+    //char *planesPtr = (char*) cgBuffer.pixels;
+    planesPtr = NULL;
+    
+    NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:planesPtr
+                                                            pixelsWide:cgBuffer.width
+                                                            pixelsHigh:cgBuffer.height
+                                                         bitsPerSample:bitsPerSample
+                                                       samplesPerPixel:samplesPerPixel
+                                                              hasAlpha:alpha
+                                                              isPlanar:FALSE
+                                                        colorSpaceName:NSDeviceRGBColorSpace
+                                                           bytesPerRow:cgBuffer.bytesPerPixel*cgBuffer.width
+                                                          bitsPerPixel:cgBuffer.bitsPerPixel] autorelease];
+    char *buffer = (char*)imgBitmap.bitmapData;
+    
+    memcpy(buffer, cgBuffer.pixels, cgBuffer.numBytes);
+    
+    NSData *data;
+    data = [imgBitmap representationUsingType:NSPNGFileType
+                                              properties:nil];
+    
+    NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame%0.4d.png", frameIndex+1];
+    
+    [data writeToFile:dumpFilename atomically:NO];
+    
+    NSLog(@"wrote %@", dumpFilename);
+  }
+  
   // The CGFrameBuffer now contains the rendered pixels in the expected output format. Write to MVID frame.
 
   if (TRUE) {

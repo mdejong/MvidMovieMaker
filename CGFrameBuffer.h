@@ -58,10 +58,6 @@
 
 - (BOOL) renderView:(UIView*)view;
 
-// Render a CGImageRef directly into the pixels
-
-- (BOOL) renderCGImage:(CGImageRef)cgImageRef;
-
 // Create a Core Graphics image from the pixel data
 // in this buffer. The hasDataProvider property
 // will be TRUE while the CGImageRef is in use.
