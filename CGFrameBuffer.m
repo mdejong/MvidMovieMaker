@@ -52,12 +52,12 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
 
 	memset(buffer, 0, inNumBytes);
 
-	self = [super init];
-
-	self->pixels = buffer;
-	self->numBytes = inNumBytes;
-	self->width = inWidth;
-	self->height = inHeight;
+  if (self = [super init]) {
+    self->pixels = buffer;
+    self->numBytes = inNumBytes;
+    self->width = inWidth;
+    self->height = inHeight;
+  }
 
 	return self;
 }
@@ -233,11 +233,16 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
 	NSBitmapImageRep* bitmapImage = [[NSBitmapImageRep alloc] initWithFocusedViewRect:imageRect];
 	[image unlockFocus];
 
-	if(bitmapImage) {
-		/*
-		 Do something with the raw pixels contents
-		 using [bitmapImage bitmapData] and [bitmapImage bytesPerRow]
-		*/
+	if (bitmapImage) {
+    // FIXME: Do something with raw bitmap data
+    
+    void *bitmapData = [bitmapImage bitmapData];
+    int bytesPerRow = [bitmapImage bytesPerRow];
+    int totalBytesInBuffer = bytesPerRow * self.height;
+    
+    assert(totalBytesInBuffer == self.numBytes);
+    memcpy(self.pixels, bitmapData, bytesPerRow * self.height);
+
 		[bitmapImage release];
 	}
 }
