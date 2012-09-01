@@ -70,6 +70,10 @@
             argument = "0.03333"
             isEnabled = "YES">
          </CommandLineArgument>
+         <CommandLineArgument
+            argument = "32"
+            isEnabled = "YES">
+         </CommandLineArgument>
       </CommandLineArguments>
       <AdditionalOptions>
       </AdditionalOptions>

@@ -18,8 +18,13 @@ NSString *delta_directory = nil;
 // This method is invoked with a path that contains the frame
 // data and the offset into the frame array that this specific
 // frame data is found at.
+//
+// filenameStr : Name of .png file that contains the frame data
+// frameIndex  : Frame index (starts at zero)
+// bppNum      : 16, 24, or 32 BPP
+// isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
 
-int process_frame_file(NSString *filenameStr, int frameIndex) {
+int process_frame_file(NSString *filenameStr, int frameIndex, int bppNum, BOOL isKeyframe) {
 	// Push pool after creating global resources
 
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -250,16 +255,17 @@ BOOL fileExists(NSString *filePath) {
 
 // main() Entry Point
 //
-// To create a .mvid video file from a series of PNG images:
+// To create a .mvid video file from a series of PNG images
+// with a 15 FPS framerate and 32BPP "Millions+" (24 BPP plus alpha channel)
 //
-// mvidmoviemaker movie.mvid FRAMES/Frame001.png 15
+// mvidmoviemaker movie.mvid FRAMES/Frame001.png 15 32
 //
 // To extract the contents of an .mvid movie to PNG images:
 //
 // mvidmoviemaker --extract out.mvid
 
 #define USAGE \
-  "usage: mvidmoviemaker FILE.mvid FIRSTFRAME.png FRAMERATE ?KEYFRAME?" "\n" \
+  "usage: mvidmoviemaker FILE.mvid FIRSTFRAME.png FRAMERATE BITSPERPIXEL ?KEYFRAME?" "\n" \
   "or   : mvidmoviemaker -extract FILE.mvid" "\n"
 
 int main (int argc, const char * argv[]) {
@@ -270,12 +276,13 @@ int main (int argc, const char * argv[]) {
 
     char *mvidFilename = (char *)argv[2];
 		extract_movie_frames(mvidFilename);
-	} else if (argc == 4 || argc == 5) {
+	} else if (argc == 5 || argc == 6) {
     // FILE.mvid : name of output file that will contain all the video frames
     // FIRSTFRAME.png : name of first frame file of input PNG files. All
     //   video frames must exist in the same directory
     // FRAMERATE is a floating point framerate value. Common values
     // include 1.0 FPS, 15 FPS, 29.97 FPS, and 30 FPS.
+    // BITSPERPIXEL : 16, 24, or 32 BPP
     // KEYFRAME is the number of frames until the next keyframe in the
     //   resulting movie file. The default of 10,000 ensures that
     //   the resulting movie would only contain the initial keyframe.
@@ -283,9 +290,10 @@ int main (int argc, const char * argv[]) {
     char *mvidFilenameCstr = (char*)argv[1];
     char *firstFilenameCstr = (char*)argv[2];
     char *framerateCstr = (char*)argv[3];
+    char *bppCstr = (char*)argv[4];
     char *keyframeCstr = "10000";
-    if (argc == 5) {
-      keyframeCstr = (char*)argv[4];
+    if (argc == 6) {
+      keyframeCstr = (char*)argv[5];
     }
     
     NSString *mvidFilename = [NSString stringWithUTF8String:mvidFilenameCstr];
@@ -418,6 +426,17 @@ int main (int argc, const char * argv[]) {
       fprintf(stderr, "error: FRAMERATE is invalid \"%f\"", framerateNum);
       exit(1);
     }
+
+    // BITSPERPIXEL : 16, 24, or 32 BPP.
+    
+    NSString *bppStr = [NSString stringWithUTF8String:bppCstr];
+    int bppNum = [bppStr intValue];
+    if (bppNum == 16 || bppNum == 24 || bppNum == 32) {
+      // Value is valid
+    } else {
+      fprintf(stderr, "error: BITSPERPIXEL is invalid \"%s\"", bppCstr);
+      exit(1);
+    }
     
     // KEYFRAME : integer that indicates a keyframe should be emitted every N frames
     
@@ -429,7 +448,12 @@ int main (int argc, const char * argv[]) {
     }
     
     int keyframeNum = [keyframeStr intValue];
-    if (keyframeNum <= 0) {
+    if (keyframeNum == 0) {
+      // All frames as stored as keyframes. This takes up more space but the frames can
+      // be blitted into graphics memory directly from mapped memory at runtime.
+      keyframeNum = 0;
+    } else if (keyframeNum < 0) {
+      // Just revert to the default
       keyframeNum = 10000;
     }
     
@@ -442,8 +466,20 @@ int main (int argc, const char * argv[]) {
     for (NSString *framePath in inFramePaths) {
       fprintf(stdout, "loading %s as frame %d\n", [framePath UTF8String], frameIndex+1);
 			fflush(stdout);
+     
+      BOOL isKeyframe = FALSE;
+      if (frameIndex == 0) {
+        isKeyframe = TRUE;
+      }
+      if (keyframeNum == 0) {
+        // All frames are key frames
+        isKeyframe = TRUE;
+      } else if ((keyframeNum > 0) && ((frameIndex % keyframeNum) == 0)) {
+        // Keyframe every N frames
+        isKeyframe = TRUE;
+      }
       
-			process_frame_file(framePath, frameIndex);
+			process_frame_file(framePath, frameIndex, bppNum, isKeyframe);
       frameIndex++;
     }
 

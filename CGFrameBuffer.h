@@ -64,10 +64,6 @@
 
 - (CGBitmapInfo) getBitmapInfo;
 
-- (NSData*) runLengthEncode;
-
-- (void) runLengthDecode:(NSData*)encoded numEncodedBytes:(NSUInteger)numEncodedBytes;
-
 - (NSData*) copyData;
 
 - (NSArray*) calculateDeltaPixels:(CGFrameBuffer*)otherFrame;

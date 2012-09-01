@@ -10,8 +10,6 @@
 
 #import <QuartzCore/QuartzCore.h>
 
-#include "runlength.h"
-
 // Pixel format is ARGB with 2 bytes per pixel (alpha is ignored)
 
 #define BITS_PER_COMPONENT 5
@@ -485,30 +483,6 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
 	bitmapInfo |= kCGImageAlphaNoneSkipFirst;
 
 	return bitmapInfo;
-}
-
-- (NSData*) runLengthEncode
-{
-	// Create a NSMutableData to contain the encoded data, then
-	// encode to compress duplicate pixels.
-	
-	int encodedNumBytes = numBytes + numBytes/2;
-	NSMutableData *buffer = [NSMutableData dataWithCapacity:encodedNumBytes];
-	NSAssert(buffer, @"could not allocate pixel buffer");
-	[buffer setLength:encodedNumBytes];
-	
-	uint16_t *buffer_bytes = (uint16_t *) [buffer mutableBytes];
-	
-	encodedNumBytes = pp_encode((uint16_t *)pixels, width * height,
-								(char*)[buffer mutableBytes], encodedNumBytes);
-	
-	return [NSData dataWithBytes:buffer_bytes length:encodedNumBytes];	
-}
-
-- (void) runLengthDecode:(NSData*)encoded numEncodedBytes:(NSUInteger)numEncodedBytes
-{
-	char *input_bytes = (char *)[encoded bytes];
-	pp_decode(input_bytes, numEncodedBytes, (uint16_t*) pixels, width * height);
 }
 
 - (NSData*) copyData
