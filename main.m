@@ -2,8 +2,7 @@
 
 #import "CGFrameBuffer.h"
 
-int _imageWidth = -1;
-int _imageHeight = -1;
+#import "AVMvidFileWriter.h"
 
 CGSize _movieDimensions;
 
@@ -24,7 +23,7 @@ NSString *delta_directory = nil;
 // bppNum      : 16, 24, or 32 BPP
 // isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
 
-int process_frame_file(NSString *filenameStr, int frameIndex, int bppNum, BOOL isKeyframe) {
+int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int frameIndex, int bppNum, BOOL isKeyframe) {
 	// Push pool after creating global resources
 
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -49,84 +48,49 @@ int process_frame_file(NSString *filenameStr, int frameIndex, int bppNum, BOOL i
 	// display size in portrait mode, so scale it down to the
 	// largest dimensions that can be displayed in portrait mode.
 
-	NSImage *img = [[NSImage alloc] initWithData:image_data];
+	NSImage *img = [[[NSImage alloc] initWithData:image_data] autorelease];
 
 	CGSize imageSize = NSSizeToCGSize(img.size);
 	int imageWidth = imageSize.width;
 	int imageHeight = imageSize.height;
+
 	assert(imageWidth > 0);
 	assert(imageHeight > 0);
+  
+  // If this is the first frame, set the movie size based on the size of the first frame
+  
+  if (frameIndex == 0) {
+    mvidWriter.movieSize = imageSize;
+    _movieDimensions = imageSize;
+  } else if (CGSizeEqualToSize(imageSize, _movieDimensions) == FALSE) {
+    // Size of next frame must exactly match the size of the previous one
+    
+    fprintf(stderr, "error: frame file \"%s\" size %d x %d does not match initial frame size %d x %d",
+            [filenameStr UTF8String],
+            (int)imageSize.width, (int)imageSize.height,
+            (int)_movieDimensions.width, (int)_movieDimensions.height);
+    exit(2);
+  }
 
-	int renderWidth;
-	int renderHeight;
-	int isLandscapeOrientation = FALSE;
-	int initMovieDimensions = FALSE;
-
-	if (imageWidth == 320 && imageHeight == 480) {
-		// Image is the exact size of the frame buffer in portrait mode
-		renderWidth = 320;
-		renderHeight = 480;
-	} else if (imageWidth == 480 && imageHeight == 320) {
-		// Image is the exact size of the frame buffer in landscape mode,
-		// render in a buffer the exact size of the image, it will be
-		// rotated to portrait orientation in a moment.
-		renderWidth = 480;
-		renderHeight = 320;
-		isLandscapeOrientation = TRUE;
-	} else if (imageWidth < 320 && imageHeight < 480) {
-		// Image is smaller than the frame buffer, encode with
-		// the exact size of the image.
-		renderWidth = imageWidth;
-		renderHeight = imageHeight;
-	} else {
-		// Image is larger than the frame buffer, scale that largest dimension
-		// down to fit into either portrait or landscape mode.
-
-		if (imageWidth > imageHeight) {
-			// image is wider than it is tall, must be landscape orientation
-			renderWidth = 480;
-			renderHeight = 320;
-			isLandscapeOrientation = TRUE;
-		} else {
-			// portrait orientation
-			renderWidth = 320;
-			renderHeight = 480;
-		}
-	}
+  // Render into pixmap of known layout, this might change the BPP if a different value was specified
+  // in the command line options. For example, 32BPP could be downsamples to 16BPP with no alpha.
 
 	NSRect viewRect;
 	viewRect.origin.x = 0.0;
 	viewRect.origin.y = 0.0;
-	viewRect.size.width = renderWidth;
-	viewRect.size.height = renderHeight;
-
-	if (_imageWidth == -1) {
-		// Init width and height globals
-		_imageWidth = imageWidth;
-		_imageHeight = imageHeight;
-		
-		initMovieDimensions = TRUE;
-	} else if ((imageWidth != _imageWidth) || (imageHeight != _imageHeight)) {
-		// Each input image should match in terms of width and height
-		fprintf(stderr, "input image dimensions did not match previous image dimensions\n");
-		exit(1);
-	}
+	viewRect.size.width = imageWidth;
+	viewRect.size.height = imageHeight;
 
 	// Render NSImageView into core graphics buffer that is limited
 	// to the max size of the iPhone frame buffer. Only scaling
 	// is handled in this render operation, no rotation issues
 	// are handled here.
 
-	NSImageView *imageView = [[NSImageView alloc] initWithFrame:viewRect];
+	NSImageView *imageView = [[[NSImageView alloc] initWithFrame:viewRect] autorelease];
 	imageView.image = img;
 
-	CGFrameBuffer *cgBuffer = [[CGFrameBuffer alloc] initWithDimensions:renderWidth height:renderHeight];	
+	CGFrameBuffer *cgBuffer = [[[CGFrameBuffer alloc] initWithDimensions:imageWidth height:imageHeight] autorelease];	
 	[cgBuffer renderView:imageView];
- 
-	if (initMovieDimensions) {
-		_movieDimensions.width = renderWidth;
-		_movieDimensions.height = renderHeight;
-	}
 
   /*
 	// RLE encode the RAW data and save to the RLE directory.
@@ -144,12 +108,20 @@ int process_frame_file(NSString *filenameStr, int frameIndex, int bppNum, BOOL i
 
 	[rle_filenames addObject:rlePath];
    */
+  
+  // The CGFrameBuffer now contains the rendered pixels in the expected output format. Write to MVID frame.
+
+  if (TRUE) {
+    // Emit Keyframe
+    
+    char *buffer = cgBuffer.pixels;
+    int numBytesInBuffer = cgBuffer.numBytes;
+    
+    [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];    
+  }
     
 	// free up resources
   
-	[img release];
-	[imageView release];
-	[cgBuffer release];
   [pool drain];
 	
 	return 0;
@@ -458,6 +430,27 @@ int main (int argc, const char * argv[]) {
     }
     
     // FIXME: Open .mvid and pass in the framerate to setup the header.
+
+    AVMvidFileWriter *mvidWriter = [AVMvidFileWriter aVMvidFileWriter];
+    
+    {
+      assert(mvidWriter);
+      
+      mvidWriter.mvidPath = mvidFilename;
+      mvidWriter.bpp = bppNum;
+      // Note that we don't know the movie size until the first frame is read
+      
+      mvidWriter.frameDuration = framerateNum;
+      mvidWriter.totalNumFrames = [inFramePaths count];
+      
+      mvidWriter.genAdler = TRUE;
+      
+      BOOL worked = [mvidWriter open];
+      if (worked == FALSE) {
+        fprintf(stderr, "error: Could not open .mvid output file \"%s\"", mvidFilenameCstr);        
+        exit(1);
+      }
+    }
     
     // We now know the start and end integer values of the frame filename range.
 
@@ -479,11 +472,15 @@ int main (int argc, const char * argv[]) {
         isKeyframe = TRUE;
       }
       
-			process_frame_file(framePath, frameIndex, bppNum, isKeyframe);
+			process_frame_file(mvidWriter, framePath, frameIndex, bppNum, isKeyframe);
       frameIndex++;
     }
 
     // Done writing .mvid file
+    
+    [mvidWriter rewriteHeader];
+
+    [mvidWriter close];
     
     fprintf(stdout, "done loading %d frames\n", frameIndex);
     fflush(stdout);
