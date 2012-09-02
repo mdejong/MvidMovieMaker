@@ -24,6 +24,35 @@
 
 void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size);
 
+
+// Input is a ABGR, Output is ARGB
+
+static inline
+uint32_t abgr_to_argb(uint32_t pixel)
+{
+  uint32_t alpha = (pixel >> 24) & 0xFF;
+  uint32_t blue = (pixel >> 16) & 0xFF;
+  uint32_t green = (pixel >> 8) & 0xFF;
+  uint32_t red = (pixel >> 0) & 0xFF;
+  
+  return (alpha << 24) | (red << 16) | (green << 8) | blue;
+}
+
+// Input is a 32 bit ABGR, Output is 16 bit XRRRRGGGGBBBB
+// This method does not resample a color down to the smaller
+// range, instead it simply crops.
+
+static inline
+uint16_t abgr_to_rgb15(uint32_t pixel)
+{
+# define MAX_5_BITS 0x1F
+  uint32_t blue  = (pixel >> 16) & MAX_5_BITS;
+  uint32_t green = (pixel >> 8)  & MAX_5_BITS;
+  uint32_t red   = (pixel >> 0)  & MAX_5_BITS;
+  
+  return (red << 10) | (green << 5) | blue;
+}
+
 @implementation CGFrameBuffer
 
 @synthesize pixels = m_pixels;
@@ -382,6 +411,87 @@ void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size
         [self release]; // release extra ref to self
       }
 	}
+}
+
+// Convert pixels to a PNG image format that can be easily saved to disk.
+
+- (NSData*) formatAsPNG
+{
+  NSMutableData *mData = [NSMutableData data];
+  
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  
+  NSInteger samplesPerPixel;
+  NSInteger bitsPerSample;
+  NSInteger bitsPerPixel = self.bitsPerPixel;
+  
+  BOOL alpha;
+  if (bitsPerPixel == 16) {
+    samplesPerPixel = 3;
+    bitsPerSample = 5;
+    alpha = FALSE;
+  } else if (bitsPerPixel == 24) {
+    samplesPerPixel = 3;
+    bitsPerSample = 8;
+    alpha = FALSE;
+  } else if (bitsPerPixel == 32) {
+    samplesPerPixel = 4;
+    bitsPerSample = 8;
+    alpha = TRUE;
+  } else {
+    assert(0);
+  }
+  
+  // The pixel format when written is RGBA, so we need to maunally convert from BGRA
+  // format in the CGFrameBuffer. Note that we do not pass NSAlphaNonpremultipliedBitmapFormat
+  // to bitmapFormat since the format of the input pixels is premultiplied.
+  
+  NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                                         pixelsWide:self.width
+                                                                         pixelsHigh:self.height
+                                                                      bitsPerSample:bitsPerSample
+                                                                    samplesPerPixel:samplesPerPixel
+                                                                           hasAlpha:alpha
+                                                                           isPlanar:FALSE
+                                                                     colorSpaceName:NSDeviceRGBColorSpace
+                                                                       bitmapFormat:0
+                                                                        bytesPerRow:self.bytesPerPixel*self.width
+                                                                       bitsPerPixel:self.bitsPerPixel] autorelease];
+  
+  // Copy pixels to bitmap storage but invert the BGRA format pixels to RGBA format
+  
+  if (bitsPerPixel == 16) {
+    uint16_t *inPtr  = (uint16_t*) self.pixels;
+    uint16_t *outPtr = (uint16_t*) imgBitmap.bitmapData;
+    
+    for (int i = 0; i < (self.width * self.height); i++) {
+      // Input format is 16 bit pixel alraedy
+      uint16_t value = inPtr[i];
+      outPtr[i] = value;
+    }
+  } else {
+    uint32_t *inPtr  = (uint32_t*) self.pixels;
+    uint32_t *outPtr = (uint32_t*) imgBitmap.bitmapData;
+    
+    for (int i = 0; i < (self.width * self.height); i++) {
+      uint32_t value = inPtr[i];
+      // BGRA -> RGBA
+      value = abgr_to_argb(value);
+      outPtr[i] = value;
+    }      
+  }
+  
+  NSData *data;
+  data = [imgBitmap representationUsingType:NSPNGFileType
+                                 properties:nil];
+  
+  [mData appendData:data];
+  
+  [pool drain];
+  
+  // Return instance object that was allocated outside the scope of pool
+  
+  return [NSData dataWithData:mData];
 }
 
 @end

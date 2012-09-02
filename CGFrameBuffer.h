@@ -72,6 +72,10 @@
 
 - (NSArray*) calculateDeltaPixels:(CGFrameBuffer*)otherFrame;
 
+// Convert pixels to a PNG image format that can be easily saved to disk.
+
+- (NSData*) formatAsPNG;
+
 @end
 
 // Util struct/object

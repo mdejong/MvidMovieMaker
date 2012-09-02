@@ -14,34 +14,6 @@ NSString *movie_prefix;
 NSString *delta_directory = nil;
 #endif
 
-
-// Input is a ABGR, Output is ARGB
-
-static inline
-uint32_t abgr_to_argb(uint32_t pixel)
-{
-  uint32_t alpha = (pixel >> 24) & 0xFF;
-  uint32_t blue = (pixel >> 16) & 0xFF;
-  uint32_t green = (pixel >> 8) & 0xFF;
-  uint32_t red = (pixel >> 0) & 0xFF;
-  
-  return (alpha << 24) | (red << 16) | (green << 8) | blue;
-}
-
-// Input is a 32 bit ABGR, Output is 16 bit XRRRRGGGGBBBB
-// This method does not resample a color down to the smaller
-// range, instead it simply crops.
-
-static inline
-uint16_t abgr_to_rgb15(uint32_t pixel)
-{
-  uint32_t blue = (pixel >> 16) & MV_MAX_5_BITS;
-  uint32_t green = (pixel >> 8) & MV_MAX_5_BITS;
-  uint32_t red = (pixel >> 0) & MV_MAX_5_BITS;
-  
-  return (red << 10) | (green << 5) | blue;
-}
-
 // This method is invoked with a path that contains the frame
 // data and the offset into the frame array that this specific
 // frame data is found at.
@@ -146,166 +118,15 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
 
 	[rle_filenames addObject:rlePath];
    */
-  
-  if (FALSE) {
-    // Dump output frames from rendered captured view, to make sure the logic is working
-
     
-    CGImageRef imgRef = [cgBuffer createCGImageRef];
-    
-    NSImage *imgRendered = [[[NSImage alloc] initWithCGImage:imgRef size:CGSizeMake(cgBuffer.width, cgBuffer.height)] autorelease];
-    
-    NSBitmapImageRep *imgRenderedBitmapRep = [[imgRendered representations] objectAtIndex:0];
-    
-    NSData *data;
-    data = [imgRenderedBitmapRep representationUsingType:NSPNGFileType
-                              properties:nil];
-    
-    NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame0.4%d", frameIndex+1];
-    
-    [data writeToFile:dumpFilename atomically:NO];
-    
-    CGImageRelease(imgRef);    
-  }
-  
-  /*
-  
-  if (TRUE)
-  {
-    CGImageRef imgRef = [cgBuffer createCGImageRef];
-
-    NSImage *imgRendered = [[[NSImage alloc] initWithCGImage:imgRef size:CGSizeMake(cgBuffer.width, cgBuffer.height)] autorelease];
-    
-    //NSBitmapImageRep *imgRenderedBitmapRep = [[imgRendered representations] objectAtIndex:0];
-    
-    NSRect rect = NSMakeRect(0, 0, cgBuffer.width, cgBuffer.height);
-
-    NSBitmapImageRep *myJPEGRep;
-    
-    //myJPEGRep = [[[NSBitmapImageRep alloc] initWithFocusedViewRect:rect] autorelease];
- 
-    //myJPEGRep = [[[NSBitmapImageRep alloc] initWithSize:rect.size] autorelease];
-    
-    //NSImage *imageRerendered = [[[NSImage alloc] initWithSize:rect.size] autorelease];
-    
-    //myJPEGRep = [[imageRerendered representations] objectAtIndex:0];
-    
-    NSCompositingOperation compOp = NSCompositeDestinationOver;
-    
-    [imageRerendered lockFocus];
-    [imgRendered drawInRect:rect
-                   fromRect:rect
-                  operation:compOp
-                   fraction:1.0];
-    [imageRerendered unlockFocus];
-    
-    NSData *myJPEGData;
-    myJPEGData = [myJPEGRep representationUsingType:NSJPEGFileType
-                                         properties:nil];
-    
-    NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame0.4%d", frameIndex+1];
-
-    [myJPEGData writeToFile:dumpFilename atomically:NO];
-  }
-   
-   */
-
-  // Render CGImageRef into NSImage and then save a PNG
-  
-  if (FALSE)
-  {
-    CGImageRef imgRef = [cgBuffer createCGImageRef];
-    
-    NSRect rect = NSMakeRect(0, 0, cgBuffer.width, cgBuffer.height);
-    CGRect cgRect = CGRectMake(0, 0, cgBuffer.width, cgBuffer.height);
-    
-    NSImage* imgRendered = [[NSImage alloc] initWithSize:rect.size];
-    
-    [imgRendered lockFocus];
-    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
-    CGContextDrawImage(ctx, cgRect, imgRef);
-    [imgRendered unlockFocus];
-    
-    NSBitmapImageRep *imgRenderedBitmapRep = [[imgRendered representations] objectAtIndex:0];
-    
-    NSData *myData;
-    myData = [imgRenderedBitmapRep representationUsingType:NSPNGFileType
-                                                properties:nil];
-    
-    NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame0.4%d.png", frameIndex+1];
-    
-    [myData writeToFile:dumpFilename atomically:NO];
-  }
-  
   // Copy the pixels from the cgBuffer into a NSImage
   
-  if (TRUE) {
-    
-    NSInteger samplesPerPixel;
-    NSInteger bitsPerSample;
-    BOOL alpha;
-    if (cgBuffer.bitsPerPixel == 16) {
-      samplesPerPixel = 3;
-      bitsPerSample = 5;
-      alpha = FALSE;
-    } else if (cgBuffer.bitsPerPixel == 24) {
-      samplesPerPixel = 3;
-      bitsPerSample = 8;
-      alpha = FALSE;
-    } else if (cgBuffer.bitsPerPixel == 32) {
-      samplesPerPixel = 4;
-      bitsPerSample = 8;
-      alpha = TRUE;
-    } else {
-      assert(0);
-    }
-    
-    // The pixel format when written is RGBA, so we need to maunally convert from BGRA
-    // format in the CGFrameBuffer. Note that we do not pass NSAlphaNonpremultipliedBitmapFormat
-    // to bitmapFormat since the format of the input pixels is premultiplied.
-    
-    NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
-                                                                           pixelsWide:cgBuffer.width
-                                                                           pixelsHigh:cgBuffer.height
-                                                                        bitsPerSample:bitsPerSample
-                                                                      samplesPerPixel:samplesPerPixel
-                                                                             hasAlpha:alpha
-                                                                             isPlanar:FALSE
-                                                                       colorSpaceName:NSDeviceRGBColorSpace
-                                                                         bitmapFormat:0
-                                                                          bytesPerRow:cgBuffer.bytesPerPixel*cgBuffer.width
-                                                                         bitsPerPixel:cgBuffer.bitsPerPixel] autorelease];
-    
-    // Copy pixels to bitmap storage but invert the BGRA format pixels to RGBA format
-    
-    if (cgBuffer.bitsPerPixel == 16) {
-      uint16_t *inPtr  = (uint16_t*) cgBuffer.pixels;
-      uint16_t *outPtr = (uint16_t*) imgBitmap.bitmapData;
-      
-      for (int i = 0; i < (cgBuffer.width * cgBuffer.height); i++) {
-        // Input format is 16 bit pixel alraedy
-        uint16_t value = inPtr[i];
-        outPtr[i] = value;
-      }
-    } else {
-      uint32_t *inPtr  = (uint32_t*) cgBuffer.pixels;
-      uint32_t *outPtr = (uint32_t*) imgBitmap.bitmapData;
-      
-      for (int i = 0; i < (cgBuffer.width * cgBuffer.height); i++) {
-        uint32_t value = inPtr[i];
-        // BGRA -> RGBA
-        value = abgr_to_argb(value);
-        outPtr[i] = value;
-      }      
-    }
-    
-    NSData *data;
-    data = [imgBitmap representationUsingType:NSPNGFileType
-                                              properties:nil];
-    
+  if (TRUE) {    
     NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame%0.4d.png", frameIndex+1];
+
+    NSData *pngData = [cgBuffer formatAsPNG];
     
-    [data writeToFile:dumpFilename atomically:NO];
+    [pngData writeToFile:dumpFilename atomically:NO];
     
     NSLog(@"wrote %@", dumpFilename);
   }
