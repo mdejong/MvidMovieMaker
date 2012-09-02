@@ -28,6 +28,20 @@ uint32_t abgr_to_argb(uint32_t pixel)
   return (alpha << 24) | (red << 16) | (green << 8) | blue;
 }
 
+// Input is a 32 bit ABGR, Output is 16 bit XRRRRGGGGBBBB
+// This method does not resample a color down to the smaller
+// range, instead it simply crops.
+
+static inline
+uint16_t abgr_to_rgb15(uint32_t pixel)
+{
+  uint32_t blue = (pixel >> 16) & MV_MAX_5_BITS;
+  uint32_t green = (pixel >> 8) & MV_MAX_5_BITS;
+  uint32_t red = (pixel >> 0) & MV_MAX_5_BITS;
+  
+  return (red << 10) | (green << 5) | blue;
+}
+
 // This method is invoked with a path that contains the frame
 // data and the offset into the frame array that this specific
 // frame data is found at.
@@ -45,9 +59,13 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
 	//BOOL success;
   
   if (FALSE) {
-    filenameStr = @"Test.png";
+    filenameStr = @"TestOpaque.png";
   }
 
+  if (FALSE) {
+    filenameStr = @"TestAlpha.png";
+  }
+  
 	NSData *image_data = [NSData dataWithContentsOfFile:filenameStr];
 	if (image_data == nil) {
 		fprintf(stderr, "can't read image data from file \"%s\"\n", [filenameStr UTF8String]);
@@ -223,8 +241,6 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
   
   if (TRUE) {
     
-    //CGImageRef imgRef = [cgBuffer createCGImageRef];
-
     NSInteger samplesPerPixel;
     NSInteger bitsPerSample;
     BOOL alpha;
@@ -244,32 +260,11 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
       assert(0);
     }
     
-    unsigned char **planesPtr;
-    planesPtr = NULL;
-
-    /*
+    // The pixel format when written is RGBA, so we need to maunally convert from BGRA
+    // format in the CGFrameBuffer. Note that we do not pass NSAlphaNonpremultipliedBitmapFormat
+    // to bitmapFormat since the format of the input pixels is premultiplied.
     
-    //unsigned char *planes[] = { (char*) cgBuffer.pixels };
-    //unsigned char **planesPtr = &planes;
-    
-    NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:planesPtr
-                                                            pixelsWide:cgBuffer.width
-                                                            pixelsHigh:cgBuffer.height
-                                                         bitsPerSample:bitsPerSample
-                                                       samplesPerPixel:samplesPerPixel
-                                                              hasAlpha:alpha
-                                                              isPlanar:FALSE
-                                                        colorSpaceName:NSDeviceRGBColorSpace
-                                                           bytesPerRow:cgBuffer.bytesPerPixel*cgBuffer.width
-                                                          bitsPerPixel:cgBuffer.bitsPerPixel] autorelease];
-    //char *buffer = (char*)imgBitmap.bitmapData;
-    //memcpy(buffer, cgBuffer.pixels, cgBuffer.numBytes);
-     
-    */
-    
-    // pixel format : BGRA
-    
-    NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:planesPtr
+    NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
                                                                            pixelsWide:cgBuffer.width
                                                                            pixelsHigh:cgBuffer.height
                                                                         bitsPerSample:bitsPerSample
@@ -277,7 +272,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
                                                                              hasAlpha:alpha
                                                                              isPlanar:FALSE
                                                                        colorSpaceName:NSDeviceRGBColorSpace
-                                                                         bitmapFormat:(NSAlphaNonpremultipliedBitmapFormat)
+                                                                         bitmapFormat:0
                                                                           bytesPerRow:cgBuffer.bytesPerPixel*cgBuffer.width
                                                                          bitsPerPixel:cgBuffer.bitsPerPixel] autorelease];
     
@@ -288,6 +283,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
       uint16_t *outPtr = (uint16_t*) imgBitmap.bitmapData;
       
       for (int i = 0; i < (cgBuffer.width * cgBuffer.height); i++) {
+        // Input format is 16 bit pixel alraedy
         uint16_t value = inPtr[i];
         outPtr[i] = value;
       }
