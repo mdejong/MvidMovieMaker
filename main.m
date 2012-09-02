@@ -16,6 +16,10 @@ NSString *movie_prefix;
 NSString *delta_directory = nil;
 #endif
 
+// ------------------------------------------------------------------------
+//
+// mvidmoviemaker
+// 
 // To create a .mvid video file from a series of PNG images
 // with a 15 FPS framerate and 32BPP "Millions+" (24 BPP plus alpha channel)
 //
@@ -23,11 +27,15 @@ NSString *delta_directory = nil;
 //
 // To extract the contents of an .mvid movie to PNG images:
 //
-// mvidmoviemaker --extract out.mvid
+// mvidmoviemaker -extract out.mvid ?FILEPREFIX?"
+//
+// The optional FILEPREFIX should be specified as "DumpFile" to get
+// frames files named "DumpFile0001.png" and "DumpFile0002.png" and so on.
+// ------------------------------------------------------------------------
 
 #define USAGE \
 "usage: mvidmoviemaker FILE.mvid FIRSTFRAME.png FRAMERATE BITSPERPIXEL ?KEYFRAME?" "\n" \
-"or   : mvidmoviemaker -extract FILE.mvid" "\n"
+"or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
 
 
 // This method is invoked with a path that contains the frame
@@ -500,7 +508,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   int frameIndex = 0;
   
   for (NSString *framePath in inFramePaths) {
-    fprintf(stdout, "loading %s as frame %d\n", [framePath UTF8String], frameIndex+1);
+    fprintf(stdout, "saved %s as frame %d\n", [framePath UTF8String], frameIndex+1);
     fflush(stdout);
     
     BOOL isKeyframe = FALSE;
@@ -525,7 +533,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   
   [mvidWriter close];
   
-  fprintf(stdout, "done loading %d frames\n", frameIndex);
+  fprintf(stdout, "done writing %d frames to %s\n", frameIndex, mvidFilenameCstr);
   fflush(stdout);
 }
 
@@ -534,11 +542,17 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
 int main (int argc, const char * argv[]) {
   NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
 
-	if (argc == 3 && strcmp(argv[1], "-extract") == 0) {
+	if ((argc == 3 || argc == 4) && (strcmp(argv[1], "-extract") == 0)) {
 		// Extract movie frames from an existing archive
 
     char *mvidFilename = (char *)argv[2];
-    char *framesFilePrefix = "Frame";
+    char *framesFilePrefix;
+    
+    if (argc == 3) {
+      framesFilePrefix = "Frame";
+    } else {
+      framesFilePrefix = (char*)argv[3];
+    }
     
 		extractFramesFromMvidMain(mvidFilename, framesFilePrefix);
 	} else if (argc == 5 || argc == 6) {

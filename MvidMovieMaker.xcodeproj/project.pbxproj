@@ -97,9 +97,9 @@
 		CDD41E7F15EDB1A6008B77A1 /* MvidMovieMaker */ = {
 			isa = PBXGroup;
 			children = (
+				CDAEB65915EDB6FB005A148B /* main.m */,
 				CDAEB65215EDB6FB005A148B /* CGFrameBuffer.h */,
 				CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */,
-				CDAEB65915EDB6FB005A148B /* main.m */,
 				CDCC050715F2036E00C08C52 /* AVMvidFileWriter.h */,
 				CDCC050815F2036E00C08C52 /* AVMvidFileWriter.m */,
 				CDCC050915F2036E00C08C52 /* maxvid_encode.c */,
