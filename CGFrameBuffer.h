@@ -76,6 +76,20 @@
 
 - (NSData*) formatAsPNG;
 
+// Copy data from another framebuffer into this one
+
+- (void) copyPixels:(CGFrameBuffer *)anotherFrameBuffer;
+
+// Use memcopy() as opposed to an OS level page copy
+
+- (void) memcopyPixels:(CGFrameBuffer *)anotherFrameBuffer;
+
+- (void) zeroCopyToPixels;
+
+// Zero copy from an external read-only location if supported. Otherwise plain copy.
+
+- (void) zeroCopyPixels:(void*)zeroCopyPtr mappedData:(NSData*)mappedData;
+
 @end
 
 // Util struct/object

@@ -4,6 +4,8 @@
 
 #import "AVMvidFileWriter.h"
 
+#import "AVMvidFrameDecoder.h"
+
 CGSize _movieDimensions;
 
 NSString *movie_prefix;
@@ -216,7 +218,47 @@ int is_duplicate_of_previous_frame(int frameIndex)
 // files indicated by a path prefix.
 
 void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
-	//BOOL worked;
+	BOOL worked;
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+
+	NSString *mvidPath = [NSString stringWithUTF8String:mvidFilename];
+  
+  worked = [frameDecoder openForReading:mvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"", mvidFilename);
+    exit(1);
+  }
+    
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+    
+    NSData *pngData = [cgFrameBuffer formatAsPNG];
+    assert(pngData);
+    
+    NSString *pngFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".png"];
+    
+    [pngData writeToFile:pngFilename atomically:NO];
+    
+    NSLog(@"wrote %@", pngFilename);
+    
+    [pool drain];
+  }
+
+  [frameDecoder close];
+  
 	return;
 }
 
@@ -528,7 +570,7 @@ int main (int argc, const char * argv[]) {
     if (TRUE) {
       // Extract frames we just encoded into the .mvid file for debug purposes
       
-      extractFramesFromMvidMain(mvidFilenameCstr, "Frames");
+      extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
     }
 	} else if (argc == 2) {
     fprintf(stderr, USAGE);

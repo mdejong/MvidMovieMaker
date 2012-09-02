@@ -494,6 +494,42 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   return [NSData dataWithData:mData];
 }
 
+- (void) copyPixels:(CGFrameBuffer *)anotherFrameBuffer
+{
+  assert(self.numBytes == anotherFrameBuffer.numBytes);
+ 
+  void *anotherFrameBufferPixelsPtr;
+  anotherFrameBufferPixelsPtr = anotherFrameBuffer.pixels;
+  
+  memcpy(self.pixels, anotherFrameBufferPixelsPtr, anotherFrameBuffer.numBytes);
+}
+
+// Explicitly memcopy pixels instead of an OS level page copy,
+// this is useful only when we want to deallocate the mapped
+// memory and an os copy would keep that memory mapped.
+
+- (void) memcopyPixels:(CGFrameBuffer *)anotherFrameBuffer
+{
+  [self copyPixels:anotherFrameBuffer];
+}
+
+// This method is a no-op in this implementation because no zero copy pixels are supported.
+
+- (void) zeroCopyToPixels
+{
+}
+
+// Zero copy from an external read-only location if supported. Otherwise plain copy.
+// This implementation does not support zero copy, so just assume the size and memcpy().
+
+- (void) zeroCopyPixels:(void*)zeroCopyPtr mappedData:(NSData*)mappedData
+{
+  void *anotherFrameBufferPixelsPtr;
+  anotherFrameBufferPixelsPtr = zeroCopyPtr;
+  
+  memcpy(self.pixels, anotherFrameBufferPixelsPtr, self.numBytes);
+}
+
 @end
 
 // C callback invoked by core graphics when done with a buffer, this is tricky
