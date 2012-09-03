@@ -17,6 +17,12 @@
 #define BYTES_PER_PIXEL 2
 
 @implementation DeltaPixel
+
+- (NSString*) description
+{
+  return [NSString stringWithFormat:@"x,y %d,%d at offset %d = 0x%X", self->x, self->y, self->offset, self->newValue];
+}
+
 @end // DeltaPixel
 
 void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size);
@@ -322,13 +328,15 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
-			uint16_t pixel = pixelData[(width * y) + x];
-			uint16_t other_pixel = other_pixelData[(width * y) + x];
+      uint32_t offset = (width * y) + x;
+			uint16_t pixel = pixelData[offset];
+			uint16_t other_pixel = other_pixelData[offset];
 
 			if (pixel != other_pixel) {
 				DeltaPixel *deltaPixel = [[DeltaPixel alloc] init];
 				deltaPixel->x = x;
 				deltaPixel->y = y;
+				deltaPixel->offset = offset;
 				deltaPixel->oldValue = pixel;
 				deltaPixel->newValue = other_pixel;
 
@@ -361,13 +369,15 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
-			uint32_t pixel = pixelData[(width * y) + x];
-			uint32_t other_pixel = other_pixelData[(width * y) + x];
+      uint32_t offset = (width * y) + x;
+			uint32_t pixel = pixelData[offset];
+			uint32_t other_pixel = other_pixelData[offset];
       
 			if (pixel != other_pixel) {
 				DeltaPixel *deltaPixel = [[DeltaPixel alloc] init];
 				deltaPixel->x = x;
 				deltaPixel->y = y;
+				deltaPixel->offset = offset;
 				deltaPixel->oldValue = pixel;
 				deltaPixel->newValue = other_pixel;
         

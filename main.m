@@ -20,10 +20,17 @@ CGFrameBuffer *prevFrameBuffer = nil;
 NSString *delta_directory = nil;
 #endif
 
+static
 BOOL write_delta_pixels_as_delta_frame(AVMvidFileWriter *mvidWriter,
                                        NSArray *deltaPixels,
                                        NSUInteger frameBufferNumPixels,
                                        uint32_t adler);
+
+static
+void process_pixel_run(NSMutableData *mvidWordCodes,
+                       NSMutableArray *mPixelRun,
+                       int prevPixelOffset,
+                       int nextPixelOffset);
 
 // ------------------------------------------------------------------------
 //
@@ -258,6 +265,8 @@ BOOL write_delta_pixels_as_delta_frame(AVMvidFileWriter *mvidWriter,
   
   // FIXME: assumes 32 bit
 
+  /*
+  
   {    
     uint32_t skipCode = maxvid32_code(SKIP, frameBufferNumPixels);
     
@@ -265,7 +274,68 @@ BOOL write_delta_pixels_as_delta_frame(AVMvidFileWriter *mvidWriter,
     
     [mvidWordCodes appendData:wordCode];    
   }
+   
+  */
 
+  /*
+  
+  Use CASES
+   
+  // 0 (add to pixel run)
+  // 1 (add)
+  // 3 (process last pixel run, SKIP to current, add to run)
+  
+  */
+  
+  int prevPixelOffset = 0;
+  BOOL isFirstPixel = TRUE;
+  
+  NSMutableArray *mPixelRun = [NSMutableArray array];
+  
+  for (DeltaPixel *deltaPixel in deltaPixels) {
+    int nextPixelOffset = deltaPixel->offset;
+    
+    if ((isFirstPixel == FALSE) && (nextPixelOffset == (prevPixelOffset + 1))) {
+      // Processing a pixel other than the first one, and this pixel appears
+      // directly after the last pixel. This means that the modified pixel is
+      // the next pixel in a pixel run.
+      
+      [mPixelRun addObject:deltaPixel];
+    } else {
+      // This is the first pixel in a new pixel run. It might be the first pixel
+      // and in that case the existing run is of zero length. Otherwise, emit
+      // the previous run of pixels so that we can start a new run.
+      
+      process_pixel_run(mvidWordCodes, mPixelRun, prevPixelOffset, nextPixelOffset);
+      
+      [mPixelRun addObject:deltaPixel];
+    }
+
+    isFirstPixel = FALSE;    
+    prevPixelOffset = nextPixelOffset;
+  }
+  
+  // At the end of the delta pixels, we could have a run of pixels that still need to
+  // be processed. In addition, we might need to SKIP to the end of the framebuffer.
+  
+  process_pixel_run(mvidWordCodes, mPixelRun, prevPixelOffset, frameBufferNumPixels);
+  
+  /*
+  if (prevPixelOffset < frameBufferNumPixels) {
+    // Emit one trailing SKIP operation to cover the unchanged pixels from the end of the
+    // delta pixels to the end of the whole framebuffer
+    
+    int numToSkip = frameBufferNumPixels - prevPixelOffset;
+    
+    uint32_t skipCode = maxvid32_code(SKIP, numToSkip);
+    
+    NSData *wordCode = [NSData dataWithBytes:&skipCode length:sizeof(uint32_t)];
+    
+    [mvidWordCodes appendData:wordCode];
+  }
+  */
+
+  // Emit DONE code to indicate that all codes have been emitted
   {    
     uint32_t doneCode = maxvid32_code(DONE, 0);
     
@@ -337,6 +407,89 @@ BOOL write_delta_pixels_as_delta_frame(AVMvidFileWriter *mvidWriter,
   }
 }
 
+// Given a buffer of modified pixels, figure out how to write the pixels
+// into mvidWordCodes. Pixels are emitted as COPY unless there is a run
+// of 2 or more of the same value. Use a DUP in the case of a run.
+
+static
+void process_pixel_run(NSMutableData *mvidWordCodes,
+                       NSMutableArray *mPixelRun,
+                       int prevPixelOffset,
+                       int nextPixelOffset)
+{
+  if ([mPixelRun count] > 0) {
+    // Emit codes for this run of pixels
+ 
+    int runLength = 0;
+    int firstPixelOffset = -1;
+    int lastPixelOffset = -1;
+    
+    if (TRUE) {
+      // Additional checking of the data run mPixelRun, not required
+      
+      for (DeltaPixel *deltaPixel in mPixelRun) {
+        runLength++;
+        if (firstPixelOffset == -1) {
+          firstPixelOffset = deltaPixel->offset;
+        }
+        lastPixelOffset = deltaPixel->offset;
+      }
+    } else {
+      runLength = [mPixelRun count];
+      
+      firstPixelOffset = ((DeltaPixel*)[mPixelRun objectAtIndex:0])->offset;
+      lastPixelOffset = ((DeltaPixel*)[mPixelRun lastObject])->offset;
+    }
+    
+    assert((lastPixelOffset - firstPixelOffset + 1) == runLength);
+    
+    // FIXME: scan pixel run for DUP pattern
+    
+    // EMIT COPY code to indicate how many delta pixels to copy
+    
+    uint32_t copyCode = maxvid32_code(COPY, runLength);
+    
+    NSData *wordCode = [NSData dataWithBytes:&copyCode length:sizeof(uint32_t)];
+    
+    [mvidWordCodes appendData:wordCode];
+
+    // Emit a word for each pixel in the COPY
+    
+    for (DeltaPixel *deltaPixel in mPixelRun) {
+      uint32_t value = deltaPixel->newValue;
+      
+      NSData *pixelData = [NSData dataWithBytes:&value length:sizeof(uint32_t)];
+      
+      // FIXME: can we just append 4 bytes instead of creating a NSData here?
+      
+      [mvidWordCodes appendData:pixelData];
+    }
+    
+    // Update prevPixelOffset so that it contains the offset that the pixel run just
+    // wrote up to. This is needed to determine if we need to SKIP pixels up to the
+    // nextPixelOffset value.
+    
+    prevPixelOffset = lastPixelOffset;
+  }
+  
+  // Emit SKIP pixels to advance from the last offset written as part of
+  // the pixel run up to the index indicated by pixelOffset.
+  
+  int numToSkip = nextPixelOffset - prevPixelOffset;
+  
+  // Emit SKIP pixels to advance up to the offset for this pixel
+  
+  if (numToSkip > 0)
+  {
+    uint32_t skipCode = maxvid32_code(SKIP, numToSkip);
+    
+    NSData *wordCode = [NSData dataWithBytes:&skipCode length:sizeof(uint32_t)];
+    
+    [mvidWordCodes appendData:wordCode];    
+  }
+    
+  [mPixelRun removeAllObjects];
+}
 
 // Extract all the frames of movie data from an archive file into
 // files indicated by a path prefix.

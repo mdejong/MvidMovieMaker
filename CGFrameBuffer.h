@@ -100,7 +100,8 @@
 @public
 	uint32_t x;
 	uint32_t y;
+	uint32_t offset;
 	uint32_t oldValue;
-	uint32_t newValue;
+	uint32_t newValue;  
 }
 @end
