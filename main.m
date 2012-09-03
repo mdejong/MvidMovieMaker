@@ -6,15 +6,24 @@
 
 #import "AVMvidFrameDecoder.h"
 
+#include "maxvid_encode.h"
+
 CGSize _movieDimensions;
 
 NSString *movie_prefix;
+
+CGFrameBuffer *prevFrameBuffer = nil;
 
 #define EMIT_DELTA
 
 #ifdef EMIT_DELTA
 NSString *delta_directory = nil;
 #endif
+
+BOOL write_delta_pixels_as_delta_frame(AVMvidFileWriter *mvidWriter,
+                                       NSArray *deltaPixels,
+                                       NSUInteger frameBufferNumPixels,
+                                       uint32_t adler);
 
 // ------------------------------------------------------------------------
 //
@@ -157,13 +166,55 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
   
   // The CGFrameBuffer now contains the rendered pixels in the expected output format. Write to MVID frame.
 
-  if (TRUE) {
+  if (isKeyframe) {
     // Emit Keyframe
     
     char *buffer = cgBuffer.pixels;
     int numBytesInBuffer = cgBuffer.numBytes;
     
-    [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];    
+    worked = [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "can't write keyframe data to mvid file \"%s\"\n", [filenameStr UTF8String]);
+      exit(1);
+    }
+  } else {
+    // Calculate delta pixels by comparing the previous frame to the current frame.
+    // Once we know specific delta pixels, then only those pixels that actually changed
+    // can be stored in a delta frame.
+    
+    assert(prevFrameBuffer);
+    
+    NSArray *deltaPixels = [prevFrameBuffer calculateDeltaPixels:cgBuffer];
+    if ([deltaPixels count] == 0) {
+      // The two frames are pixel identical, this is a no-op delta frame
+      
+      [mvidWriter writeNopFrame];
+      worked = TRUE;
+    } else {
+      NSUInteger frameBufferNumPixels = mvidWriter.movieSize.width * mvidWriter.movieSize.height;
+      
+      // Calculate adler32 on the original frame data
+      
+      uint32_t adler = 0;
+      adler = maxvid_adler32(0, (unsigned char *)cgBuffer.pixels, cgBuffer.numBytes);
+      assert(adler != 0);
+      
+      worked = write_delta_pixels_as_delta_frame(mvidWriter, deltaPixels, frameBufferNumPixels, adler);
+    }
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "can't write deltaframe data to mvid file \"%s\"\n", [filenameStr UTF8String]);
+      exit(1);
+    }
+  }
+
+  if (TRUE) {
+    if (prevFrameBuffer) {
+      [prevFrameBuffer release];
+    }
+    prevFrameBuffer = cgBuffer;
+    [prevFrameBuffer retain];
   }
   
 	// free up resources
@@ -173,53 +224,118 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
 	return 0;
 }
 
-/*
-// Return 0 if the indicated frame is an exact duplicate of the
-// previous frame indicated by prevFrameIndex. If the frames
-// don't match, then 1 will be returned.
+// Query open file size, then rewind to start
 
-int compare_frames(int frameIndex, int prevFrameIndex) {
-	assert(frameIndex > 0);
-	assert(prevFrameIndex >= 0);
-	assert(prevFrameIndex < frameIndex);
-
-	int prev_crc = crcs[prevFrameIndex];
-	int crc = crcs[frameIndex];
-
-	if (prev_crc != crc)
-		return 1;
-
-	// if the crcs do match, it is still possible that
-	// the two frames are not exactly the same. Need to
-	// pull in the binary data and compare it in this
-	// case to be sure that the frames actually match.
-
-	NSString *prev_raw_filename = [raw_filenames objectAtIndex:prevFrameIndex];
-	NSString *raw_filename = [raw_filenames objectAtIndex:frameIndex];
-
-	NSData *prev_raw_data = [NSData dataWithContentsOfFile:prev_raw_filename];
-	NSData *raw_data = [NSData dataWithContentsOfFile:raw_filename];
-	
-	if ([raw_data isEqualToData:prev_raw_data]) {
-		return 0;
-	} else {
-		return 1;
-	}
+static
+int fpsize(FILE *fp, uint32_t *filesize) {
+  int retcode;
+  retcode = fseek(fp, 0, SEEK_END);
+  assert(retcode == 0);
+  uint32_t size = ftell(fp);
+  *filesize = size;
+  fseek(fp, 0, SEEK_SET);
+  return 0;
 }
 
-// Return true if the indicated frame is an exact duplicate of the
-// one just before it. A frame is a duplicate if the pixels all match.
+// Given an array of delta pixel values, generate maxvid codes that describe
+// the delta pixels and encode the information as a delta frame in the
+// mvid file.
 
-int is_duplicate_of_previous_frame(int frameIndex)
+BOOL write_delta_pixels_as_delta_frame(AVMvidFileWriter *mvidWriter,
+                                       NSArray *deltaPixels,
+                                       NSUInteger frameBufferNumPixels,
+                                       uint32_t adler)
 {
-	if (frameIndex == 0)
-		return FALSE;
+  int retcode;
+  
+  NSMutableData *mvidWordCodes = [NSMutableData data];
+  
+  int bpp = mvidWriter.bpp;
+  
+  // Create MVID word codes in a buffer
 
-	int cmp = compare_frames(frameIndex, frameIndex - 1);
-	return (cmp == 0);
+  adler = 0;
+  
+  // FIXME: assumes 32 bit
+
+  {    
+    uint32_t skipCode = maxvid32_code(SKIP, frameBufferNumPixels);
+    
+    NSData *wordCode = [NSData dataWithBytes:&skipCode length:sizeof(uint32_t)];
+    
+    [mvidWordCodes appendData:wordCode];    
+  }
+
+  {    
+    uint32_t doneCode = maxvid32_code(DONE, 0);
+    
+    NSData *wordCode = [NSData dataWithBytes:&doneCode length:sizeof(uint32_t)];
+    
+    [mvidWordCodes appendData:wordCode];    
+  }
+  
+  // Convert the generic maxvid codes to the optimized c4 encoding and append to the output file
+  
+  FILE *tmpfp = tmpfile();
+  if (tmpfp == NULL) {
+    assert(0);
+  }
+  
+  uint32_t *maxvidCodeBuffer = (uint32_t*)mvidWordCodes.bytes;
+  uint32_t numMaxvidCodeWords = mvidWordCodes.length / sizeof(uint32_t);
+  
+  if (bpp == 16) {
+    retcode = maxvid_encode_c4_sample16(maxvidCodeBuffer, numMaxvidCodeWords, frameBufferNumPixels, NULL, tmpfp, 0);
+  } else if (bpp == 24 || bpp == 32) {
+    retcode = maxvid_encode_c4_sample32(maxvidCodeBuffer, numMaxvidCodeWords, frameBufferNumPixels, NULL, tmpfp, 0);
+  }
+  
+  // Read tmp file contents into buffer.
+  
+  if (retcode == 0) {
+    // Read file contents into a buffer, then write that buffer into .mvid file
+    
+    uint32_t filesize;
+    
+    fpsize(tmpfp, &filesize);
+    
+    assert(filesize > 0);
+    
+    char *buffer = malloc(filesize);
+    
+    if (buffer == NULL) {
+      // Malloc failed
+      
+      retcode = MV_ERROR_CODE_WRITE_FAILED;
+    } else {
+      size_t result = fread(buffer, filesize, 1, tmpfp);
+      
+      if (result != 1) {
+        retcode = MV_ERROR_CODE_READ_FAILED;
+      } else {        
+        // Write codes to mvid file
+        
+        BOOL worked = [mvidWriter writeDeltaframe:buffer bufferSize:filesize adler:adler];
+        
+        if (worked == FALSE) {
+          retcode = MV_ERROR_CODE_WRITE_FAILED;
+        }
+      }
+      
+      free(buffer);
+    }
+  }
+  
+  if (tmpfp != NULL) {
+    fclose(tmpfp);
+  }
+  
+  if (retcode == 0) {
+    return TRUE;
+  } else {
+    return FALSE;
+  }
 }
- 
-*/
 
 
 // Extract all the frames of movie data from an archive file into
@@ -535,6 +651,12 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   
   fprintf(stdout, "done writing %d frames to %s\n", frameIndex, mvidFilenameCstr);
   fflush(stdout);
+  
+  // cleanup
+  
+  if (prevFrameBuffer) {
+    [prevFrameBuffer release];
+  }
 }
 
 // main() Entry Point

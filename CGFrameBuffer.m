@@ -19,9 +19,6 @@
 @implementation DeltaPixel
 @end // DeltaPixel
 
-@implementation DeltaBounds
-@end // DeltaBounds
-
 void CGFrameBufferProviderReleaseData (void *info, const void *data, size_t size);
 
 
@@ -310,9 +307,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 // the location of the pixel, the old value (the one in this frame)
 // and the new value (the one in the new frame).
 
-// FIXME: need 16 and 32 bpp versions of this logic
-
-- (NSArray*) calculateDeltaPixels:(CGFrameBuffer*)otherFrame
+- (NSArray*) calculateDeltaPixels16:(CGFrameBuffer*)otherFrame
 {
 	NSMutableArray *deltaPixels = [NSMutableArray arrayWithCapacity:1024];
 	
@@ -344,6 +339,62 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 	}
 
 	return deltaPixels;
+}
+
+// Calculate deltas between this frame and the indicated other frame.
+// The return value is an array of DeltaPixel values that store
+// the location of the pixel, the old value (the one in this frame)
+// and the new value (the one in the new frame).
+
+- (NSArray*) calculateDeltaPixels32:(CGFrameBuffer*)otherFrame
+{
+	NSMutableArray *deltaPixels = [NSMutableArray arrayWithCapacity:1024];
+	
+	NSAssert(self.width == otherFrame.width, @"frame widths don't match");
+	NSAssert(self.height == otherFrame.height, @"frame heights don't match");
+  
+	uint32_t *pixelData = (uint32_t*) self.pixels;
+	uint32_t *other_pixelData = (uint32_t*) otherFrame.pixels;
+  
+  int width = self.width;
+  int height = self.height;
+  
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			uint32_t pixel = pixelData[(width * y) + x];
+			uint32_t other_pixel = other_pixelData[(width * y) + x];
+      
+			if (pixel != other_pixel) {
+				DeltaPixel *deltaPixel = [[DeltaPixel alloc] init];
+				deltaPixel->x = x;
+				deltaPixel->y = y;
+				deltaPixel->oldValue = pixel;
+				deltaPixel->newValue = other_pixel;
+        
+				[deltaPixels addObject:deltaPixel];
+				[deltaPixel release];
+			}
+		}
+	}
+  
+	return deltaPixels;
+}
+
+// Return pixels that change in a comparison of this frame to otherFrame.
+// In this comparison, this frame is considered the base frame and then
+// the pixels that change in order to get to otherFrame are calculated.
+
+- (NSArray*) calculateDeltaPixels:(CGFrameBuffer*)otherFrame
+{
+  NSArray *deltaPixels = nil;
+  if (self.bitsPerPixel == 16) {
+    return [self calculateDeltaPixels16:otherFrame];
+  } else if (self.bitsPerPixel == 24 || self.bitsPerPixel == 32) {
+    return [self calculateDeltaPixels32:otherFrame];
+  } else {
+    assert(0);
+  }
+  return deltaPixels;
 }
 
 - (CGBitmapInfo) getBitmapInfo

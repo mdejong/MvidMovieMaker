@@ -4,13 +4,15 @@
 //  Created by Moses DeJong on 2/13/09.
 //
 //  License terms defined in License.txt.
+//
+//  This implementation of CGFrameBuffer supports MacOSX image and view interfaces.
+//  In addition, it supports logic to calculate delta pixels.
 
 #import <Foundation/Foundation.h>
 #import <Cocoa/Cocoa.h>
 
 #define UIView NSView
 
-@class DeltaBounds;
 @class DeltaPixel;
 
 // Avoid incorrect warnings from clang
@@ -96,21 +98,9 @@
 
 @interface DeltaPixel : NSObject {
 @public
-	uint16_t x;
-	uint16_t y;
-	uint16_t oldValue;
-	uint16_t newValue;
-	DeltaBounds *deltaBounds;
-}
-@end
-
-// Util struct/object
-
-@interface DeltaBounds : NSObject {
-@public
-	uint16_t x;
-	uint16_t y;
-	uint16_t width;
-	uint16_t height;
+	uint32_t x;
+	uint32_t y;
+	uint32_t oldValue;
+	uint32_t newValue;
 }
 @end
