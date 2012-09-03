@@ -14,7 +14,7 @@
 		CDAEB66515EDB6FB005A148B /* CGFrameBuffer.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */; };
 		CDAEB66815EDB6FB005A148B /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65915EDB6FB005A148B /* main.m */; };
 		CDCC050D15F2036E00C08C52 /* AVMvidFileWriter.m in Sources */ = {isa = PBXBuildFile; fileRef = CDCC050815F2036E00C08C52 /* AVMvidFileWriter.m */; };
-		CDCC050E15F2036E00C08C52 /* maxvid_encode.c in Sources */ = {isa = PBXBuildFile; fileRef = CDCC050915F2036E00C08C52 /* maxvid_encode.c */; };
+		CDCC050E15F2036E00C08C52 /* maxvid_encode.m in Sources */ = {isa = PBXBuildFile; fileRef = CDCC050915F2036E00C08C52 /* maxvid_encode.m */; };
 		CDCC050F15F2036E00C08C52 /* maxvid_file.c in Sources */ = {isa = PBXBuildFile; fileRef = CDCC050B15F2036E00C08C52 /* maxvid_file.c */; };
 		CDD23BA715EFD3F80021D00C /* libz.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = CDD23BA615EFD3F80021D00C /* libz.dylib */; };
 		CDE6D04B15EE6E570084FFAA /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDE6D04A15EE6E570084FFAA /* Cocoa.framework */; };
@@ -45,7 +45,7 @@
 		CDAEB65915EDB6FB005A148B /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = SOURCE_ROOT; };
 		CDCC050715F2036E00C08C52 /* AVMvidFileWriter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AVMvidFileWriter.h; sourceTree = SOURCE_ROOT; };
 		CDCC050815F2036E00C08C52 /* AVMvidFileWriter.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AVMvidFileWriter.m; sourceTree = SOURCE_ROOT; };
-		CDCC050915F2036E00C08C52 /* maxvid_encode.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = maxvid_encode.c; sourceTree = SOURCE_ROOT; };
+		CDCC050915F2036E00C08C52 /* maxvid_encode.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = maxvid_encode.m; sourceTree = SOURCE_ROOT; };
 		CDCC050A15F2036E00C08C52 /* maxvid_encode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = maxvid_encode.h; sourceTree = SOURCE_ROOT; };
 		CDCC050B15F2036E00C08C52 /* maxvid_file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = maxvid_file.c; sourceTree = SOURCE_ROOT; };
 		CDCC050C15F2036E00C08C52 /* maxvid_file.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = maxvid_file.h; sourceTree = SOURCE_ROOT; };
@@ -103,7 +103,7 @@
 				CDCC050715F2036E00C08C52 /* AVMvidFileWriter.h */,
 				CDCC050815F2036E00C08C52 /* AVMvidFileWriter.m */,
 				CDCC050A15F2036E00C08C52 /* maxvid_encode.h */,
-				CDCC050915F2036E00C08C52 /* maxvid_encode.c */,
+				CDCC050915F2036E00C08C52 /* maxvid_encode.m */,
 				CDCC050B15F2036E00C08C52 /* maxvid_file.c */,
 				CDCC050C15F2036E00C08C52 /* maxvid_file.h */,
 				CDCC051115F2039A00C08C52 /* maxvid_decode.h */,
@@ -171,7 +171,7 @@
 				CDAEB66515EDB6FB005A148B /* CGFrameBuffer.m in Sources */,
 				CDAEB66815EDB6FB005A148B /* main.m in Sources */,
 				CDCC050D15F2036E00C08C52 /* AVMvidFileWriter.m in Sources */,
-				CDCC050E15F2036E00C08C52 /* maxvid_encode.c in Sources */,
+				CDCC050E15F2036E00C08C52 /* maxvid_encode.m in Sources */,
 				CDCC050F15F2036E00C08C52 /* maxvid_file.c in Sources */,
 				CD7E243815F341A000027DA6 /* AVFrameDecoder.m in Sources */,
 				CD7E243915F341A000027DA6 /* AVMvidFrameDecoder.m in Sources */,

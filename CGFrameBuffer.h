@@ -13,8 +13,6 @@
 
 #define UIView NSView
 
-@class DeltaPixel;
-
 // Avoid incorrect warnings from clang
 #ifndef __has_feature      // Optional.
 #define __has_feature(x) 0 // Compatibility with non-clang compilers.
@@ -72,8 +70,6 @@
 
 - (NSData*) copyData;
 
-- (NSArray*) calculateDeltaPixels:(CGFrameBuffer*)otherFrame;
-
 // Convert pixels to a PNG image format that can be easily saved to disk.
 
 - (NSData*) formatAsPNG;
@@ -92,16 +88,4 @@
 
 - (void) zeroCopyPixels:(void*)zeroCopyPtr mappedData:(NSData*)mappedData;
 
-@end
-
-// Util struct/object
-
-@interface DeltaPixel : NSObject {
-@public
-	uint32_t x;
-	uint32_t y;
-	uint32_t offset;
-	uint32_t oldValue;
-	uint32_t newValue;  
-}
 @end
