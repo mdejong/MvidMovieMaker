@@ -1966,6 +1966,7 @@ void process_pixel_run(NSMutableData *mvidWordCodes,
         if (dupCount == 0) {
           dupCount = 2;
         } else {
+          // FIXME: max DUP count that can be emitted is 0xFFFF
           dupCount++;          
         }
       } else {
@@ -1977,6 +1978,8 @@ void process_pixel_run(NSMutableData *mvidWordCodes,
           emit_dup_run(mvidWordCodes, dupCount, prevPixelValue, bpp);
           dupCount = 0;
         }
+        
+        // FIXME: max COPY count that can be emitted is 0xFFFF
         
         [copyPixels addObject:deltaPixel];
       }
@@ -2016,6 +2019,8 @@ void process_pixel_run(NSMutableData *mvidWordCodes,
   
   if (numToSkip > 0)
   {
+    // FIXME: max SKIP count that can be emitted is 0xFFFF
+    
     uint32_t skipCode;
     if (bpp == 16) {
       skipCode = maxvid16_code(SKIP, numToSkip);

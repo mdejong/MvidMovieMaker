@@ -63,15 +63,15 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "EXPORTFRAMES/Frame001.png"
+            argument = "BlackBlueFrames16BPP/BlackBlue16BPP1.png"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "0.03333"
+            argument = "1"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "32"
+            argument = "16"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

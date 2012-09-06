@@ -372,11 +372,14 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   NSString *firstFilenameTailNoExtension = [firstFilenameTail stringByDeletingPathExtension];
   
   int numericStartIndex = -1;
+  BOOL foundNonAlpha = FALSE;
   
   for (int i = [firstFilenameTailNoExtension length] - 1; i > 0; i--) {
     unichar c = [firstFilenameTailNoExtension characterAtIndex:i];
-    if (c >= '0' && c <= '9') {
+    if ((c >= '0') && (c <= '9') && (foundNonAlpha == FALSE)) {
       numericStartIndex = i;
+    } else {
+      foundNonAlpha = TRUE;
     }
   }
   if (numericStartIndex == -1 || numericStartIndex == 0) {
@@ -436,6 +439,11 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
     }
     
     [pool drain];
+  }
+
+  if ([inFramePaths count] <= 1) {
+    fprintf(stderr, "error: at least 2 input frames are required");
+    exit(1);    
   }
   
   if ((startingFrameNumber == endingFrameNumber) || (endingFrameNumber == CRAZY_MAX_FRAMES-1)) {
