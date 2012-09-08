@@ -32,6 +32,15 @@ uint32_t abgr_to_argb(uint32_t pixel)
   return (alpha << 24) | (red << 16) | (green << 8) | blue;
 }
 
+// Output as ABGR format pixel
+
+static inline
+uint32_t rgba_to_rbga(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
+{  
+  //return (alpha << 24) | (red << 16) | (green << 8) | blue;
+  return (alpha << 24) | (blue << 16) | (green << 8) | red;
+}
+
 // Input is a 32 bit ABGR, Output is 16 bit XRRRRGGGGBBBB
 // This method does not resample a color down to the smaller
 // range, instead it simply crops.
@@ -377,20 +386,33 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   NSInteger samplesPerPixel;
   NSInteger bitsPerSample;
   NSInteger bitsPerPixel = self.bitsPerPixel;
+  NSInteger bytesPerRow;
+  NSInteger bitmapBytesPerPixel;
+  NSInteger bitmapBitsPerPixel;
   
   BOOL alpha;
   if (bitsPerPixel == 16) {
+    // RGB555 is resampled to RGB888 just like 24bpp
     samplesPerPixel = 3;
-    bitsPerSample = 5;
+    bitsPerSample = 8;
     alpha = FALSE;
+    bitmapBitsPerPixel = 32;
+    bitmapBytesPerPixel = 4;
+    bytesPerRow = bitmapBytesPerPixel * self.width;
   } else if (bitsPerPixel == 24) {
     samplesPerPixel = 3;
     bitsPerSample = 8;
     alpha = FALSE;
+    bitmapBitsPerPixel = 32;
+    bitmapBytesPerPixel = 4;
+    bytesPerRow = bitmapBytesPerPixel * self.width;
   } else if (bitsPerPixel == 32) {
     samplesPerPixel = 4;
     bitsPerSample = 8;
     alpha = TRUE;
+    bitmapBitsPerPixel = 32;
+    bitmapBytesPerPixel = 4;
+    bytesPerRow = bitmapBytesPerPixel * self.width;
   } else {
     assert(0);
   }
@@ -408,24 +430,47 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
                                                                            isPlanar:FALSE
                                                                      colorSpaceName:NSDeviceRGBColorSpace
                                                                        bitmapFormat:0
-                                                                        bytesPerRow:self.bytesPerPixel*self.width
-                                                                       bitsPerPixel:self.bitsPerPixel] autorelease];
+                                                                        bytesPerRow:bytesPerRow
+                                                                       bitsPerPixel:bitmapBitsPerPixel] autorelease];
   NSAssert(imgBitmap != nil, @"NSBitmapImageRep initWithBitmapDataPlanes failed");
   
   // Copy pixels to bitmap storage but invert the BGRA format pixels to RGBA format
   
   if (bitsPerPixel == 16) {
     uint16_t *inPtr  = (uint16_t*) self.pixels;
-    uint16_t *outPtr = (uint16_t*) imgBitmap.bitmapData;
+    uint32_t *outPtr = (uint32_t*) imgBitmap.bitmapData;
+    bzero(outPtr, (self.width * self.height) * sizeof(uint32_t));
     
     for (int i = 0; i < (self.width * self.height); i++) {
-      // Input format is 16 bit pixel alraedy
+      // Input format is 16 bit pixel already
       uint16_t value = inPtr[i];
-      outPtr[i] = value;
+
+      // FIXME: this RGB vs BGR parsing logic might be backwards, output is correct though
+      
+      // rgb555 = XRRRRRGGGGGBBBBB
+      
+      #define CG_MAX_5_BITS 0x1F
+      
+      uint8_t red = (value >> 10) & CG_MAX_5_BITS;
+      uint8_t green = (value >> 5) & CG_MAX_5_BITS;
+      uint8_t blue = value & CG_MAX_5_BITS;
+      
+      // rgb555 to rgb888 (execution speed is not an issue here)
+      
+      red   = (int) floor( red   * (255.0 / 31.0) + 0.5);
+      green = (int) floor( green * (255.0 / 31.0) + 0.5);
+      blue  = (int) floor( blue  * (255.0 / 31.0) + 0.5);
+      
+      // emit RGBA pixel, ALPHA will be ignored
+      
+      uint32_t rgba = rgba_to_rbga(red, green, blue, 0xFF);
+      
+      outPtr[i] = rgba;
     }
   } else {
     uint32_t *inPtr  = (uint32_t*) self.pixels;
     uint32_t *outPtr = (uint32_t*) imgBitmap.bitmapData;
+    bzero(outPtr, (self.width * self.height) * sizeof(uint32_t));
     
     for (int i = 0; i < (self.width * self.height); i++) {
       uint32_t value = inPtr[i];
