@@ -227,6 +227,55 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 	return TRUE;
 }
 
+- (BOOL) renderCGImage:(CGImageRef)cgImageRef
+{
+  // Render cgImageRef into this buffer at the current width and height
+  
+  size_t bitsPerComponent;
+  size_t numComponents;
+  size_t bitsPerPixel;
+  size_t bytesPerRow;
+  
+  if (self.bitsPerPixel == 16) {
+    bitsPerComponent = 5;
+    //    numComponents = 3;
+    bitsPerPixel = 16;
+    bytesPerRow = self.width * (bitsPerPixel / 8);    
+  } else if (self.bitsPerPixel == 24 || self.bitsPerPixel == 32) {
+    bitsPerComponent = 8;
+    numComponents = 4;
+    bitsPerPixel = bitsPerComponent * numComponents;
+    bytesPerRow = self.width * (bitsPerPixel / 8);
+  } else {
+    NSAssert(FALSE, @"unmatched bitsPerPixel");
+  }
+  
+	CGBitmapInfo bitmapInfo = [self getBitmapInfo];
+  
+	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+  
+	NSAssert(self.pixels != NULL, @"pixels must not be NULL");
+  
+	NSAssert(self.isLockedByDataProvider == FALSE, @"renderView: pixel buffer locked by data provider");
+  
+	CGContextRef bitmapContext =
+    CGBitmapContextCreate(self.pixels, self.width, self.height, bitsPerComponent, bytesPerRow, colorSpace, bitmapInfo);
+  
+	CGColorSpaceRelease(colorSpace);
+  
+	if (bitmapContext == NULL) {
+		return FALSE;
+	}
+  
+	CGRect bounds = CGRectMake( 0.0f, 0.0f, self.width, self.height );
+  
+	CGContextDrawImage(bitmapContext, bounds, cgImageRef);
+	
+	CGContextRelease(bitmapContext);
+  
+	return TRUE;
+}
+
 - (CGImageRef) createCGImageRef
 {
 	// Load pixel data as a core graphics image object.
@@ -257,6 +306,8 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 	CGDataProviderReleaseDataCallback releaseData = CGFrameBufferProviderReleaseData;
   
   void *pixelsPtr = self.pixels;
+  
+	NSAssert(self.isLockedByDataProvider == FALSE, @"createCGImageRef: pixel buffer locked by data provider");
   
 	CGDataProviderRef dataProviderRef = CGDataProviderCreateWithData(self,
                                                                    pixelsPtr,
@@ -391,15 +442,10 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   NSInteger bitmapBitsPerPixel;
   
   BOOL alpha;
-  if (bitsPerPixel == 16) {
-    // RGB555 is resampled to RGB888 just like 24bpp
-    samplesPerPixel = 3;
-    bitsPerSample = 8;
-    alpha = FALSE;
-    bitmapBitsPerPixel = 32;
-    bitmapBytesPerPixel = 4;
-    bytesPerRow = bitmapBytesPerPixel * self.width;
-  } else if (bitsPerPixel == 24) {
+  
+  // Note that RGB555 is resampled to RGB888
+  
+  if (bitsPerPixel == 16 || bitsPerPixel == 24) {
     samplesPerPixel = 3;
     bitsPerSample = 8;
     alpha = FALSE;
@@ -417,9 +463,11 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
     assert(0);
   }
   
-  // The pixel format when written is RGBA, so we need to maunally convert from BGRA
-  // format in the CGFrameBuffer. Note that we do not pass NSAlphaNonpremultipliedBitmapFormat
-  // to bitmapFormat since the format of the input pixels is premultiplied.
+  // The pixel format for a NSBitmapImageRep is RGBA so we need to manually convert
+  // from BGRA when writing pixels. If the pixel format in the frame buffer is
+  // 16bpp then we have to resample to 24bpp so that the PNG can be written
+  // from 8bpp pixels. Note that we do not pass NSAlphaNonpremultipliedBitmapFormat
+  // to bitmapFormat since the format of the input pixel format is premultiplied.
   
   NSBitmapImageRep* imgBitmap = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
                                                                          pixelsWide:self.width
@@ -433,6 +481,44 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
                                                                         bytesPerRow:bytesPerRow
                                                                        bitsPerPixel:bitmapBitsPerPixel] autorelease];
   NSAssert(imgBitmap != nil, @"NSBitmapImageRep initWithBitmapDataPlanes failed");
+  
+  BOOL needToResample = FALSE;
+  
+  if (bitsPerPixel == 16) {
+    needToResample = TRUE;
+  }
+  
+  CGFrameBuffer *inputFrameBuffer = self;
+  
+  if (needToResample) {
+    CGImageRef imgRefAtOriginalBPP = [self createCGImageRef];
+    
+    // Note that it is only possible to resample rbg555 to rbg888, since there is no alpha channel
+    int otherBpp = 24;
+    
+    CGFrameBuffer *frameBufferAtAnotherBPP = [CGFrameBuffer cGFrameBufferWithBppDimensions:otherBpp width:self.width height:self.height];
+    
+    [frameBufferAtAnotherBPP renderCGImage:imgRefAtOriginalBPP];
+    
+    CGImageRelease(imgRefAtOriginalBPP);
+    
+    inputFrameBuffer = frameBufferAtAnotherBPP;
+  }
+
+  // inputFrameBuffer contains either 24bpp or 32bpp formatted words at this point
+  
+  uint32_t *inPtr  = (uint32_t*) inputFrameBuffer.pixels;
+  uint32_t *outPtr = (uint32_t*) imgBitmap.bitmapData;
+  
+  int numPixels = (self.width * self.height);
+  for (int i = 0; i < numPixels; i++) {
+    uint32_t value = inPtr[i];
+    // BGRA -> RGBA
+    value = abgr_to_argb(value);
+    outPtr[i] = value;
+  }      
+  
+  /*
   
   // Copy pixels to bitmap storage but invert the BGRA format pixels to RGBA format
   
@@ -479,6 +565,10 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
       outPtr[i] = value;
     }      
   }
+   
+  */
+  
+  // Render the CGImage into the newly created NSBitmapImageRep
   
   NSData *data;
   data = [imgBitmap representationUsingType:NSPNGFileType

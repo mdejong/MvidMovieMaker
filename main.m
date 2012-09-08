@@ -260,6 +260,9 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
     
     AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
     
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
     CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
     assert(cgFrameBuffer);
     
