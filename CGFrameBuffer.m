@@ -410,6 +410,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
                                                                        bitmapFormat:0
                                                                         bytesPerRow:self.bytesPerPixel*self.width
                                                                        bitsPerPixel:self.bitsPerPixel] autorelease];
+  NSAssert(imgBitmap != nil, @"NSBitmapImageRep initWithBitmapDataPlanes failed");
   
   // Copy pixels to bitmap storage but invert the BGRA format pixels to RGBA format
   
