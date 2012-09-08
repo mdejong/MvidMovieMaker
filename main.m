@@ -58,6 +58,9 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
 
 	//BOOL success;
   
+  CGImageSourceRef sourceRef;
+  CGImageRef imageRef;
+  
   if (FALSE) {
     filenameStr = @"TestOpaque.png";
   }
@@ -72,26 +75,29 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
 		exit(1);
 	}
 
-	// Create image object from src image data. If the image is the
-	// exact size of the iPhone display in portrait mode (320x480) then
-	// render into a view of that exact size. If the image is the
-	// exact size of landscape mode (480x320) then render with a
-	// 90 degree clockwise rotation so that the rendered result
-	// can be displayed with no transformation applied to the
-	// UIView. If the image dimensions are smaller than the
-	// width and height in portrait mode, render at the exact size
-	// of the image. Otherwise, the image is larger than the
-	// display size in portrait mode, so scale it down to the
-	// largest dimensions that can be displayed in portrait mode.
+	// Create image object from src image data.
 
-	NSImage *img = [[[NSImage alloc] initWithData:image_data] autorelease];
+  sourceRef = CGImageSourceCreateWithData((CFDataRef)image_data, NULL);
+  
+  // Make sure the image source exists before continuing
+  
+  if (sourceRef == NULL) {
+    fprintf(stderr, "CGImageSourceCreateWithData returned NULL.");
+		exit(1);
+  }
+  
+  // Create an image from the first item in the image source.
+  
+  imageRef = CGImageSourceCreateImageAtIndex(sourceRef, 0, NULL);
+  
+  CFRelease(sourceRef);
+  
+  CGSize imageSize = CGSizeMake(CGImageGetWidth(imageRef), CGImageGetHeight(imageRef));
+  int imageWidth = imageSize.width;
+  int imageHeight = imageSize.height;
 
-	CGSize imageSize = NSSizeToCGSize(img.size);
-	int imageWidth = imageSize.width;
-	int imageHeight = imageSize.height;
-
-	assert(imageWidth > 0);
-	assert(imageHeight > 0);
+  assert(imageWidth > 0);
+  assert(imageHeight > 0);
   
   // If this is the first frame, set the movie size based on the size of the first frame
   
@@ -107,28 +113,16 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
             (int)_movieDimensions.width, (int)_movieDimensions.height);
     exit(2);
   }
-
-  // Render into pixmap of known layout, this might change the BPP if a different value was specified
-  // in the command line options. For example, 32BPP could be downsamples to 16BPP with no alpha.
-
-	NSRect viewRect;
-	viewRect.origin.x = 0.0;
-	viewRect.origin.y = 0.0;
-	viewRect.size.width = imageWidth;
-	viewRect.size.height = imageHeight;
-
-	// Render NSImageView into core graphics buffer that is limited
-	// to the max size of the iPhone frame buffer. Only scaling
-	// is handled in this render operation, no rotation issues
-	// are handled here.
-
-	NSImageView *imageView = [[[NSImageView alloc] initWithFrame:viewRect] autorelease];
-	imageView.image = img;
-
-	CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:imageWidth height:imageHeight];
   
-	BOOL worked = [cgBuffer renderView:imageView];
+  // Render input image into a CGFrameBuffer at a specific BPP. If the input buffer actually contains
+  // 16bpp pixels expanded to 24bpp, then this render logic will resample down to 16bpp.
+
+  CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:imageWidth height:imageHeight];
+  
+  BOOL worked = [cgBuffer renderCGImage:imageRef];
   assert(worked);
+  
+  CGImageRelease(imageRef);
     
   // Copy the pixels from the cgBuffer into a NSImage
   
