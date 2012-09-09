@@ -268,7 +268,12 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
     
     [pngData writeToFile:pngFilename atomically:NO];
     
-    NSLog(@"wrote %@", pngFilename);
+    NSString *dupString = @"";
+    if (frame.isDuplicate) {
+      dupString = @" (duplicate)";
+    }
+    
+    NSLog(@"wrote %@%@", pngFilename, dupString);
     
     [pool drain];
   }
