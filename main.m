@@ -60,12 +60,24 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
   
   CGImageSourceRef sourceRef;
   CGImageRef imageRef;
+
+  if (FALSE) {
+    filenameStr = @"RGBGradient16BPP.png";
+  }
+  
+  if (FALSE) {
+    filenameStr = @"RGBGradient24BPP.png";
+  }
+  
+  if (FALSE) {
+    filenameStr = @"TestBlack.png";
+  }
   
   if (FALSE) {
     filenameStr = @"TestOpaque.png";
   }
 
-  if (TRUE) {
+  if (FALSE) {
     filenameStr = @"TestAlpha.png";
   }
   
@@ -613,7 +625,7 @@ int main (int argc, const char * argv[]) {
       
       extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
     }
-	} else if (argc == 2) {
+	} else {
     fprintf(stderr, USAGE);
     exit(1);
   }
