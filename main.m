@@ -65,7 +65,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
     filenameStr = @"TestOpaque.png";
   }
 
-  if (FALSE) {
+  if (TRUE) {
     filenameStr = @"TestAlpha.png";
   }
   
@@ -253,6 +253,7 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     
     AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
     
     // Release the NSImage ref inside the frame since we will operate on the CG image directly.
     frame.image = nil;
