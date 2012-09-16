@@ -8,6 +8,8 @@
 
 #include "maxvid_encode.h"
 
+#import <QTKit/QTKit.h>
+
 CGSize _movieDimensions;
 
 NSString *movie_prefix;
@@ -23,7 +25,11 @@ NSString *delta_directory = nil;
 // ------------------------------------------------------------------------
 //
 // mvidmoviemaker
-// 
+//
+// To convert a .mov to .mvid (Quicktime to optimized .mvid) execute.
+//
+// mvidmoviemaker movie.mov movie.mvid
+//
 // To create a .mvid video file from a series of PNG images
 // with a 15 FPS framerate and 32BPP "Millions+" (24 BPP plus alpha channel)
 //
@@ -38,6 +44,7 @@ NSString *delta_directory = nil;
 // ------------------------------------------------------------------------
 
 #define USAGE \
+"usage: mvidmoviemaker FILE.mov FILE.mvid" "\n" \
 "usage: mvidmoviemaker FILE.mvid FIRSTFRAME.png FRAMERATE BITSPERPIXEL ?KEYFRAME?" "\n" \
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
 
@@ -382,6 +389,106 @@ BOOL fileExists(NSString *filePath) {
   }
 }
 
+// Entry point for logic that will extract video frames from a Quicktime .mov file
+// and then write the frames as a .mvid file.
+
+void encodeMvidFromMovMain(char *movFilenameCstr,
+                           char *mvidFilenameCstr)
+{
+  NSString *movFilename = [NSString stringWithUTF8String:movFilenameCstr];
+  
+  BOOL isMov = [movFilename hasSuffix:@".mov"];
+  
+  if (isMov == FALSE) {
+    fprintf(stderr, USAGE);
+    exit(1);
+  }
+  
+  NSString *mvidFilename = [NSString stringWithUTF8String:mvidFilenameCstr];
+  
+  BOOL isMvid = [mvidFilename hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, USAGE);
+    exit(1);
+  }
+  
+  if (fileExists(movFilename) == FALSE) {
+    fprintf(stderr, "input quicktime movie file not found : %s", movFilenameCstr);
+    exit(2);
+  }
+
+  BOOL worked;
+  NSError *errState;  
+  QTTime duration;
+  QTTime startTime;
+  QTTime currentTime;
+  CVPixelBufferRef buffer;
+  int frameNum = 1;
+  NSTimeInterval timeInterval;
+  
+  QTMovie *movie = [QTMovie movieWithFile:movFilename error:&errState];
+  assert(movie);
+    
+  NSDictionary *attributes = [[[NSDictionary alloc] initWithObjectsAndKeys:
+                               QTMovieFrameImageTypeCVPixelBufferRef, QTMovieFrameImageType,
+                               [NSNumber numberWithBool:YES], QTMovieFrameImageHighQuality,
+                               nil]
+                              autorelease];
+  
+  BOOL done = FALSE;
+  BOOL extractedFirstFrame = FALSE;
+  
+  duration = [[movie attributeForKey:QTMovieDurationAttribute] QTTimeValue];
+  startTime = QTMakeTime(0, duration.timeScale);
+  currentTime = startTime;
+  
+  // FIXME: run through the movie once to determine the framerate
+  
+  fprintf(stdout, "extracting frames from QT Movie\n");
+  
+  while (!done) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    worked = QTGetTimeInterval(currentTime, &timeInterval);
+    assert(worked);
+        
+    buffer = [movie frameImageAtTime:currentTime withAttributes:attributes error:&errState];
+    worked = (buffer != nil);
+    
+    frameNum++;
+    float timeFloat = timeInterval;
+    fprintf(stdout, "extracted frame %d at time %f\n", frameNum, timeFloat);
+    
+    if (worked == FALSE) {
+      done = TRUE;
+    } else {
+      extractedFirstFrame = TRUE;
+    }
+    
+    QTTime increment = QTMakeTime(1, duration.timeScale);
+    currentTime = QTTimeIncrement(currentTime, increment);
+    
+    // Done once at the end of the movie
+    
+    QTTimeRange startEndRange = QTMakeTimeRange(startTime, duration);
+    if (!QTTimeInTimeRange(currentTime, startEndRange)) {
+      done = TRUE;
+    }
+    
+    // FIXME: Write frame buffer to mvid file
+    
+    [pool drain];
+  }
+  
+  if (extractedFirstFrame == FALSE) {
+    fprintf(stderr, "Could not extract initial frame from movie file %s", movFilenameCstr);
+    exit(2);
+  }
+  
+  return;
+}
+
 // Entry point for logic that encodes a .mvid from a series of frames.
 
 void encodeMvidFromFramesMain(char *mvidFilenameCstr,
@@ -626,7 +733,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
 
 int main (int argc, const char * argv[]) {
   NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
-
+  
 	if ((argc == 3 || argc == 4) && (strcmp(argv[1], "-extract") == 0)) {
 		// Extract movie frames from an existing archive
 
@@ -640,6 +747,18 @@ int main (int argc, const char * argv[]) {
     }
     
 		extractFramesFromMvidMain(mvidFilename, framesFilePrefix);
+  } else if (argc == 3) {
+    // FILE.mov : name of input Quicktime file
+    // FILE.mvid : name of output .mvid file
+    //
+    // When converting, the original BPP and framerate are copied
+    // but only the initial keyframe remains a keyframe in the .mvid
+    // file for reasons of space savings.
+    
+    char *movFilenameCstr = (char*)argv[1];
+    char *mvidFilenameCstr = (char*)argv[2];
+    
+    encodeMvidFromMovMain(movFilenameCstr, mvidFilenameCstr);    
 	} else if (argc == 5 || argc == 6) {
     // FILE.mvid : name of output file that will contain all the video frames
     // FIRSTFRAME.png : name of first frame file of input PNG files. All

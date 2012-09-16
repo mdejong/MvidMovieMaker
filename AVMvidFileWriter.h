@@ -21,7 +21,7 @@
 @interface AVMvidFileWriter : NSObject {
 @private
   NSString *m_mvidPath;
-  float frameDuration;
+  float m_frameDuration;
   int   frameNum;
   int   m_totalNumFrames;
   MVFileHeader *mvHeader;

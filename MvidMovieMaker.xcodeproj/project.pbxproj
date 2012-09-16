@@ -11,6 +11,7 @@
 		CD7E243815F341A000027DA6 /* AVFrameDecoder.m in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243415F341A000027DA6 /* AVFrameDecoder.m */; };
 		CD7E243915F341A000027DA6 /* AVMvidFrameDecoder.m in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243615F341A000027DA6 /* AVMvidFrameDecoder.m */; };
 		CD7E243A15F341A000027DA6 /* maxvid_decode.c in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243715F341A000027DA6 /* maxvid_decode.c */; };
+		CD96F739160604AD00316089 /* QTKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CD96F738160604AD00316089 /* QTKit.framework */; };
 		CDAEB66515EDB6FB005A148B /* CGFrameBuffer.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */; };
 		CDAEB66815EDB6FB005A148B /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65915EDB6FB005A148B /* main.m */; };
 		CDCC050D15F2036E00C08C52 /* AVMvidFileWriter.m in Sources */ = {isa = PBXBuildFile; fileRef = CDCC050815F2036E00C08C52 /* AVMvidFileWriter.m */; };
@@ -40,6 +41,7 @@
 		CD7E243515F341A000027DA6 /* AVMvidFrameDecoder.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AVMvidFrameDecoder.h; sourceTree = SOURCE_ROOT; };
 		CD7E243615F341A000027DA6 /* AVMvidFrameDecoder.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AVMvidFrameDecoder.m; sourceTree = SOURCE_ROOT; };
 		CD7E243715F341A000027DA6 /* maxvid_decode.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = maxvid_decode.c; sourceTree = SOURCE_ROOT; };
+		CD96F738160604AD00316089 /* QTKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QTKit.framework; path = System/Library/Frameworks/QTKit.framework; sourceTree = SDKROOT; };
 		CDAEB65215EDB6FB005A148B /* CGFrameBuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CGFrameBuffer.h; sourceTree = SOURCE_ROOT; };
 		CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CGFrameBuffer.m; sourceTree = SOURCE_ROOT; };
 		CDAEB65915EDB6FB005A148B /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = SOURCE_ROOT; };
@@ -60,6 +62,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CD96F739160604AD00316089 /* QTKit.framework in Frameworks */,
 				CDD23BA715EFD3F80021D00C /* libz.dylib in Frameworks */,
 				CDE6D04B15EE6E570084FFAA /* Cocoa.framework in Frameworks */,
 			);
@@ -71,6 +74,7 @@
 		CDD23BA815EFD4060021D00C /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				CD96F738160604AD00316089 /* QTKit.framework */,
 				CDE6D04A15EE6E570084FFAA /* Cocoa.framework */,
 				CDD23BA615EFD3F80021D00C /* libz.dylib */,
 			);
@@ -187,7 +191,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
 				COPY_PHASE_STRIP = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -213,7 +217,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
 				COPY_PHASE_STRIP = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				GCC_C_LANGUAGE_STANDARD = gnu99;
