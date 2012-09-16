@@ -63,7 +63,7 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "EXPORTFRAMES/Frame001.png"
+            argument = "BW100_FRAMES/BW100sRGB01.png"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
@@ -71,7 +71,7 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "16"
+            argument = "32"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

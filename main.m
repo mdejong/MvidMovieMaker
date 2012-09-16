@@ -62,11 +62,18 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
   CGImageRef imageRef;
 
   if (FALSE) {
-    filenameStr = @"RGBGradient16BPP.png";
+    // FIXME : values not the same after read from rgb24 -> rgb555 -> rbg24
+    
+    // This input PNG was downsampled from a smooth 24BPP gradient
+    filenameStr = @"RGBGradient16BPP_SRGB.png";
   }
   
   if (FALSE) {
-    filenameStr = @"RGBGradient24BPP.png";
+    filenameStr = @"SunriseFunkyColorspace.jpg";
+  }
+  
+  if (FALSE) {
+    filenameStr = @"RGBGradient24BPP_SRGB.png";
   }
   
   if (FALSE) {
@@ -77,6 +84,10 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
     filenameStr = @"TestOpaque.png";
   }
 
+  if (FALSE) {
+    filenameStr = @"TestAlphaOnOrOff.png";
+  }
+  
   if (FALSE) {
     filenameStr = @"TestAlpha.png";
   }
@@ -97,6 +108,21 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
     fprintf(stderr, "CGImageSourceCreateWithData returned NULL.");
 		exit(1);
   }
+  
+  // FIXME: if the input image in the generic RGB colorspace, but the output is in
+  // the SRGB colorspace, then the input will not equal the output? Is it possible
+  // to implicitly assign the sRGB colorspace to the input "generic" or unspecificed PNG?
+  //
+  // SRGB
+  // https://gist.github.com/1130831
+  // http://www.mailinglistarchive.com/html/quartz-dev@lists.apple.com/2010-04/msg00076.html
+  // http://www.w3.org/Graphics/Color/sRGB.html (see alpha masking topic)
+  //
+  // Render from input (RGB or whatever) into sRGB, this could involve conversions
+  // but it makes the results portable and it basically better because it is still as
+  // lossless as possible given the constraints. Only output sRGB and only work with
+  // sRGB formatted data, perhaps a flag would be needed to reject images created by
+  // earlier versions that don't use sRGB directly.
   
   // Create an image from the first item in the image source.
   
@@ -125,11 +151,27 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
             (int)_movieDimensions.width, (int)_movieDimensions.height);
     exit(2);
   }
-  
+    
   // Render input image into a CGFrameBuffer at a specific BPP. If the input buffer actually contains
   // 16bpp pixels expanded to 24bpp, then this render logic will resample down to 16bpp.
 
   CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:imageWidth height:imageHeight];
+  
+  // Query the colorspace identified in the input PNG image
+  
+  CGColorSpaceRef inputColorspace = CGImageGetColorSpace(imageRef);
+  // Should default to RGB is nothing is specified
+  assert(inputColorspace);
+
+  //cgBuffer.colorspace = inputColorspace;
+  
+  // Use sRGB colorspace when reading input pixels into format that will be written to
+  // the .mvid file. This is needed when using a custom color space to avoid problems
+  // related to storing the exact original input pixels.
+  
+  CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  cgBuffer.colorspace = colorspace;
+  CGColorSpaceRelease(colorspace);
   
   BOOL worked = [cgBuffer renderCGImage:imageRef];
   assert(worked);
@@ -139,8 +181,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
   // Copy the pixels from the cgBuffer into a NSImage
   
   if (FALSE) {
-    NSString *dumpFilename = [NSString stringWithFormat:@"DumpFrame%0.4d.png", frameIndex+1];
-
+    NSString *dumpFilename = [NSString stringWithFormat:@"WriteDumpFrame%0.4d.png", frameIndex+1];
+    
     NSData *pngData = [cgBuffer formatAsPNG];
     
     [pngData writeToFile:dumpFilename atomically:NO];
@@ -272,6 +314,10 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
     
     CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
     assert(cgFrameBuffer);
+    
+    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    cgFrameBuffer.colorspace = colorspace;
+    CGColorSpaceRelease(colorspace);
     
     NSData *pngData = [cgFrameBuffer formatAsPNG];
     assert(pngData);
@@ -624,6 +670,95 @@ int main (int argc, const char * argv[]) {
       // Extract frames we just encoded into the .mvid file for debug purposes
       
       extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
+    }
+    
+    // FIXME: remove next two image emit blocks
+    
+    if (FALSE) {
+      // Emit rgb555 image that contains all possible 16bpp values
+
+      NSMutableData *mData = [NSMutableData data];
+      
+      CGFrameBuffer *gcFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:16 width:200 height:200];
+      
+      uint16_t *dstPtr = (uint16_t*) gcFrameBuffer.pixels;
+      bzero(dstPtr, 200*200*sizeof(uint16_t));
+      for (int i=0; i < (200 * 200); i++) {
+        if (i > 32767) {
+          break;
+        }
+        *dstPtr++ = i;
+      }
+      
+      CFStringRef type = kUTTypeBMP;
+      size_t count = 1;  
+      CGImageDestinationRef dataDest;      
+      
+      dataDest = CGImageDestinationCreateWithData((CFMutableDataRef)mData,
+                                                  type,
+                                                  count,
+                                                  NULL);
+      assert(dataDest);
+      
+      CGImageRef imgRef = [gcFrameBuffer createCGImageRef];
+      
+      CGImageDestinationAddImage(dataDest, imgRef, NULL);
+      CGImageDestinationFinalize(dataDest);
+      
+      CGImageRelease(imgRef);
+      CFRelease(dataDest);
+      
+      NSString *dumpFilename = @"All16BPP.bmp";
+      
+      [mData writeToFile:dumpFilename atomically:NO];
+      
+      NSLog(@"Wrote %@", dumpFilename);
+    }
+    
+    
+    if (FALSE) {
+      // Emit rgb888 image that contains all possible 24bpp values
+      
+      NSMutableData *mData = [NSMutableData data];
+      
+      int width = 200;
+      int height = 200;
+      
+      CGFrameBuffer *gcFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
+      
+      uint32_t *dstPtr = (uint32_t*) gcFrameBuffer.pixels;
+      bzero(dstPtr, width*height*sizeof(uint32_t));
+      // Note that all 200 pixels will be counting up, but the maximum size of a 24bpp wil not be reached
+      for (int i=0; i < (width * height); i++) {
+        //if (i > 0xFFFFFF) {
+        //  break;
+        //}
+        *dstPtr++ = i;
+      }
+      
+      CFStringRef type = kUTTypeBMP;
+      size_t count = 1;  
+      CGImageDestinationRef dataDest;      
+      
+      dataDest = CGImageDestinationCreateWithData((CFMutableDataRef)mData,
+                                                  type,
+                                                  count,
+                                                  NULL);
+      assert(dataDest);
+      
+      CGImageRef imgRef = [gcFrameBuffer createCGImageRef];
+      
+      CGImageDestinationAddImage(dataDest, imgRef, NULL);
+      CGImageDestinationFinalize(dataDest);
+      
+      CGImageRelease(imgRef);
+      CFRelease(dataDest);
+      
+      NSString *dumpFilename = @"All24BPP.bmp";
+      
+      [mData writeToFile:dumpFilename atomically:NO];
+      
+      NSLog(@"Wrote %@", dumpFilename);
     }
 	} else {
     fprintf(stderr, USAGE);

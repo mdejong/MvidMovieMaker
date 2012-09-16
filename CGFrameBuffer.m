@@ -66,6 +66,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 @synthesize bytesPerPixel = m_bytesPerPixel;
 //@synthesize isLockedByDataProvider = m_isLockedByDataProvider;
 @synthesize lockedByImageRef = m_lockedByImageRef;
+@synthesize colorspace = m_colorspace;
 
 + (CGFrameBuffer*) cGFrameBufferWithBppDimensions:(NSInteger)bitsPerPixel
                                             width:(NSInteger)width
@@ -131,10 +132,12 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 }
 
 - (void)dealloc {
-	NSAssert(self->m_isLockedByDataProvider == FALSE, @"dealloc: buffer still locked by data provider");
+  NSAssert(self->m_isLockedByDataProvider == FALSE, @"dealloc: buffer still locked by data provider");
+
+  self.colorspace = NULL;
   
-	if (self->m_pixels != NULL) {
-		free(self->m_pixels);
+  if (self->m_pixels != NULL) {
+    free(self->m_pixels);
   }
   
   [super dealloc];
@@ -181,7 +184,12 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
 	CGBitmapInfo bitmapInfo = [self getBitmapInfo];
   
-	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+	CGColorSpaceRef colorSpace = self.colorspace;
+	if (colorSpace) {
+		CGColorSpaceRetain(colorSpace);
+	} else {
+		colorSpace = CGColorSpaceCreateDeviceRGB();
+	}
   
 	NSAssert(self.pixels != NULL, @"pixels must not be NULL");
   
@@ -252,7 +260,12 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
 	CGBitmapInfo bitmapInfo = [self getBitmapInfo];
   
-	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+	CGColorSpaceRef colorSpace = self.colorspace;
+	if (colorSpace) {
+		CGColorSpaceRetain(colorSpace);
+	} else {
+		colorSpace = CGColorSpaceCreateDeviceRGB();
+	}
   
 	NSAssert(self.pixels != NULL, @"pixels must not be NULL");
   
@@ -318,7 +331,12 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
 	CGColorRenderingIntent renderIntent = kCGRenderingIntentDefault;
   
-	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+	CGColorSpaceRef colorSpace = self.colorspace;
+	if (colorSpace) {
+		CGColorSpaceRetain(colorSpace);
+	} else {
+		colorSpace = CGColorSpaceCreateDeviceRGB();
+	}
   
 	CGImageRef inImageRef = CGImageCreate(self.width, self.height, bitsPerComponent, bitsPerPixel, bytesPerRow,
                                         colorSpace, bitmapInfo, dataProviderRef, NULL,
@@ -434,6 +452,8 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   
+  /*
+  
   NSInteger samplesPerPixel;
   NSInteger bitsPerSample;
   NSInteger bitsPerPixel = self.bitsPerPixel;
@@ -462,6 +482,11 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   } else {
     assert(0);
   }
+  
+  // FIXME: write with CGImageDestinationCreateWithData()
+  // CGImageDestinationCreateWithURL()
+  //
+  // Write PNG data directly instead of interfacing with NSBitmapImageRep !
   
   // The pixel format for a NSBitmapImageRep is RGBA so we need to manually convert
   // from BGRA when writing pixels. If the pixel format in the frame buffer is
@@ -516,7 +541,9 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
     // BGRA -> RGBA
     value = abgr_to_argb(value);
     outPtr[i] = value;
-  }      
+  }
+   
+   */
   
   /*
   
@@ -568,13 +595,24 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
    
   */
   
-  // Render the CGImage into the newly created NSBitmapImageRep
+  // Render buffer as a PNG image
   
-  NSData *data;
-  data = [imgBitmap representationUsingType:NSPNGFileType
-                                 properties:nil];
+  CFStringRef type = kUTTypePNG;
+  size_t count = 1;  
+  CGImageDestinationRef dataDest;
+  dataDest = CGImageDestinationCreateWithData((CFMutableDataRef)mData,
+                                              type,
+                                              count,
+                                              NULL);
+  assert(dataDest);
   
-  [mData appendData:data];
+  CGImageRef imgRef = [self createCGImageRef];
+  
+	CGImageDestinationAddImage(dataDest, imgRef, NULL);
+	CGImageDestinationFinalize(dataDest);
+  
+  CGImageRelease(imgRef);
+  CFRelease(dataDest);
   
   [pool drain];
   
@@ -617,6 +655,22 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   anotherFrameBufferPixelsPtr = zeroCopyPtr;
   
   memcpy(self.pixels, anotherFrameBufferPixelsPtr, self.numBytes);
+}
+
+// Setter for self.colorspace property. While this property is declared as assign,
+// it will actually retain a ref to the colorspace.
+
+- (void) setColorspace:(CGColorSpaceRef)colorspace
+{
+  if (colorspace) {
+    CGColorSpaceRetain(colorspace);
+  }
+  
+  if (self->m_colorspace) {
+    CGColorSpaceRelease(self->m_colorspace);
+  }
+  
+  self->m_colorspace = colorspace;
 }
 
 @end
