@@ -10,6 +10,8 @@
 
 #import <QTKit/QTKit.h>
 
+#import <QuickTime/Movies.h>
+
 CGSize _movieDimensions;
 
 NSString *movie_prefix;
@@ -423,12 +425,16 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   QTTime duration;
   QTTime startTime;
   QTTime currentTime;
+  QTTime frameTime;
   CVPixelBufferRef buffer;
   int frameNum = 1;
   NSTimeInterval timeInterval;
   
   QTMovie *movie = [QTMovie movieWithFile:movFilename error:&errState];
   assert(movie);
+
+  NSDictionary *movieAttributes = [movie movieAttributes];
+  fprintf(stdout, "movieAttributes : %s", [[movieAttributes description] UTF8String]);
     
   NSDictionary *attributes = [[[NSDictionary alloc] initWithObjectsAndKeys:
                                QTMovieFrameImageTypeCVPixelBufferRef, QTMovieFrameImageType,
@@ -443,9 +449,86 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   startTime = QTMakeTime(0, duration.timeScale);
   currentTime = startTime;
   
-  // FIXME: run through the movie once to determine the framerate
+  // Iterate over the "interesting" times in the movie and calculate framerate.
+  // Typically, the first couple of frames appear at the exact frame bound,
+  // but then the times can be in flux depending on the movie. If the movie starts
+  // with a very long frame display time but then a small frame rate appears
+  // later on, we need to adjust the whole movie framerate to match the shortest
+  // interval.
+
+  TimeValue lastInteresting = 0;
+  TimeValue nextInteresting;
+	TimeValue nextInterestingDuration;
+  short nextTimeFlags = nextTimeStep;
+  QTTimeRange startEndRange = QTMakeTimeRange(startTime, duration);
+  
+  NSArray *tracks = [movie tracksOfMediaType:QTMediaTypeVideo];
+  if ([tracks count] == 0) {
+    fprintf(stderr, "Could not find any video tracks in movie file %s", movFilenameCstr);
+    exit(2);
+  }
+  QTTrack *firstTrack = [tracks objectAtIndex:0];
+  Media trackMedia = [[firstTrack media] quickTimeMedia];
+  assert(trackMedia);
+  
+  NSMutableArray *durations = [NSMutableArray array];
+  
+  fprintf(stdout, "extracting framerate from QT Movie\n");
+  
+  while (!done) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+        
+    GetMediaNextInterestingTime(trackMedia,
+                                nextTimeFlags,
+                                currentTime.timeValue,
+                                1,
+                                &nextInteresting,
+                                &nextInterestingDuration);
+    
+    if (nextInteresting == -1) {      
+      done = TRUE;
+    } else {
+      TimeValue interestingDuration = nextInteresting - lastInteresting;
+      
+      [durations addObject:[NSNumber numberWithInt:(int)interestingDuration]];
+      
+      currentTime = QTMakeTime(nextInteresting, duration.timeScale);
+      
+      worked = QTGetTimeInterval(currentTime, &timeInterval);
+      assert(worked);
+      
+      fprintf(stdout, "found delta at time %f with duration %d\n", (float)timeInterval, (int)interestingDuration);
+    }
+    
+    [pool drain];
+  }
+  
+  assert([durations count] > 0);
+  
+  // First check for the easy case, where all the durations are the exact same number.
+  
+  int firstDuration = [[durations objectAtIndex:0] intValue];
+  BOOL allSame = TRUE;
+  for (NSNumber *durationNumber in durations) {
+    int currentDuration = [durationNumber intValue];
+    if (currentDuration != firstDuration) {
+      allSame = FALSE;
+    }
+  }
+  
+  if (allSame) {
+    frameTime = QTMakeTime(firstDuration, duration.timeScale);
+  } else {
+    assert(0);
+  }
+  
+  // Now that we know the framerate, iterate through visual
+  // display at the indicated framerate.
   
   fprintf(stdout, "extracting frames from QT Movie\n");
+  
+  done = FALSE;
+  currentTime = startTime;
   
   while (!done) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -455,23 +538,22 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         
     buffer = [movie frameImageAtTime:currentTime withAttributes:attributes error:&errState];
     worked = (buffer != nil);
-    
-    frameNum++;
-    float timeFloat = timeInterval;
-    fprintf(stdout, "extracted frame %d at time %f\n", frameNum, timeFloat);
-    
+        
     if (worked == FALSE) {
       done = TRUE;
+      
+      fprintf(stdout, "failed to extract frame %d at time %f\n", frameNum, (float)timeInterval);
     } else {
       extractedFirstFrame = TRUE;
+      
+      fprintf(stdout, "extracted frame %d at time %f\n", frameNum, (float)timeInterval);
+      frameNum++;
     }
     
-    QTTime increment = QTMakeTime(1, duration.timeScale);
-    currentTime = QTTimeIncrement(currentTime, increment);
+    currentTime = QTTimeIncrement(currentTime, frameTime);
     
     // Done once at the end of the movie
     
-    QTTimeRange startEndRange = QTMakeTimeRange(startTime, duration);
     if (!QTTimeInTimeRange(currentTime, startEndRange)) {
       done = TRUE;
     }
@@ -485,6 +567,10 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     fprintf(stderr, "Could not extract initial frame from movie file %s", movFilenameCstr);
     exit(2);
   }
+  
+  int totalNumFrames = frameNum - 1;
+  
+  // FIXME : rewrite header
   
   return;
 }
