@@ -173,6 +173,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     imageRef = createImageFromFile(filenameStr);
   } else {
     imageRef = existingImageRef;
+    CGImageRetain(imageRef);
   }
   assert(imageRef);
   
@@ -478,10 +479,10 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   QTTime startTime;
   QTTime currentTime;
   QTTime frameTime;
-  //CVPixelBufferRef frameImage;
   CGImageRef frameImage;
-  int frameNum = 1;
+  //int frameNum = 1;
   NSTimeInterval timeInterval;
+  int mvidBPP = 32;
   
   QTMovie *movie = [QTMovie movieWithFile:movFilename error:&errState];
   assert(movie);
@@ -601,9 +602,15 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   }
   if ([durations count] == 0) {
     // If one single frame is displayed for the entire length of the movie, then the
-    // duration is the frame rate.
+    // duration is the actual frame rate. The trouble with that approach is that
+    // an animation is assumed to have at least 2 frames. Work around the assumption
+    // by creating a framerate that is exactly half of the duration in this case.
     
-    [durations addObject:[NSNumber numberWithInt:(int)duration.timeValue]];
+    int halfDuration = (int)duration.timeValue / (int)2;
+    NSNumber *halfDurationNum = [NSNumber numberWithInt:halfDuration];
+    
+    [durations addObject:halfDurationNum];
+    [durations addObject:halfDurationNum];
   }
   
   assert([durations count] > 0);
@@ -625,13 +632,40 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     assert(0);
   }
   
+  // The frame interval is now known, so recalculate the total number of frames
+  // by counting how many frames of the indicated interval fit into the movie duration.
+    
+  int totalNumFrames = 1;
+  done = FALSE;
+  currentTime = startTime;
+  
+  while (!done) {
+    currentTime = QTTimeIncrement(currentTime, frameTime);
+    
+    // Done once at the end of the movie
+    
+    if (!QTTimeInTimeRange(currentTime, startEndRange)) {
+      done = TRUE;
+    } else {
+      totalNumFrames++;
+    }
+  }
+  
   // Now that we know the framerate, iterate through visual
   // display at the indicated framerate.
+  // Calculate framerate in terms of clock time
   
-  fprintf(stdout, "extracting frames from QT Movie\n");
+  worked = QTGetTimeInterval(frameTime, &timeInterval);
+  assert(worked);
+
+  fprintf(stdout, "extracting %d frame(s) from QT Movie\n", totalNumFrames);
+  fprintf(stdout, "frame duration is %f seconds\n", (float)timeInterval);
+  
+  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, mvidBPP, timeInterval, totalNumFrames);
   
   done = FALSE;
   currentTime = startTime;
+  int frameIndex = 0;
   
   while (!done) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -639,27 +673,38 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     worked = QTGetTimeInterval(currentTime, &timeInterval);
     assert(worked);
 
+    // Note that the CGImageRef here has been placed in the autorelease pool automatically
     frameImage = [movie frameImageAtTime:currentTime withAttributes:attributes error:&errState];
     worked = (frameImage != nil);
         
     if (worked == FALSE) {
       done = TRUE;
       
-      fprintf(stdout, "failed to extract frame %d at time %f\n", frameNum, (float)timeInterval);
+      fprintf(stdout, "failed to extract frame %d at time %f\n", frameIndex+1, (float)timeInterval);
     } else {
       extractedFirstFrame = TRUE;
       
-      fprintf(stdout, "extracted frame %d at time %f\n", frameNum, (float)timeInterval);
-      frameNum++;
+      fprintf(stdout, "extracted frame %d at time %f\n", frameIndex+1, (float)timeInterval);
       
       int width = CGImageGetWidth(frameImage);
       int height = CGImageGetHeight(frameImage);
+      // Note that this value will always be 32bpp for a rendered movie frame, we need to
+      // actually scan the pixels composited here to figure out if the alpha channel is used.
       int bpp = CGImageGetBitsPerPixel(frameImage);
       
       fprintf(stdout, "width x height : %d x %d at bpp %d\n", width, height, bpp);
       
       // FIXME: need to scan all pixels to see if all the ALPHA is set to 0xFF since
       // this CGImage does not know if it is 24BPP or 32BPP
+
+      // Write frame data to MVID
+      
+      BOOL isKeyframe = FALSE;
+      if (frameIndex == 0) {
+        isKeyframe = TRUE;
+      }
+      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidBPP, isKeyframe);
+      frameIndex++;
     }
     
     currentTime = QTTimeIncrement(currentTime, frameTime);
@@ -670,8 +715,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       done = TRUE;
     }
     
-    // FIXME: Write frame buffer to mvid file
-    
+    //CGImageRelease(frameImage);
+        
     [pool drain];
   }
   
@@ -680,9 +725,22 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     exit(2);
   }
   
-  int totalNumFrames = frameNum - 1;
+  assert(frameIndex == totalNumFrames);
   
-  // FIXME : rewrite header
+  // FIXME: If scanning shows that all pixels are opaque, then reset bpp to 24bpp
+  
+  [mvidWriter rewriteHeader];
+  
+  [mvidWriter close];
+  
+  fprintf(stdout, "done writing %d frames to %s\n", totalNumFrames, mvidFilenameCstr);
+  fflush(stdout);
+  
+  // cleanup
+  
+  if (prevFrameBuffer) {
+    [prevFrameBuffer release];
+  }
   
   return;
 }
@@ -935,7 +993,13 @@ int main (int argc, const char * argv[]) {
     char *movFilenameCstr = (char*)argv[1];
     char *mvidFilenameCstr = (char*)argv[2];
     
-    encodeMvidFromMovMain(movFilenameCstr, mvidFilenameCstr);    
+    encodeMvidFromMovMain(movFilenameCstr, mvidFilenameCstr);
+    
+    if (TRUE) {
+      // Extract frames we just encoded into the .mvid file for debug purposes
+      
+      extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
+    }
 	} else if (argc == 5 || argc == 6) {
     // FILE.mvid : name of output file that will contain all the video frames
     // FIRSTFRAME.png : name of first frame file of input PNG files. All
