@@ -426,7 +426,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   QTTime startTime;
   QTTime currentTime;
   QTTime frameTime;
-  CVPixelBufferRef buffer;
+  //CVPixelBufferRef frameImage;
+  CGImageRef frameImage;
   int frameNum = 1;
   NSTimeInterval timeInterval;
   
@@ -435,9 +436,11 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
 
   NSDictionary *movieAttributes = [movie movieAttributes];
   fprintf(stdout, "movieAttributes : %s", [[movieAttributes description] UTF8String]);
-    
+  
+  // Passing QTMovieFrameImagePixelFormat for type 
+  
   NSDictionary *attributes = [[[NSDictionary alloc] initWithObjectsAndKeys:
-                               QTMovieFrameImageTypeCVPixelBufferRef, QTMovieFrameImageType,
+                               QTMovieFrameImageTypeCGImageRef, QTMovieFrameImageType,
                                [NSNumber numberWithBool:YES], QTMovieFrameImageHighQuality,
                                nil]
                               autorelease];
@@ -467,18 +470,60 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     fprintf(stderr, "Could not find any video tracks in movie file %s", movFilenameCstr);
     exit(2);
   }
+  
+  // FIXME: only descend into track looking for Animation codec if there is 1 video track
+  
   QTTrack *firstTrack = [tracks objectAtIndex:0];
-  Media trackMedia = [[firstTrack media] quickTimeMedia];
-  assert(trackMedia);
+  QTMedia *firstTrackMedia = [firstTrack media];
+  Media firstTrackQuicktimeMedia = [firstTrackMedia quickTimeMedia];
+  assert(firstTrackQuicktimeMedia);
+
+  NSDictionary *firstTrackAttributes = [firstTrack trackAttributes];
+  fprintf(stdout, "firstTrackAttributes : %s\n", [[firstTrackAttributes description] UTF8String]);
+
+  NSDictionary *firstTrackMediaAttributes = [firstTrackMedia mediaAttributes];
+  fprintf(stdout, "firstTrackMediaAttributes : %s\n", [[firstTrackMediaAttributes description] UTF8String]);
   
   NSMutableArray *durations = [NSMutableArray array];
   
-  fprintf(stdout, "extracting framerate from QT Movie\n");
+  if (TRUE) {
+    // Drop into QT to determine what kind of samples are inside of the Media object
+    
+    ImageDescriptionHandle desc = (ImageDescriptionHandle)NewHandleClear(sizeof(ImageDescription));
+        
+    GetMediaSampleDescription(firstTrackQuicktimeMedia, 1, (SampleDescriptionHandle)desc);
+    
+    CodecType cType =(*desc)->cType;
+    
+    BOOL isAnimationCodec = FALSE;
+    
+    // Animation
+    // 1919706400 ?= 'rle '
+    char qtAniFourCC[] = { 'r', 'l', 'e', ' ' };
+    uint32_t fourCC = qtAniFourCC[0] << 24 | qtAniFourCC[1] << 16 | qtAniFourCC[2] << 8 | qtAniFourCC[3];
+    if (cType == fourCC) {
+      isAnimationCodec = TRUE;
+    }
+    
+    int depth = (*desc)->depth;
+    
+    // 16
+    
+    assert(depth == 16 || depth == 24 || depth == 32);
+    
+    // For 16BPP Animation, we need to get at the data directly?
+    
+    // http://www.mailinglistarchive.com/quicktime-api@lists.apple.com/msg06593.html
+    
+    DisposeHandle((Handle)desc);
+  }
   
+  fprintf(stdout, "extracting framerate from QT Movie\n");
+    
   while (!done) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
         
-    GetMediaNextInterestingTime(trackMedia,
+    GetMediaNextInterestingTime(firstTrackQuicktimeMedia,
                                 nextTimeFlags,
                                 currentTime.timeValue,
                                 1,
@@ -501,6 +546,12 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     }
     
     [pool drain];
+  }
+  if ([durations count] == 0) {
+    // If one single frame is displayed for the entire length of the movie, then the
+    // duration is the frame rate.
+    
+    [durations addObject:[NSNumber numberWithInt:(int)duration.timeValue]];
   }
   
   assert([durations count] > 0);
@@ -535,9 +586,9 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     worked = QTGetTimeInterval(currentTime, &timeInterval);
     assert(worked);
-        
-    buffer = [movie frameImageAtTime:currentTime withAttributes:attributes error:&errState];
-    worked = (buffer != nil);
+
+    frameImage = [movie frameImageAtTime:currentTime withAttributes:attributes error:&errState];
+    worked = (frameImage != nil);
         
     if (worked == FALSE) {
       done = TRUE;
@@ -548,6 +599,15 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       
       fprintf(stdout, "extracted frame %d at time %f\n", frameNum, (float)timeInterval);
       frameNum++;
+      
+      int width = CGImageGetWidth(frameImage);
+      int height = CGImageGetHeight(frameImage);
+      int bpp = CGImageGetBitsPerPixel(frameImage);
+      
+      fprintf(stdout, "width x height : %d x %d at bpp %d\n", width, height, bpp);
+      
+      // FIXME: need to scan all pixels to see if all the ALPHA is set to 0xFF since
+      // this CGImage does not know if it is 24BPP or 32BPP
     }
     
     currentTime = QTTimeIncrement(currentTime, frameTime);
