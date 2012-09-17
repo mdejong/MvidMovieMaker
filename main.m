@@ -51,25 +51,13 @@ NSString *delta_directory = nil;
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
 
 
-// This method is invoked with a path that contains the frame
-// data and the offset into the frame array that this specific
-// frame data is found at.
-//
-// filenameStr : Name of .png file that contains the frame data
-// frameIndex  : Frame index (starts at zero)
-// bppNum      : 16, 24, or 32 BPP
-// isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
+// Create a CGImageRef given a filename. Image data is read from the file
 
-int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int frameIndex, int bppNum, BOOL isKeyframe) {
-	// Push pool after creating global resources
-
-  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-
-	//BOOL success;
-  
+CGImageRef createImageFromFile(NSString *filenameStr)
+{
   CGImageSourceRef sourceRef;
   CGImageRef imageRef;
-
+  
   if (FALSE) {
     // FIXME : values not the same after read from rgb24 -> rgb555 -> rbg24
     
@@ -92,7 +80,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
   if (FALSE) {
     filenameStr = @"TestOpaque.png";
   }
-
+  
   if (FALSE) {
     filenameStr = @"TestAlphaOnOrOff.png";
   }
@@ -106,9 +94,9 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
 		fprintf(stderr, "can't read image data from file \"%s\"\n", [filenameStr UTF8String]);
 		exit(1);
 	}
-
+  
 	// Create image object from src image data.
-
+  
   sourceRef = CGImageSourceCreateWithData((CFDataRef)image_data, NULL);
   
   // Make sure the image source exists before continuing
@@ -117,6 +105,76 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
     fprintf(stderr, "CGImageSourceCreateWithData returned NULL.");
 		exit(1);
   }
+  
+  // Create an image from the first item in the image source.
+  
+  imageRef = CGImageSourceCreateImageAtIndex(sourceRef, 0, NULL);
+  
+  CFRelease(sourceRef);
+  
+  return imageRef;
+}
+
+// Make a new MVID file writing object in the autorelease pool and configure
+// with the indicated framerate, total number of frames, and bpp.
+
+AVMvidFileWriter* makeMVidWriter(
+                                 NSString *mvidFilename,
+                                 NSUInteger bpp,
+                                 NSTimeInterval frameRate,
+                                 NSUInteger totalNumFrames
+                                 )
+{
+  AVMvidFileWriter *mvidWriter = [AVMvidFileWriter aVMvidFileWriter];
+  assert(mvidWriter);
+  
+  mvidWriter.mvidPath = mvidFilename;
+  mvidWriter.bpp = bpp;
+  // Note that we don't know the movie size until the first frame is read
+  
+  mvidWriter.frameDuration = frameRate;
+  mvidWriter.totalNumFrames = totalNumFrames;
+  
+  mvidWriter.genAdler = TRUE;
+  
+  BOOL worked = [mvidWriter open];
+  if (worked == FALSE) {
+    fprintf(stderr, "error: Could not open .mvid output file \"%s\"", (char*)[mvidFilename UTF8String]);        
+    exit(1);
+  }
+  
+  return mvidWriter;
+}
+
+// This method is invoked with a path that contains the frame
+// data and the offset into the frame array that this specific
+// frame data is found at.
+//
+// mvidWriter  : Output destination for MVID frame data.
+// filenameStr : Name of .png file that contains the frame data
+// existingImageRef : If NULL, image is loaded from filenameStr instead
+// frameIndex  : Frame index (starts at zero)
+// bppNum      : 16, 24, or 32 BPP
+// isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
+
+int process_frame_file(AVMvidFileWriter *mvidWriter,
+                       NSString *filenameStr,
+                       CGImageRef existingImageRef,
+                       int frameIndex,
+                       int bppNum,
+                       BOOL isKeyframe)
+{
+  // Push pool after creating global resources
+
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+
+  CGImageRef imageRef;
+  if (existingImageRef == NULL) {
+    imageRef = createImageFromFile(filenameStr);
+  } else {
+    imageRef = existingImageRef;
+  }
+  assert(imageRef);
   
   // FIXME: if the input image in the generic RGB colorspace, but the output is in
   // the SRGB colorspace, then the input will not equal the output? Is it possible
@@ -132,13 +190,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter, NSString *filenameStr, int 
   // lossless as possible given the constraints. Only output sRGB and only work with
   // sRGB formatted data, perhaps a flag would be needed to reject images created by
   // earlier versions that don't use sRGB directly.
-  
-  // Create an image from the first item in the image source.
-  
-  imageRef = CGImageSourceCreateImageAtIndex(sourceRef, 0, NULL);
-  
-  CFRelease(sourceRef);
-  
+    
   CGSize imageSize = CGSizeMake(CGImageGetWidth(imageRef), CGImageGetHeight(imageRef));
   int imageWidth = imageSize.width;
   int imageHeight = imageSize.height;
@@ -812,28 +864,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
     keyframeNum = 10000;
   }
   
-  // FIXME: Open .mvid and pass in the framerate to setup the header.
-  
-  AVMvidFileWriter *mvidWriter = [AVMvidFileWriter aVMvidFileWriter];
-  
-  {
-    assert(mvidWriter);
-    
-    mvidWriter.mvidPath = mvidFilename;
-    mvidWriter.bpp = bppNum;
-    // Note that we don't know the movie size until the first frame is read
-    
-    mvidWriter.frameDuration = framerateNum;
-    mvidWriter.totalNumFrames = [inFramePaths count];
-    
-    mvidWriter.genAdler = TRUE;
-    
-    BOOL worked = [mvidWriter open];
-    if (worked == FALSE) {
-      fprintf(stderr, "error: Could not open .mvid output file \"%s\"", mvidFilenameCstr);        
-      exit(1);
-    }
-  }
+  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, bppNum, framerateNum, [inFramePaths count]);
   
   // We now know the start and end integer values of the frame filename range.
   
@@ -855,7 +886,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(mvidWriter, framePath, frameIndex, bppNum, isKeyframe);
+    process_frame_file(mvidWriter, framePath, NULL, frameIndex, bppNum, isKeyframe);
     frameIndex++;
   }
   
@@ -878,7 +909,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
-  NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
+	NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
   
 	if ((argc == 3 || argc == 4) && (strcmp(argv[1], "-extract") == 0)) {
 		// Extract movie frames from an existing archive
@@ -935,95 +966,6 @@ int main (int argc, const char * argv[]) {
       // Extract frames we just encoded into the .mvid file for debug purposes
       
       extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
-    }
-    
-    // FIXME: remove next two image emit blocks
-    
-    if (FALSE) {
-      // Emit rgb555 image that contains all possible 16bpp values
-
-      NSMutableData *mData = [NSMutableData data];
-      
-      CGFrameBuffer *gcFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:16 width:200 height:200];
-      
-      uint16_t *dstPtr = (uint16_t*) gcFrameBuffer.pixels;
-      bzero(dstPtr, 200*200*sizeof(uint16_t));
-      for (int i=0; i < (200 * 200); i++) {
-        if (i > 32767) {
-          break;
-        }
-        *dstPtr++ = i;
-      }
-      
-      CFStringRef type = kUTTypeBMP;
-      size_t count = 1;  
-      CGImageDestinationRef dataDest;      
-      
-      dataDest = CGImageDestinationCreateWithData((CFMutableDataRef)mData,
-                                                  type,
-                                                  count,
-                                                  NULL);
-      assert(dataDest);
-      
-      CGImageRef imgRef = [gcFrameBuffer createCGImageRef];
-      
-      CGImageDestinationAddImage(dataDest, imgRef, NULL);
-      CGImageDestinationFinalize(dataDest);
-      
-      CGImageRelease(imgRef);
-      CFRelease(dataDest);
-      
-      NSString *dumpFilename = @"All16BPP.bmp";
-      
-      [mData writeToFile:dumpFilename atomically:NO];
-      
-      NSLog(@"Wrote %@", dumpFilename);
-    }
-    
-    
-    if (FALSE) {
-      // Emit rgb888 image that contains all possible 24bpp values
-      
-      NSMutableData *mData = [NSMutableData data];
-      
-      int width = 200;
-      int height = 200;
-      
-      CGFrameBuffer *gcFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
-      
-      uint32_t *dstPtr = (uint32_t*) gcFrameBuffer.pixels;
-      bzero(dstPtr, width*height*sizeof(uint32_t));
-      // Note that all 200 pixels will be counting up, but the maximum size of a 24bpp wil not be reached
-      for (int i=0; i < (width * height); i++) {
-        //if (i > 0xFFFFFF) {
-        //  break;
-        //}
-        *dstPtr++ = i;
-      }
-      
-      CFStringRef type = kUTTypeBMP;
-      size_t count = 1;  
-      CGImageDestinationRef dataDest;      
-      
-      dataDest = CGImageDestinationCreateWithData((CFMutableDataRef)mData,
-                                                  type,
-                                                  count,
-                                                  NULL);
-      assert(dataDest);
-      
-      CGImageRef imgRef = [gcFrameBuffer createCGImageRef];
-      
-      CGImageDestinationAddImage(dataDest, imgRef, NULL);
-      CGImageDestinationFinalize(dataDest);
-      
-      CGImageRelease(imgRef);
-      CFRelease(dataDest);
-      
-      NSString *dumpFilename = @"All24BPP.bmp";
-      
-      [mData writeToFile:dumpFilename atomically:NO];
-      
-      NSLog(@"Wrote %@", dumpFilename);
     }
 	} else {
     fprintf(stderr, USAGE);
