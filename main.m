@@ -74,6 +74,7 @@ CGImageRef createImageFromFile(NSString *filenameStr)
   }
   
   if (FALSE) {
+    // Device RGB colorspace
     filenameStr = @"TestBlack.png";
   }
   
@@ -227,19 +228,91 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   
   // Query the colorspace identified in the input PNG image
   
-  CGColorSpaceRef inputColorspace = CGImageGetColorSpace(imageRef);
-  // Should default to RGB is nothing is specified
+  BOOL useSRGBColorspace = FALSE;
+    
+  CGColorSpaceRef inputColorspace;
+  inputColorspace = CGImageGetColorSpace(imageRef);
+  // Should default to RGB if nothing is specified
   assert(inputColorspace);
+  
+  BOOL inputIsRGBColorspace = FALSE;
+  
+  /*
+  {
+    // CGColorSpaceCreateDeviceRGB();
+    
+    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
+    
+    NSString *colorspaceDescription = (NSString*) CGColorSpaceCopyName(colorspace);
+    NSString *inputColorspaceDescription = (NSString*) CGColorSpaceCopyName(inputColorspace);
+    
+    if ([colorspaceDescription isEqualToString:inputColorspaceDescription]) {
+      isRGBColorspace = TRUE;
+    }
+    
+    CGColorSpaceRelease(colorspace);
+  }
+  */
+  {
+    CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
+    
+    NSString *colorspaceDescription = (NSString*) CGColorSpaceCopyName(colorspace);
+    NSString *inputColorspaceDescription = (NSString*) CGColorSpaceCopyName(inputColorspace);
+    
+    if ([colorspaceDescription isEqualToString:inputColorspaceDescription]) {
+      inputIsRGBColorspace = TRUE;
+    }
+
+    CGColorSpaceRelease(colorspace);
+  }
+
+  BOOL inputIsSRGBColorspace = FALSE;
+  {
+    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    
+    NSString *colorspaceDescription = (NSString*) CGColorSpaceCopyName(colorspace);
+    NSString *inputColorspaceDescription = (NSString*) CGColorSpaceCopyName(inputColorspace);
+    
+    if ([colorspaceDescription isEqualToString:inputColorspaceDescription]) {
+      inputIsSRGBColorspace = TRUE;
+    }
+    
+    CGColorSpaceRelease(colorspace);
+  }
+  
+  if (inputIsRGBColorspace) {
+    assert(inputIsSRGBColorspace == FALSE);
+  }
+  if (inputIsSRGBColorspace) {
+    assert(inputIsRGBColorspace == FALSE);
+  }
+  
+  // Output is either "device RGB" or "srgb"
+  //
+  // If input is in device RGB, and rgb is indicated, then keep device RGB.
+  // If input is in device RGB, default, SRGB
+  // If input is in sRGB, then use sRGB to avoid conversion
 
   //cgBuffer.colorspace = inputColorspace;
+  
+  if (bppNum == 24 || bppNum == 32) {
+    useSRGBColorspace = TRUE;
+  }
+  if (inputIsSRGBColorspace) {
+    useSRGBColorspace = TRUE;    
+  }
   
   // Use sRGB colorspace when reading input pixels into format that will be written to
   // the .mvid file. This is needed when using a custom color space to avoid problems
   // related to storing the exact original input pixels.
   
-  CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-  cgBuffer.colorspace = colorspace;
-  CGColorSpaceRelease(colorspace);
+  if (useSRGBColorspace) {
+    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    cgBuffer.colorspace = colorspace;
+    CGColorSpaceRelease(colorspace);
+    
+    mvidWriter.isSRGB = TRUE;
+  }
   
   BOOL worked = [cgBuffer renderCGImage:imageRef];
   assert(worked);
@@ -408,9 +481,11 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
     CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
     assert(cgFrameBuffer);
     
-    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-    cgFrameBuffer.colorspace = colorspace;
-    CGColorSpaceRelease(colorspace);
+    if (frameDecoder.isSRGB) {
+      CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+      cgFrameBuffer.colorspace = colorspace;
+      CGColorSpaceRelease(colorspace);
+    }
     
     NSData *pngData = [cgFrameBuffer formatAsPNG];
     assert(pngData);
