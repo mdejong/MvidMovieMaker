@@ -155,6 +155,7 @@ AVMvidFileWriter* makeMVidWriter(
 // existingImageRef : If NULL, image is loaded from filenameStr instead
 // frameIndex  : Frame index (starts at zero)
 // bppNum      : 16, 24, or 32 BPP
+// checkAlphaChannel : If bpp is 24 and this argument is TRUE, scan output pixels for non-opaque image.
 // isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
 
 int process_frame_file(AVMvidFileWriter *mvidWriter,
@@ -162,6 +163,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
                        CGImageRef existingImageRef,
                        int frameIndex,
                        int bppNum,
+                       BOOL checkAlphaChannel,
                        BOOL isKeyframe)
 {
   // Push pool after creating global resources
@@ -217,6 +219,10 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   // Render input image into a CGFrameBuffer at a specific BPP. If the input buffer actually contains
   // 16bpp pixels expanded to 24bpp, then this render logic will resample down to 16bpp.
 
+  if (bppNum == 24 && checkAlphaChannel) {
+    bppNum = 32;
+  }
+  
   CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:imageWidth height:imageHeight];
   
   // Query the colorspace identified in the input PNG image
@@ -327,6 +333,31 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     }
   }
 
+  // Wrote either keyframe, nop delta, or delta frame. In the case where we need to scan the pixels
+  // to determine if any alpha channel pixels are used we might change the write bpp from 24 to 32 bpp.
+  
+  if (checkAlphaChannel) {
+    uint32_t *currentPixels = (uint32_t*)cgBuffer.pixels;
+    int width = cgBuffer.width;
+    int height = cgBuffer.height;
+    
+    BOOL allOpaque = TRUE;
+    
+    for (int i=0; i < (width * height); i++) {
+      uint32_t currentPixel = currentPixels[i];
+      // ABGR
+      uint8_t alpha = (currentPixel >> 24) & 0xFF;
+      if (alpha != 0xFF) {
+        allOpaque = FALSE;
+        break;
+      }
+    }
+    
+    if (allOpaque == FALSE) {
+      mvidWriter.bpp = 32;
+    }
+  }
+  
   if (TRUE) {
     if (prevFrameBuffer) {
       [prevFrameBuffer release];
@@ -482,7 +513,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   CGImageRef frameImage;
   //int frameNum = 1;
   NSTimeInterval timeInterval;
-  int mvidBPP = 32;
+  int mvidBPP = 24; // assume 24BPP at first, up to 32bpp if non-opaque pixels are found
   
   QTMovie *movie = [QTMovie movieWithFile:movFilename error:&errState];
   assert(movie);
@@ -703,7 +734,12 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       if (frameIndex == 0) {
         isKeyframe = TRUE;
       }
-      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidBPP, isKeyframe);
+      
+      BOOL checkAlphaChannel = FALSE;
+      if (mvidBPP != 16) {
+        checkAlphaChannel = TRUE;
+      }
+      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidBPP, checkAlphaChannel, isKeyframe);
       frameIndex++;
     }
     
@@ -727,7 +763,9 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   
   assert(frameIndex == totalNumFrames);
   
-  // FIXME: If scanning shows that all pixels are opaque, then reset bpp to 24bpp
+  // Note that the process_frame_file() method could have modified the bpp field by changing it
+  // from 24bpp to 32bpp in the case where alpha channel usage was found in the image data.
+  // This call will rewrite the header with that updated info along with other data.
   
   [mvidWriter rewriteHeader];
   
@@ -944,7 +982,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(mvidWriter, framePath, NULL, frameIndex, bppNum, isKeyframe);
+    process_frame_file(mvidWriter, framePath, NULL, frameIndex, bppNum, FALSE, isKeyframe);
     frameIndex++;
   }
   
