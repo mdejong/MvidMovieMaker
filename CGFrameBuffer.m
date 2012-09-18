@@ -106,12 +106,18 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
     
 	char* buffer;
   size_t allocNumBytes;
-  
   allocNumBytes = inNumBytes;
-  buffer = (char*) malloc(allocNumBytes);
+  
+  int pagesize = getpagesize();
+  int numpages = (inNumBytes / pagesize);
+  if (inNumBytes % pagesize) {
+    numpages++;
+  }
+  int allocNumBytesInPages = numpages * pagesize;
+  buffer = (char*) valloc(allocNumBytesInPages);
   if (buffer) {
-    bzero(buffer, allocNumBytes);
-  }  
+    bzero(buffer, allocNumBytesInPages);
+  }
   
 	if (buffer == NULL) {
 		return nil;
