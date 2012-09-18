@@ -106,10 +106,10 @@ CGImageRef createImageFromFile(NSString *filenameStr)
   
   // Make sure the image source exists before continuing
   
-  if (sourceRef == NULL) {
-    fprintf(stderr, "CGImageSourceCreateWithData returned NULL.");
+	if (sourceRef == NULL) {
+		fprintf(stderr, "can't create image data from file \"%s\"\n", [filenameStr UTF8String]);
 		exit(1);
-  }
+	}
   
   // Create an image from the first item in the image source.
   
@@ -144,7 +144,7 @@ AVMvidFileWriter* makeMVidWriter(
   
   BOOL worked = [mvidWriter open];
   if (worked == FALSE) {
-    fprintf(stderr, "error: Could not open .mvid output file \"%s\"", (char*)[mvidFilename UTF8String]);        
+    fprintf(stderr, "error: Could not open .mvid output file \"%s\"\n", (char*)[mvidFilename UTF8String]);        
     exit(1);
   }
   
@@ -214,7 +214,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   } else if (CGSizeEqualToSize(imageSize, _movieDimensions) == FALSE) {
     // Size of next frame must exactly match the size of the previous one
     
-    fprintf(stderr, "error: frame file \"%s\" size %d x %d does not match initial frame size %d x %d",
+    fprintf(stderr, "error: frame file \"%s\" size %d x %d does not match initial frame size %d x %d\n",
             [filenameStr UTF8String],
             (int)imageSize.width, (int)imageSize.height,
             (int)_movieDimensions.width, (int)_movieDimensions.height);
@@ -463,7 +463,7 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
   worked = [frameDecoder openForReading:mvidPath];
   
   if (worked == FALSE) {
-    fprintf(stderr, "error: cannot open mvid filename \"%s\"", mvidFilename);
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", mvidFilename);
     exit(1);
   }
     
@@ -579,7 +579,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   }
   
   if (fileExists(movFilename) == FALSE) {
-    fprintf(stderr, "input quicktime movie file not found : %s", movFilenameCstr);
+    fprintf(stderr, "input quicktime movie file not found : %s\n", movFilenameCstr);
     exit(2);
   }
 
@@ -597,8 +597,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   QTMovie *movie = [QTMovie movieWithFile:movFilename error:&errState];
   assert(movie);
 
-  NSDictionary *movieAttributes = [movie movieAttributes];
-  fprintf(stdout, "movieAttributes : %s", [[movieAttributes description] UTF8String]);
+  //NSDictionary *movieAttributes = [movie movieAttributes];
+  //fprintf(stdout, "movieAttributes : %s", [[movieAttributes description] UTF8String]);
   
   // Passing QTMovieFrameImagePixelFormat for type 
   
@@ -630,7 +630,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   
   NSArray *tracks = [movie tracksOfMediaType:QTMediaTypeVideo];
   if ([tracks count] == 0) {
-    fprintf(stderr, "Could not find any video tracks in movie file %s", movFilenameCstr);
+    fprintf(stderr, "Could not find any video tracks in movie file %s\n", movFilenameCstr);
     exit(2);
   }
   
@@ -641,11 +641,11 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   Media firstTrackQuicktimeMedia = [firstTrackMedia quickTimeMedia];
   assert(firstTrackQuicktimeMedia);
 
-  NSDictionary *firstTrackAttributes = [firstTrack trackAttributes];
-  fprintf(stdout, "firstTrackAttributes : %s\n", [[firstTrackAttributes description] UTF8String]);
+  //NSDictionary *firstTrackAttributes = [firstTrack trackAttributes];
+  //fprintf(stdout, "firstTrackAttributes : %s\n", [[firstTrackAttributes description] UTF8String]);
 
-  NSDictionary *firstTrackMediaAttributes = [firstTrackMedia mediaAttributes];
-  fprintf(stdout, "firstTrackMediaAttributes : %s\n", [[firstTrackMediaAttributes description] UTF8String]);
+  //NSDictionary *firstTrackMediaAttributes = [firstTrackMedia mediaAttributes];
+  //fprintf(stdout, "firstTrackMediaAttributes : %s\n", [[firstTrackMediaAttributes description] UTF8String]);
   
   NSMutableArray *durations = [NSMutableArray array];
   
@@ -836,7 +836,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   }
   
   if (extractedFirstFrame == FALSE) {
-    fprintf(stderr, "Could not extract initial frame from movie file %s", movFilenameCstr);
+    fprintf(stderr, "Could not extract initial frame from movie file %s\n", movFilenameCstr);
     exit(2);
   }
   
@@ -887,14 +887,14 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   NSString *firstFilename = [NSString stringWithUTF8String:firstFilenameCstr];
   
   if (fileExists(firstFilename) == FALSE) {
-    fprintf(stderr, "error: first filename \"%s\" does not exist", firstFilenameCstr);
+    fprintf(stderr, "error: first filename \"%s\" does not exist\n", firstFilenameCstr);
     exit(1);
   }
   
   NSString *firstFilenameExt = [firstFilename pathExtension];
   
   if ([firstFilenameExt isEqualToString:@"png"] == FALSE) {
-    fprintf(stderr, "error: first filename \"%s\" must have .png extension", firstFilenameCstr);
+    fprintf(stderr, "error: first filename \"%s\" must have .png extension\n", firstFilenameCstr);
     exit(1);
   }
   
@@ -924,7 +924,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
     }
   }
   if (numericStartIndex == -1 || numericStartIndex == 0) {
-    fprintf(stderr, "error: could not find frame number in first filename \"%s\"", firstFilenameCstr);
+    fprintf(stderr, "error: could not find frame number in first filename \"%s\"\n", firstFilenameCstr);
     exit(1);
   }
   
@@ -934,7 +934,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   NSString *numberPortion = [firstFilenameTailNoExtension substringFromIndex:numericStartIndex];
   
   if ([namePortion length] < 1 || [numberPortion length] == 0) {
-    fprintf(stderr, "error: could not find frame number in first filename \"%s\"", firstFilenameCstr);
+    fprintf(stderr, "error: could not find frame number in first filename \"%s\"\n", firstFilenameCstr);
     exit(1);
   }
   
@@ -983,12 +983,12 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   }
 
   if ([inFramePaths count] <= 1) {
-    fprintf(stderr, "error: at least 2 input frames are required");
+    fprintf(stderr, "error: at least 2 input frames are required\n");
     exit(1);    
   }
   
   if ((startingFrameNumber == endingFrameNumber) || (endingFrameNumber == CRAZY_MAX_FRAMES-1)) {
-    fprintf(stderr, "error: could not find last frame number");
+    fprintf(stderr, "error: could not find last frame number\n");
     exit(1);
   }
   
@@ -999,13 +999,13 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   NSString *framerateStr = [NSString stringWithUTF8String:framerateCstr];
   
   if ([framerateStr length] == 0) {
-    fprintf(stderr, "error: FRAMERATE is invalid \"%s\"", firstFilenameCstr);
+    fprintf(stderr, "error: FRAMERATE is invalid \"%s\"\n", firstFilenameCstr);
     exit(1);
   }
   
   float framerateNum = [framerateStr floatValue];
   if (framerateNum <= 0.0f || framerateNum >= 90.0f) {
-    fprintf(stderr, "error: FRAMERATE is invalid \"%f\"", framerateNum);
+    fprintf(stderr, "error: FRAMERATE is invalid \"%f\"\n", framerateNum);
     exit(1);
   }
   
@@ -1016,7 +1016,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   if (bppNum == 16 || bppNum == 24 || bppNum == 32) {
     // Value is valid
   } else {
-    fprintf(stderr, "error: BITSPERPIXEL is invalid \"%s\"", bppCstr);
+    fprintf(stderr, "error: BITSPERPIXEL is invalid \"%s\"\n", bppCstr);
     exit(1);
   }
   
@@ -1025,7 +1025,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   NSString *keyframeStr = [NSString stringWithUTF8String:keyframeCstr];
   
   if ([keyframeStr length] == 0) {
-    fprintf(stderr, "error: KEYFRAME is invalid \"%s\"", keyframeCstr);
+    fprintf(stderr, "error: KEYFRAME is invalid \"%s\"\n", keyframeCstr);
     exit(1);
   }
   
@@ -1097,7 +1097,7 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   BOOL worked = [frameDecoder openForReading:mvidFilename];
   
   if (worked == FALSE) {
-    fprintf(stderr, "error: cannot open mvid filename \"%s\"", mvidFilenameCstr);
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", mvidFilenameCstr);
     exit(1);
   }
   

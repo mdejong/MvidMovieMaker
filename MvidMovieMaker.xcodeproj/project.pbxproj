@@ -77,6 +77,7 @@
 		CDD23BA815EFD4060021D00C /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				CDE728251606305400B34FB6 /* QuickTime.framework */,
 				CD96F738160604AD00316089 /* QTKit.framework */,
 				CDE6D04A15EE6E570084FFAA /* Cocoa.framework */,
 				CDD23BA615EFD3F80021D00C /* libz.dylib */,
@@ -87,7 +88,6 @@
 		CDD41E7115EDB1A6008B77A1 = {
 			isa = PBXGroup;
 			children = (
-				CDE728251606305400B34FB6 /* QuickTime.framework */,
 				CDD41E7F15EDB1A6008B77A1 /* MvidMovieMaker */,
 				CDD23BA815EFD4060021D00C /* Frameworks */,
 				CDD41E7D15EDB1A6008B77A1 /* Products */,
