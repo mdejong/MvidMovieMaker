@@ -893,10 +893,12 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   
   NSString *firstFilenameExt = [firstFilename pathExtension];
   
-  if ([firstFilenameExt isEqualToString:@"png"] == FALSE) {
-    fprintf(stderr, "error: first filename \"%s\" must have .png extension\n", firstFilenameCstr);
-    exit(1);
-  }
+  // FIXME: Disabled this test since we want to try to import ".jpg" and other formats directly
+  
+  //if ([firstFilenameExt isEqualToString:@"png"] == FALSE) {
+  //  fprintf(stderr, "error: first filename \"%s\" must have .png extension\n", firstFilenameCstr);
+  //  exit(1);
+  //}
   
   // Find first numerical character in the [0-9] range starting at the end of the filename string.
   // A frame filename like "Frame0001.png" would be an example input. Note that the last frame
@@ -964,7 +966,8 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       [frameNumberWithLeadingZeros deleteCharactersInRange:delRange];
       assert([frameNumberWithLeadingZeros length] == formatWidth);
     }
-    [frameNumberWithLeadingZeros appendString:@".png"];
+    [frameNumberWithLeadingZeros appendString:@"."];
+    [frameNumberWithLeadingZeros appendString:firstFilenameExt];
     [frameNumberWithLeadingZeros insertString:namePortion atIndex:0];
     NSString *framePathWithNumber = [upToLastPathComponentPath stringByAppendingPathComponent:frameNumberWithLeadingZeros];
     

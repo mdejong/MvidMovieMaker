@@ -59,11 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "2x2_black_blue_24BPP.mov"
+            argument = "FunkyRGBPicture.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Exported.mvid"
+            argument = "FunkyColorspaceFrames/FunkyRGBPicture1.jpg"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "1"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "24"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
