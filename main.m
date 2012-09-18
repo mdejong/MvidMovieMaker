@@ -1081,6 +1081,11 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   }
 }
 
+void fprintStdoutFixedWidth(char *label)
+{
+  fprintf(stdout, "%-20s", label);
+}
+
 // Entry point for movie info printing logic. This will print the headers of the file
 // and some encoding info.
 
@@ -1107,21 +1112,38 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   
   int bpp = [frameDecoder header]->bpp;
   
-  fprintf(stdout, "MVID:\t\t\t%s\n", [[mvidFilename lastPathComponent] UTF8String]);
-  fprintf(stdout, "Width:\t\t\t%d\n", [frameDecoder width]);
-  fprintf(stdout, "Height:\t\t\t%d\n", [frameDecoder height]);
-  fprintf(stdout, "BitsPerPixel:\t%d\n", bpp);
-  fprintf(stdout, "ColorSpace:\t\t");
+  // Format left side in fixed 20 space width
+  
+  fprintStdoutFixedWidth("MVID:");
+  fprintf(stdout, "%s\n", [[mvidFilename lastPathComponent] UTF8String]);
+
+  fprintStdoutFixedWidth("Width:");
+  fprintf(stdout, "%d\n", [frameDecoder width]);
+  
+  fprintStdoutFixedWidth("Height:");
+  fprintf(stdout, "%d\n", [frameDecoder height]);
+
+  fprintStdoutFixedWidth("BitsPerPixel:");
+  fprintf(stdout, "%d\n", bpp);
+
+  fprintStdoutFixedWidth("ColorSpace:");
   if (frameDecoder.isSRGB) {
     fprintf(stdout, "%s\n", "sRGB");
   } else {
     fprintf(stdout, "%s\n", "RGB");    
   }
 
-  fprintf(stdout, "Duration:\t\t%.4fs\n", movieDuration);
-  fprintf(stdout, "FrameDuration:\t%.4fs\n", frameDuration);
-  fprintf(stdout, "FPS:\t\t\t%.4f\n", (1.0 / frameDuration));
-  fprintf(stdout, "Frames:\t\t\t%d\n", numFrames);
+  fprintStdoutFixedWidth("Duration:");
+  fprintf(stdout, "%.4fs\n", movieDuration);
+
+  fprintStdoutFixedWidth("FrameDuration:");
+  fprintf(stdout, "%.4fs\n", frameDuration);
+
+  fprintStdoutFixedWidth("FPS:");
+  fprintf(stdout, "%.4f\n", (1.0 / frameDuration));
+
+  fprintStdoutFixedWidth("Frames:");
+  fprintf(stdout, "%d\n", numFrames);
     
   [frameDecoder close];
 }
