@@ -119,4 +119,8 @@
 // Time each frame shold be displayed
 - (NSTimeInterval) frameDuration;
 
+// Return direct access to the header info, caller might want to inspect the header without decoding
+
+- (MVFileHeader*) header;
+
 @end

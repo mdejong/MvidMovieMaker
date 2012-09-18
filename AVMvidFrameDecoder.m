@@ -100,7 +100,7 @@
   return [[[AVMvidFrameDecoder alloc] init] autorelease];
 }
 
-- (MVFileHeader*) _getHeader
+- (MVFileHeader*) header
 {
   NSAssert(self->m_isOpen == TRUE, @"isOpen");
   return &self->m_mvHeader;
@@ -120,7 +120,7 @@
   
   NSAssert(renderWidth > 0 && renderHeight > 0, @"renderWidth or renderHeight is zero");
 
-  uint32_t bitsPerPixel = [self _getHeader]->bpp;
+  uint32_t bitsPerPixel = [self header]->bpp;
   
   CGFrameBuffer *cgFrameBuffer1 = [CGFrameBuffer cGFrameBufferWithBppDimensions:bitsPerPixel width:renderWidth height:renderHeight];
   CGFrameBuffer *cgFrameBuffer2 = [CGFrameBuffer cGFrameBufferWithBppDimensions:bitsPerPixel width:renderWidth height:renderHeight];
@@ -442,7 +442,7 @@
 
   void *frameBuffer = (void*)nextFrameBuffer.pixels;
   uint32_t frameBufferSize = [self width] * [self height];
-  uint32_t bpp = [self _getHeader]->bpp;
+  uint32_t bpp = [self header]->bpp;
   uint32_t frameBufferNumBytes;
   if (bpp == 16) {
     frameBufferNumBytes = frameBufferSize * sizeof(uint16_t);
@@ -746,12 +746,12 @@
 
 - (NSUInteger) width
 {
-  return [self _getHeader]->width;
+  return [self header]->width;
 }
 
 - (NSUInteger) height
 {
-  return [self _getHeader]->height;
+  return [self header]->height;
 }
 
 - (BOOL) isOpen
@@ -761,7 +761,7 @@
 
 - (NSUInteger) numFrames
 {
-  return [self _getHeader]->numFrames;
+  return [self header]->numFrames;
 }
 
 - (NSInteger) frameIndex
@@ -773,7 +773,7 @@
 
 - (NSTimeInterval) frameDuration
 {
-  float frameDuration = [self _getHeader]->frameDuration;
+  float frameDuration = [self header]->frameDuration;
   return frameDuration;
 }
 
@@ -781,7 +781,7 @@
 
 - (BOOL) hasAlphaChannel
 {
-  uint32_t bpp = [self _getHeader]->bpp;
+  uint32_t bpp = [self header]->bpp;
   if (bpp == 16 || bpp == 24) {
     return FALSE;
   } else if (bpp == 32) {
@@ -795,7 +795,7 @@
 
 - (BOOL) isSRGB
 {
-  if (maxvid_file_colorspace_is_srgb([self _getHeader])) {
+  if (maxvid_file_colorspace_is_srgb([self header])) {
     return TRUE;
   } else {
     return FALSE;

@@ -39,17 +39,21 @@ NSString *delta_directory = nil;
 //
 // To extract the contents of an .mvid movie to PNG images:
 //
-// mvidmoviemaker -extract out.mvid ?FILEPREFIX?"
+// mvidmoviemaker -extract movie.mvid ?FILEPREFIX?"
 //
 // The optional FILEPREFIX should be specified as "DumpFile" to get
 // frames files named "DumpFile0001.png" and "DumpFile0002.png" and so on.
+//
+//  To see a summary of MVID header info for a specific file.
+//
+//  mvidmoviemaker -info movie.mvid
 // ------------------------------------------------------------------------
 
 #define USAGE \
 "usage: mvidmoviemaker FILE.mov FILE.mvid" "\n" \
 "usage: mvidmoviemaker FILE.mvid FIRSTFRAME.png FRAMERATE BITSPERPIXEL ?KEYFRAME?" "\n" \
-"or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
-
+"or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n" \
+"or   : mvidmoviemaker -info movie.mvid" "\n"
 
 // Create a CGImageRef given a filename. Image data is read from the file
 
@@ -1077,6 +1081,51 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   }
 }
 
+// Entry point for movie info printing logic. This will print the headers of the file
+// and some encoding info.
+
+void printMovieHeaderInfo(char *mvidFilenameCstr) {
+  NSString *mvidFilename = [NSString stringWithUTF8String:mvidFilenameCstr];
+
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:mvidFilename];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"", mvidFilenameCstr);
+    exit(1);
+  }
+  
+  //worked = [frameDecoder allocateDecodeResources];
+  //assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+
+  float frameDuration = [frameDecoder frameDuration];
+  float movieDuration = frameDuration * numFrames;
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  fprintf(stdout, "MVID:\t\t\t%s\n", [[mvidFilename lastPathComponent] UTF8String]);
+  fprintf(stdout, "Width:\t\t\t%d\n", [frameDecoder width]);
+  fprintf(stdout, "Height:\t\t\t%d\n", [frameDecoder height]);
+  fprintf(stdout, "BitsPerPixel:\t%d\n", bpp);
+  fprintf(stdout, "ColorSpace:\t\t");
+  if (frameDecoder.isSRGB) {
+    fprintf(stdout, "%s\n", "sRGB");
+  } else {
+    fprintf(stdout, "%s\n", "RGB");    
+  }
+
+  fprintf(stdout, "Duration:\t\t%.4fs\n", movieDuration);
+  fprintf(stdout, "FrameDuration:\t%.4fs\n", frameDuration);
+  fprintf(stdout, "FPS:\t\t\t%.4f\n", (1.0 / frameDuration));
+  fprintf(stdout, "Frames:\t\t\t%d\n", numFrames);
+    
+  [frameDecoder close];
+}
+
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
@@ -1095,6 +1144,12 @@ int main (int argc, const char * argv[]) {
     }
     
 		extractFramesFromMvidMain(mvidFilename, framesFilePrefix);
+	} else if ((argc == 3) && (strcmp(argv[1], "-info") == 0)) {
+    // mvidmoviemaker -info movie.mvid
+    
+    char *mvidFilename = (char *)argv[2];
+    
+    printMovieHeaderInfo(mvidFilename);
   } else if (argc == 3) {
     // FILE.mov : name of input Quicktime file
     // FILE.mvid : name of output .mvid file
@@ -1112,6 +1167,10 @@ int main (int argc, const char * argv[]) {
       // Extract frames we just encoded into the .mvid file for debug purposes
       
       extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
+    }
+    
+    if (TRUE) {
+      printMovieHeaderInfo(mvidFilenameCstr);
     }
 	} else if (argc == 5 || argc == 6) {
     // FILE.mvid : name of output file that will contain all the video frames
