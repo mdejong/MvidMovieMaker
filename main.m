@@ -32,6 +32,7 @@ typedef struct
   float framerate;
   int   bpp;
   int   keyframe;
+  BOOL  sRGB;
 } MovieOptions;
 
 // ------------------------------------------------------------------------
@@ -71,7 +72,8 @@ typedef struct
 "-fps FLOAT : required when creating .mvid from a series of images\n" \
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n" \
 "-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n" \
-"-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n"
+"-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n" \
+"-colorspace srgb|rgb : defaults to srgb, rgb indicates no colorspace mapping\n"
 
 // Create a CGImageRef given a filename. Image data is read from the file
 
@@ -184,6 +186,7 @@ AVMvidFileWriter* makeMVidWriter(
 // bppNum      : 16, 24, or 32 BPP
 // checkAlphaChannel : If bpp is 24 and this argument is TRUE, scan output pixels for non-opaque image.
 // isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
+// isSRGBColorspace : TRUE when writing pixels in the sRGB colorspace (the default), FALSE for device rgb.
 
 int process_frame_file(AVMvidFileWriter *mvidWriter,
                        NSString *filenameStr,
@@ -191,7 +194,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
                        int frameIndex,
                        int bppNum,
                        BOOL checkAlphaChannel,
-                       BOOL isKeyframe)
+                       BOOL isKeyframe,
+                       BOOL isSRGBColorspace)
 {
   // Push pool after creating global resources
 
@@ -206,9 +210,9 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   }
   assert(imageRef);
   
-  // FIXME: if the input image in the generic RGB colorspace, but the output is in
-  // the SRGB colorspace, then the input will not equal the output? Is it possible
-  // to implicitly assign the sRGB colorspace to the input "generic" or unspecificed PNG?
+  // General logic is to assume sRGB colorspace since that is what the iOS device assumes.
+  // If the user explicitly indicates -colorspace rgb then do no color convert the pixels.
+  // But in general, we want to convert all the pixels to sRGB for all bpp values.
   //
   // SRGB
   // https://gist.github.com/1130831
@@ -321,11 +325,19 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
 
   //cgBuffer.colorspace = inputColorspace;
   
-  if (bppNum == 24 || bppNum == 32) {
+  // Always emit to sRGB colorspace unless the comamnd line options "-colorspace rgb" were passed.
+  // The only reason to use this option is to binary compare the results, since the iOS device will
+  // assume all input has already been mapped into the sRGB colorspace when reading pixel data.
+  
+//  if (bppNum == 24 || bppNum == 32) {
+//    useSRGBColorspace = TRUE;
+//  }
+//  if (inputIsSRGBColorspace) {
+//    useSRGBColorspace = TRUE;    
+//  }
+  
+  if (isSRGBColorspace) {
     useSRGBColorspace = TRUE;
-  }
-  if (inputIsSRGBColorspace) {
-    useSRGBColorspace = TRUE;    
   }
   
   // Use sRGB colorspace when reading input pixels into format that will be written to
@@ -537,37 +549,6 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
   [frameDecoder close];
   
 	return;
-}
-
-// Calculate the standard deviation and the mean
-
-void calc_std_dev(int *sizes, int numFrames, float *std_dev, float *mean, int *maxPtr) {
-	int i;
-
-	int sum = 0;
-	int max = 0;
-
-	for (i = 0; i < numFrames; i++) {
-		sum += sizes[i];
-
-		if (sizes[i] > max)
-			max = sizes[i];
-	}
-
-	*mean = ((float)sum) / numFrames;
-
-	float sum_of_squares = 0.0;
-
-	for (i = 0; i < numFrames; i++) {
-		float diff = (sizes[i] - *mean);
-		sum_of_squares += (diff * diff);
-	}
-
-	float numerator = sqrt(sum_of_squares);
-	float denominator = sqrt(numFrames - 1);
-
-	*std_dev = numerator / denominator;
-	*maxPtr = max;
 }
 
 // Return TRUE if file exists, FALSE otherwise
@@ -833,9 +814,6 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       
       fprintf(stdout, "width x height : %d x %d at bpp %d\n", width, height, bpp);
       
-      // FIXME: need to scan all pixels to see if all the ALPHA is set to 0xFF since
-      // this CGImage does not know if it is 24BPP or 32BPP
-
       // Write frame data to MVID
       
       BOOL isKeyframe = FALSE;
@@ -845,9 +823,13 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       
       BOOL checkAlphaChannel = FALSE;
       if (mvidBPP != 16) {
-        checkAlphaChannel = TRUE;
+        if (optionsPtr->bpp == 24) {
+          // Explicitly indicated "-bpp 24" so do not check for 32bpp pixels.
+        } else {
+          checkAlphaChannel = TRUE;          
+        }
       }
-      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidBPP, checkAlphaChannel, isKeyframe);
+      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidBPP, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
       frameIndex++;
     }
     
@@ -919,14 +901,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   }
   
   NSString *firstFilenameExt = [firstFilename pathExtension];
-  
-  // FIXME: Disabled this test since we want to try to import ".jpg" and other formats directly
-  
-  //if ([firstFilenameExt isEqualToString:@"png"] == FALSE) {
-  //  fprintf(stderr, "error: first filename \"%s\" must have .png extension\n", firstFilenameCstr);
-  //  exit(1);
-  //}
-  
+    
   // Find first numerical character in the [0-9] range starting at the end of the filename string.
   // A frame filename like "Frame0001.png" would be an example input. Note that the last frame
   // number must be the last character before the extension.
@@ -1036,12 +1011,15 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   // BITSPERPIXEL : 16, 24, or 32 BPP.
   
   int bppNum = optionsPtr->bpp;
+  BOOL explicit24bpp = FALSE;
   
   // In the case where no -bpp is indicated on the command line, assume 24 bpp.
   // If the input data is actually 32 bpp then we can adjust upward.
   
   if (bppNum < 0) {
     bppNum = 24;
+  } else if (bppNum == 24) {
+    explicit24bpp = TRUE;
   }
   
   // KEYFRAME : integer that indicates a keyframe should be emitted every N frames
@@ -1078,7 +1056,15 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(mvidWriter, framePath, NULL, frameIndex, bppNum, FALSE, isKeyframe);
+    BOOL checkAlphaChannel = FALSE;
+    if (bppNum != 16) {
+      if (explicit24bpp == FALSE) {
+        // If "-bpp 24" was passed, do not scan for alpha pixels. Instead, explicitly composite
+        // over black to create a 24bpp movie from a 32bpp movie with an alpha channel.
+        checkAlphaChannel = TRUE;
+      }
+    }
+    process_frame_file(mvidWriter, framePath, NULL, frameIndex, bppNum, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
     frameIndex++;
   }
   
@@ -1222,6 +1208,7 @@ int main (int argc, const char * argv[]) {
     options.framerate = 0.0f;
     options.bpp = -1;
     options.keyframe = 10000;
+    options.sRGB = TRUE;
     
     if ((argc > 3) && (((argc - 3) % 2) != 0)) {
       // Uneven number of options
@@ -1280,6 +1267,15 @@ int main (int argc, const char * argv[]) {
           }
           
           options.keyframe = keyframe;
+        } else if ([optionStr isEqualToString:@"-colorspace"]) {
+          if ([valueStr isEqualToString:@"rgb"]) {
+            options.sRGB = FALSE;
+          } else if ([valueStr isEqualToString:@"srgb"]) {
+            options.sRGB = TRUE;
+          } else {
+            fprintf(stderr, "error: -colorspace is invalid \"%s\"\n", valueCstr);
+            exit(1);
+          }
         } else {
           // Unmatched option
           
@@ -1315,7 +1311,7 @@ int main (int argc, const char * argv[]) {
       //   video frames must exist in the same directory      
       // FILE.mvid : name of output file that will contain all the video frames
       
-      // Either -framerate FLOAT or -fps FLOAT is required
+      // Either -framerate FLOAT or -fps FLOAT is required when build from frames.
       // -fps 15, -fps 29.97, -fps 30 are common values.
       
       // -bpp is optional, the default is 24 but 32 bpp will be detected if used.
