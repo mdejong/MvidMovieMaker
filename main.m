@@ -24,6 +24,16 @@ CGFrameBuffer *prevFrameBuffer = nil;
 NSString *delta_directory = nil;
 #endif
 
+// A MovieOptions struct is filled in as the user passes
+// specific command line options.
+
+typedef struct
+{
+  float framerate;
+  int   bpp;
+  int   keyframe;
+} MovieOptions;
+
 // ------------------------------------------------------------------------
 //
 // mvidmoviemaker
@@ -32,10 +42,13 @@ NSString *delta_directory = nil;
 //
 // mvidmoviemaker movie.mov movie.mvid
 //
-// To create a .mvid video file from a series of PNG images
-// with a 15 FPS framerate and 32BPP "Millions+" (24 BPP plus alpha channel)
+// The following arguments can be used to create a .mvid video file
+// from a series of PNG or other images. The -fps option indicates
+// that the framerate is 15 frames per second. By default, the
+// system will assume 24bpp "Millions". If input images make use
+// of an alpha channel, then 32bpp "Millions+" will be used automatically.
 //
-// mvidmoviemaker movie.mvid FRAMES/Frame001.png 15 32
+// mvidmoviemaker FRAMES/Frame001.png movie.mvid -fps 15
 //
 // To extract the contents of an .mvid movie to PNG images:
 //
@@ -50,10 +63,15 @@ NSString *delta_directory = nil;
 // ------------------------------------------------------------------------
 
 #define USAGE \
-"usage: mvidmoviemaker FILE.mov FILE.mvid" "\n" \
-"usage: mvidmoviemaker FILE.mvid FIRSTFRAME.png FRAMERATE BITSPERPIXEL ?KEYFRAME?" "\n" \
+"usage: mvidmoviemaker INFILE.mov OUTFILE.mvid ?OPTIONS?" "\n" \
+"or   : mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?" "\n" \
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n" \
-"or   : mvidmoviemaker -info movie.mvid" "\n"
+"or   : mvidmoviemaker -info movie.mvid" "\n" \
+"OPTIONS:\n" \
+"-fps FLOAT : required when creating .mvid from a series of images\n" \
+"-framerate FLOAT : alternative way to indicate 1.0/fps\n" \
+"-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n" \
+"-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n"
 
 // Create a CGImageRef given a filename. Image data is read from the file
 
@@ -563,10 +581,13 @@ BOOL fileExists(NSString *filePath) {
 }
 
 // Entry point for logic that will extract video frames from a Quicktime .mov file
-// and then write the frames as a .mvid file.
+// and then write the frames as a .mvid file. The options argument is normally not
+// used, but if the user indicated values then these values can overwrite defaults
+// read from the input .mov file.
 
 void encodeMvidFromMovMain(char *movFilenameCstr,
-                           char *mvidFilenameCstr)
+                           char *mvidFilenameCstr,
+                           MovieOptions *optionsPtr)
 {
   NSString *movFilename = [NSString stringWithUTF8String:movFilenameCstr];
   
@@ -874,9 +895,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
 
 void encodeMvidFromFramesMain(char *mvidFilenameCstr,
                               char *firstFilenameCstr,
-                              char *framerateCstr,
-                              char *bppCstr,
-                              char *keyframeCstr)
+                              MovieOptions *optionsPtr)
 {
   NSString *mvidFilename = [NSString stringWithUTF8String:mvidFilenameCstr];
   
@@ -1007,41 +1026,28 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   // This framerate value is a constant that does not change over the course of the
   // movie, though it is possible that a certain frame could repeat a number of times.
   
-  NSString *framerateStr = [NSString stringWithUTF8String:framerateCstr];
-  
-  if ([framerateStr length] == 0) {
-    fprintf(stderr, "error: FRAMERATE is invalid \"%s\"\n", firstFilenameCstr);
-    exit(1);
-  }
-  
-  float framerateNum = [framerateStr floatValue];
-  if (framerateNum <= 0.0f || framerateNum >= 90.0f) {
-    fprintf(stderr, "error: FRAMERATE is invalid \"%f\"\n", framerateNum);
+  float framerateNum = optionsPtr->framerate;
+
+  if (framerateNum <= 0.0f) {
+    fprintf(stderr, "error: -framerate or -fps is required\n");
     exit(1);
   }
   
   // BITSPERPIXEL : 16, 24, or 32 BPP.
   
-  NSString *bppStr = [NSString stringWithUTF8String:bppCstr];
-  int bppNum = [bppStr intValue];
-  if (bppNum == 16 || bppNum == 24 || bppNum == 32) {
-    // Value is valid
-  } else {
-    fprintf(stderr, "error: BITSPERPIXEL is invalid \"%s\"\n", bppCstr);
-    exit(1);
+  int bppNum = optionsPtr->bpp;
+  
+  // In the case where no -bpp is indicated on the command line, assume 24 bpp.
+  // If the input data is actually 32 bpp then we can adjust upward.
+  
+  if (bppNum < 0) {
+    bppNum = 24;
   }
   
   // KEYFRAME : integer that indicates a keyframe should be emitted every N frames
   
-  NSString *keyframeStr = [NSString stringWithUTF8String:keyframeCstr];
-  
-  if ([keyframeStr length] == 0) {
-    fprintf(stderr, "error: KEYFRAME is invalid \"%s\"\n", keyframeCstr);
-    exit(1);
-  }
-  
-  int keyframeNum = [keyframeStr intValue];
-  if (keyframeNum == 0) {
+  int keyframeNum = optionsPtr->keyframe;
+  if (keyframeNum == 0 || keyframeNum == 1) {
     // All frames as stored as keyframes. This takes up more space but the frames can
     // be blitted into graphics memory directly from mapped memory at runtime.
     keyframeNum = 0;
@@ -1183,58 +1189,148 @@ int main (int argc, const char * argv[]) {
     char *mvidFilename = (char *)argv[2];
     
     printMovieHeaderInfo(mvidFilename);
-  } else if (argc == 3) {
-    // FILE.mov : name of input Quicktime file
-    // FILE.mvid : name of output .mvid file
+  } else if (argc >= 3) {
+    // Either:
     //
-    // When converting, the original BPP and framerate are copied
-    // but only the initial keyframe remains a keyframe in the .mvid
-    // file for reasons of space savings.
-    
-    char *movFilenameCstr = (char*)argv[1];
+    // mvidmoviemaker INFILE.mov OUTFILE.mvid ?OPTIONS?
+    // mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?
+        
+    char *firstFilenameCstr = (char*)argv[1];
     char *mvidFilenameCstr = (char*)argv[2];
-    
-    encodeMvidFromMovMain(movFilenameCstr, mvidFilenameCstr);
-    
-    if (TRUE) {
-      // Extract frames we just encoded into the .mvid file for debug purposes
-      
-      extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
-    }
-    
-    if (TRUE) {
-      printMovieHeaderInfo(mvidFilenameCstr);
-    }
-	} else if (argc == 5 || argc == 6) {
-    // FILE.mvid : name of output file that will contain all the video frames
-    // FIRSTFRAME.png : name of first frame file of input PNG files. All
-    //   video frames must exist in the same directory
-    // FRAMERATE is a floating point framerate value. Common values
-    // include 1.0 FPS, 15 FPS, 29.97 FPS, and 30 FPS.
-    // BITSPERPIXEL : 16, 24, or 32 BPP
-    // KEYFRAME is the number of frames until the next keyframe in the
-    //   resulting movie file. The default of 10,000 ensures that
-    //   the resulting movie would only contain the initial keyframe.
 
-    char *mvidFilenameCstr = (char*)argv[1];
-    char *firstFilenameCstr = (char*)argv[2];
-    char *framerateCstr = (char*)argv[3];
-    char *bppCstr = (char*)argv[4];
-    char *keyframeCstr = "10000";
-    if (argc == 6) {
-      keyframeCstr = (char*)argv[5];
+    // The second argument has to be "*.mvid"
+    
+    NSString *mvidFilename = [NSString stringWithUTF8String:mvidFilenameCstr];
+    
+    BOOL isMvid = [mvidFilename hasSuffix:@".mvid"];
+    
+    if (isMvid == FALSE) {
+      fprintf(stderr, USAGE);
+      exit(1);
     }
+
+    // If the first argument is a .mov file, then this must be
+    // a .mov -> .mvid conversion.
     
-    encodeMvidFromFramesMain(mvidFilenameCstr,
-                            firstFilenameCstr,
-                            framerateCstr,
-                            bppCstr,
-                             keyframeCstr);
+    NSString *movFilename = [NSString stringWithUTF8String:firstFilenameCstr];
     
-    if (TRUE) {
-      // Extract frames we just encoded into the .mvid file for debug purposes
+    BOOL isMov = [movFilename hasSuffix:@".mov"];
+    
+    // Both forms support 1 to N arguments like "-fps 15"
+    
+    MovieOptions options;
+    options.framerate = 0.0f;
+    options.bpp = -1;
+    options.keyframe = 10000;
+    
+    if ((argc > 3) && (((argc - 3) % 2) != 0)) {
+      // Uneven number of options
+      fprintf(stderr, "error: OPTIONS must be an even number arguments of the form -name value\n");
+      exit(1);
+    } else if (argc > 3) {
+      // Parse OPTIONS
       
-      extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
+      int pairCount = (argc - 3) / 2;
+      
+      for (int i=0; i<pairCount; i++) {
+        int offset = 3 + (i * 2);
+        char *optionCstr = (char*)argv[offset];
+        char *valueCstr = (char*)argv[offset+1];
+        
+        NSString *optionStr = [NSString stringWithUTF8String:optionCstr];
+        NSString *valueStr = [NSString stringWithUTF8String:valueCstr];
+        
+        NSLog(@"option \"%s\" -> \"%s\"", optionCstr, valueCstr);
+        
+        if ([optionStr isEqualToString:@"-fps"]) {
+          float fps = [valueStr floatValue];
+          
+          if ((fps <= 0.0f) || (fps >= 90.0f)) {
+            fprintf(stderr, USAGE);
+            exit(1);
+          }
+          
+          options.framerate = 1.0 / fps;
+        } else if ([optionStr isEqualToString:@"-framerate"]) {
+          float framerate = [valueStr floatValue];
+                    
+          if (framerate <= 0.0f || framerate >= 90.0f) {
+            fprintf(stderr, "error: -framerate is invalid \"%f\"\n", framerate);
+            exit(1);
+          }
+
+          options.framerate = framerate;
+        } else if ([optionStr isEqualToString:@"-bpp"]) {
+          int bpp = [valueStr intValue];
+          
+          if ((bpp == 16) || (bpp == 24) || (bpp == 32)) {
+            // No-op
+          } else {
+            fprintf(stderr, "error: -bpp is invalid \"%s\"\n", valueCstr);
+            exit(1);
+          }
+          
+          options.bpp = bpp;
+        } else if ([optionStr isEqualToString:@"-keyframe"]) {
+          int keyframe = [valueStr intValue];
+          
+          if (keyframe <= 0) {
+            fprintf(stderr, USAGE);
+            exit(1);
+          }
+          
+          options.keyframe = keyframe;
+        } else {
+          // Unmatched option
+          
+          fprintf(stderr, "error: option %s is invalid\n", optionCstr);
+          exit(1);
+        }
+      }
+    }    
+    
+    if (isMov) {
+      // INFILE.mov : name of input Quicktime .mov file
+      // OUTFILE.mvid : name of output .mvid file
+      //
+      // When converting, the original BPP and framerate are copied
+      // but only the initial keyframe remains a keyframe in the .mvid
+      // file for reasons of space savings.
+      
+      encodeMvidFromMovMain(firstFilenameCstr, mvidFilenameCstr, &options);
+      
+      if (TRUE) {
+        // Extract frames we just encoded into the .mvid file for debug purposes
+        
+        extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
+      }
+      
+      if (TRUE) {
+        printMovieHeaderInfo(mvidFilenameCstr);
+      }
+    } else {
+      // Otherwise, generate a .mvid from a series of images
+      
+      // FIRSTFRAME.png : name of first frame file of input PNG files. All
+      //   video frames must exist in the same directory      
+      // FILE.mvid : name of output file that will contain all the video frames
+      
+      // Either -framerate FLOAT or -fps FLOAT is required
+      // -fps 15, -fps 29.97, -fps 30 are common values.
+      
+      // -bpp is optional, the default is 24 but 32 bpp will be detected if used.
+      // If -bpp 16 is indicated then the result pixels will be downsamples from
+      // 24 bpp to 16 bpp if the input source is in 24 bpp.
+      
+      encodeMvidFromFramesMain(mvidFilenameCstr,
+                               firstFilenameCstr,
+                               &options);
+      
+      if (TRUE) {
+        // Extract frames we just encoded into the .mvid file for debug purposes
+        
+        extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
+      }
     }
 	} else {
     fprintf(stderr, USAGE);

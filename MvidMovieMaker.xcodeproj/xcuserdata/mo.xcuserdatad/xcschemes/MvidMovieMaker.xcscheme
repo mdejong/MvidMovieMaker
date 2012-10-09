@@ -59,19 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "FunkyRGBPicture.mvid"
+            argument = "Colorbands/Colorbands_sRGB1.png"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "FunkyColorspaceFrames/FunkyRGBPicture1.jpg"
+            argument = "Colorbands.mvid"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-fps"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "1"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "24"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
