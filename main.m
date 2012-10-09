@@ -18,11 +18,8 @@ NSString *movie_prefix;
 
 CGFrameBuffer *prevFrameBuffer = nil;
 
-#define EMIT_DELTA
-
-#ifdef EMIT_DELTA
-NSString *delta_directory = nil;
-#endif
+// Define this symbol to create a -test option that can be run from the command line.
+#define TESTMODE
 
 // A MovieOptions struct is filled in as the user passes
 // specific command line options.
@@ -1151,6 +1148,475 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   [frameDecoder close];
 }
 
+// testmode() runs a series of basic test logic having to do with rendering
+// and then checking the results of a graphics render operation.
+
+#if defined(TESTMODE)
+
+static inline
+uint32_t rgba_to_bgra(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
+{
+  return (alpha << 24) | (red << 16) | (green << 8) | blue;
+}
+
+void testmode()
+{
+  // Create a framebuffer that contains a 75% gray color in 16bpp and device RGB
+  
+  @autoreleasepool
+  {
+    int bppNum = 16;
+    int width = 2;
+    int height = 2;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    uint16_t *pixels = (uint16_t *)cgBuffer.pixels;
+    int numPixels = width * height;
+    
+    uint32_t grayLevel = (int) (0x1F * 0.75);
+    uint16_t grayPixel = (grayLevel << 10) | (grayLevel << 5) | grayLevel;
+    
+    for (int i=0; i < numPixels; i++) {
+      pixels[i] = grayPixel;
+    }
+    
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer and then verify that the pixel value is the same
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    [renderBuffer renderCGImage:imageRef];
+    
+    uint16_t *renderPixels = (uint16_t *)renderBuffer.pixels;
+    
+    for (int i=0; i < numPixels; i++) {
+      uint16_t pixel = renderPixels[i];      
+      assert(pixel == grayPixel);
+    }
+  }
+  
+  // Create a framebuffer that contains a 75% gray color in 24bpp and device RGB
+  
+  @autoreleasepool
+  {
+    int bppNum = 24;
+    int width = 2;
+    int height = 2;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+   
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    //int numBytes = cgBuffer.numBytes;
+    int numPixels = width * height;
+    int numBytes = numPixels * sizeof(uint32_t);
+
+    uint32_t grayLevel = (int) (255 * 0.75);
+    uint32_t grayPixel = rgba_to_bgra(grayLevel, grayLevel, grayLevel, 0xFF);
+    
+    for (int i=0; i < numPixels; i++) {
+      pixels[i] = grayPixel;
+    }
+    
+    // calculate alder
+    
+    uint32_t adler1 = maxvid_adler32(0L, (unsigned char *)pixels, numBytes);
+    assert(adler1 != 0);
+    
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer and then verify that the pixel value is the same
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    [renderBuffer renderCGImage:imageRef];
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    for (int i=0; i < numPixels; i++) {
+      uint32_t pixel = renderPixels[i];      
+      assert(pixel == grayPixel);
+    }
+    
+    uint32_t adler2 = maxvid_adler32(0L, (unsigned char *)renderPixels, numBytes);
+    assert(adler2 != 0);
+
+    assert(adler1 == adler2);
+  }
+  
+  // Create a framebuffer that contains a 75% gray color with alpha 0xFF in 32bpp and device RGB
+  
+  @autoreleasepool
+  {
+    int bppNum = 32;
+    int width = 2;
+    int height = 2;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    //int numBytes = cgBuffer.numBytes;
+    int numPixels = width * height;
+    //int numBytes = numPixels * sizeof(uint32_t);
+    
+    uint32_t grayLevel = (int) (255 * 0.75);
+    uint32_t grayPixel = rgba_to_bgra(grayLevel, grayLevel, grayLevel, 0xFF);
+    
+    for (int i=0; i < numPixels; i++) {
+      pixels[i] = grayPixel;
+    }
+    
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer and then verify that the pixel value is the same
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    [renderBuffer renderCGImage:imageRef];
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    for (int i=0; i < numPixels; i++) {
+      uint32_t pixel = renderPixels[i];      
+      assert(pixel == grayPixel);
+    }
+  }
+  
+  // Create a framebuffer that contains a 75% gray color with alpha 0.5 in 32bpp and device RGB
+  
+  @autoreleasepool
+  {
+    int bppNum = 32;
+    int width = 2;
+    int height = 2;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    //int numBytes = cgBuffer.numBytes;
+    int numPixels = width * height;
+    //int numBytes = numPixels * sizeof(uint32_t);
+    
+    uint32_t grayLevel = (int) (255 * 0.75);
+    uint32_t grayPixel = rgba_to_bgra(grayLevel, grayLevel, grayLevel, 0xFF/2);
+    
+    for (int i=0; i < numPixels; i++) {
+      pixels[i] = grayPixel;
+    }
+    
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer and then verify that the pixel value is the same
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    [renderBuffer renderCGImage:imageRef];
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    for (int i=0; i < numPixels; i++) {
+      uint32_t pixel = renderPixels[i];      
+      assert(pixel == grayPixel);
+    }
+  }
+  
+  // Create a framebuffer that contains all device RGB pixel values at 24 bpp
+
+  @autoreleasepool
+  {
+    int bppNum = 24;
+    int width = 256;
+    int height = 3;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    //int numPixels = width * height;
+
+    int offset = 0;
+
+    for (int step=0; step < 256; step++) {
+      uint32_t redPixel = rgba_to_bgra(step, 0, 0, 0xFF);      
+      pixels[offset++] = redPixel;
+    }
+
+    for (int step=0; step < 256; step++) {
+      uint32_t greenPixel = rgba_to_bgra(0, step, 0, 0xFF);      
+      pixels[offset++] = greenPixel;
+    }    
+
+    for (int step=0; step < 256; step++) {
+      uint32_t bluePixel = rgba_to_bgra(0, 0, step, 0xFF);      
+      pixels[offset++] = bluePixel;
+    }
+    
+    assert(offset == (256 * 3));
+    
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer and then verify that the pixel value is the same
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    [renderBuffer renderCGImage:imageRef];
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    offset = 0;
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t redPixel = rgba_to_bgra(step, 0, 0, 0xFF);  
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == redPixel);
+    }
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t greenPixel = rgba_to_bgra(0, step, 0, 0xFF);  
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == greenPixel);
+    }    
+
+    for (int step=0; step < 256; step++) {
+      uint32_t bluePixel = rgba_to_bgra(0, 0, step, 0xFF);  
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == bluePixel);
+    }
+    
+    assert(offset == (256 * 3));
+  }
+
+  // Create a framebuffer that contains all sRGB pixel values at 24 bpp
+  
+  @autoreleasepool
+  {
+    int bppNum = 24;
+    int width = 256;
+    int height = 3;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+
+    CGColorSpaceRef colorSpace;
+    colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    assert(colorSpace);
+    
+    cgBuffer.colorspace = colorSpace;
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    //int numPixels = width * height;
+    
+    int offset = 0;
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t redPixel = rgba_to_bgra(step, 0, 0, 0xFF);
+      pixels[offset++] = redPixel;
+    }
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t greenPixel = rgba_to_bgra(0, step, 0, 0xFF);
+      pixels[offset++] = greenPixel;
+    }    
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t bluePixel = rgba_to_bgra(0, 0, step, 0xFF);
+      pixels[offset++] = bluePixel;
+    }
+    
+    assert(offset == (256 * 3));
+    
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer and then verify that the pixel value is the same
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    renderBuffer.colorspace = colorSpace;
+    CGColorSpaceRelease(colorSpace);
+    
+    [renderBuffer renderCGImage:imageRef];
+        
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    offset = 0;
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t redPixel = rgba_to_bgra(step, 0, 0, 0xFF);  
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == redPixel);
+    }
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t greenPixel = rgba_to_bgra(0, step, 0, 0xFF);  
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == greenPixel);
+    }    
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t bluePixel = rgba_to_bgra(0, 0, step, 0xFF);  
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == bluePixel);
+    }
+    
+    assert(offset == (256 * 3));
+  }
+  
+  // Create a framebuffer that contains device RGB pixel values with an alpha step at 32bpp
+  
+  @autoreleasepool
+  {
+    int bppNum = 32;
+    int width = 256;
+    int height = 3;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    
+    int offset = 0;
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t redPixel = rgba_to_bgra(0xFF, 0, 0, step);
+      pixels[offset++] = redPixel;
+    }
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t greenPixel = rgba_to_bgra(0, 0xFF, 0, step);
+      pixels[offset++] = greenPixel;
+    }    
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t bluePixel = rgba_to_bgra(0, 0, 0xFF, step);
+      pixels[offset++] = bluePixel;
+    }
+    
+    assert(offset == (256 * 3));
+    
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer and then verify that the pixel value is the same
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    [renderBuffer renderCGImage:imageRef];
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    offset = 0;
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t redPixel = rgba_to_bgra(0xFF, 0, 0, step);
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == redPixel);
+    }
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t greenPixel = rgba_to_bgra(0, 0xFF, 0, step);
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == greenPixel);
+    }    
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t bluePixel = rgba_to_bgra(0, 0, 0xFF, step);
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == bluePixel);
+    }
+    
+    assert(offset == (256 * 3));
+  }
+
+  // Create a framebuffer that contains sRGB pixel values with an alpha step at 32bpp
+  
+  @autoreleasepool
+  {
+    int bppNum = 32;
+    int width = 256;
+    int height = 3;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    CGColorSpaceRef colorSpace;
+    colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    assert(colorSpace);
+    
+    cgBuffer.colorspace = colorSpace;
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    
+    int offset = 0;
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t redPixel = rgba_to_bgra(0xFF, 0, 0, step);
+      pixels[offset++] = redPixel;
+    }
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t greenPixel = rgba_to_bgra(0, 0xFF, 0, step);
+      pixels[offset++] = greenPixel;
+    }    
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t bluePixel = rgba_to_bgra(0, 0, 0xFF, step);
+      pixels[offset++] = bluePixel;
+    }
+    
+    assert(offset == (256 * 3));
+    
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer and then verify that the pixel value is the same
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    renderBuffer.colorspace = colorSpace;
+    CGColorSpaceRelease(colorSpace);
+    
+    [renderBuffer renderCGImage:imageRef];
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    offset = 0;
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t redPixel = rgba_to_bgra(0xFF, 0, 0, step);
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == redPixel);
+    }
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t greenPixel = rgba_to_bgra(0, 0xFF, 0, step);
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == greenPixel);
+    }    
+    
+    for (int step=0; step < 256; step++) {
+      uint32_t bluePixel = rgba_to_bgra(0, 0, 0xFF, step);
+      uint32_t pixel = renderPixels[offset++];
+      assert(pixel == bluePixel);
+    }
+    
+    assert(offset == (256 * 3));
+  }
+  
+  return;
+}
+#endif // TESTMODE
+
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
@@ -1175,6 +1641,10 @@ int main (int argc, const char * argv[]) {
     char *mvidFilename = (char *)argv[2];
     
     printMovieHeaderInfo(mvidFilename);
+#if defined(TESTMODE)
+	} else if (argc == 2 && (strcmp(argv[1], "-test") == 0)) {
+    testmode();
+#endif // TESTMODE
   } else if (argc >= 3) {
     // Either:
     //
@@ -1183,6 +1653,11 @@ int main (int argc, const char * argv[]) {
         
     char *firstFilenameCstr = (char*)argv[1];
     char *mvidFilenameCstr = (char*)argv[2];
+    
+    if (TRUE) {
+      fprintf(stderr, "%s\n", firstFilenameCstr);
+      fprintf(stderr, "%s\n", mvidFilenameCstr);
+    }
 
     // The second argument has to be "*.mvid"
     
@@ -1326,6 +1801,10 @@ int main (int argc, const char * argv[]) {
         // Extract frames we just encoded into the .mvid file for debug purposes
         
         extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
+      }
+      
+      if (TRUE) {
+        printMovieHeaderInfo(mvidFilenameCstr);
       }
     }
 	} else {
