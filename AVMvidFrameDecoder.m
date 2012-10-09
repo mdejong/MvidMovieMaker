@@ -1,5 +1,5 @@
 //
-//  AVMvidFrameDecoder.h
+//  AVMvidFrameDecoder.m
 //
 //  Created by Moses DeJong on 1/4/11.
 //
@@ -137,6 +137,25 @@
   } else {
     NSAssert(FALSE, @"invalid bitsPerPixel");
   }
+  
+  // If the input frames are in sRGB colorspace, then mark each frame so that RGB data is interpreted
+  // as sRGB instead of generic RGB.
+  // http://www.pupuweb.com/blog/wwdc-2012-session-523-practices-color-management-ken-greenebaum-luke-wallis/
+
+#if TARGET_OS_IPHONE
+  // No-op
+#else
+  // MacOSX
+  if ([self isSRGB]) {
+    CGColorSpaceRef colorSpace = NULL;
+    colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    NSAssert(colorSpace, @"colorSpace");
+    for (CGFrameBuffer *cgFrameBuffer in self.cgFrameBuffers) {
+      cgFrameBuffer.colorspace = colorSpace;
+    }
+    CGColorSpaceRelease(colorSpace);
+  }
+#endif // TARGET_OS_IPHONE
   
   self->m_resourceUsageLimit = FALSE;
 }
@@ -682,6 +701,11 @@
   CGFrameBuffer *cgFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:self.currentFrameBuffer.bitsPerPixel
                                                                          width:self.currentFrameBuffer.width
                                                                         height:self.currentFrameBuffer.height];
+  // If a specific non-default colorspace is being used, then copy it
+  
+  if (self.currentFrameBuffer.colorspace != NULL) {
+    cgFrameBuffer.colorspace = self.currentFrameBuffer.colorspace;
+  }
   
   // Using the OS level copy means that a small portion of the mapped memory will stay around, only the copied part.
   // Might be more efficient, unknown.

@@ -93,6 +93,10 @@ CGImageRef createImageFromFile(NSString *filenameStr)
   if (FALSE) {
     filenameStr = @"TestAlpha.png";
   }
+
+  if (FALSE) {
+    filenameStr = @"Colorbands_sRGB.png";
+  }
   
 	NSData *image_data = [NSData dataWithContentsOfFile:filenameStr];
 	if (image_data == nil) {
@@ -348,7 +352,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     if (worked == FALSE) {
       fprintf(stderr, "can't write keyframe data to mvid file \"%s\"\n", [filenameStr UTF8String]);
       exit(1);
-    }
+    }    
   } else {
     // Calculate delta pixels by comparing the previous frame to the current frame.
     // Once we know specific delta pixels, then only those pixels that actually changed
@@ -486,9 +490,13 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
     assert(cgFrameBuffer);
     
     if (frameDecoder.isSRGB) {
-      CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-      cgFrameBuffer.colorspace = colorspace;
-      CGColorSpaceRelease(colorspace);
+      // The frame decoder should have created the frame buffers using the sRGB colorspace.
+      
+      CGColorSpaceRef sRGBColorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+      assert(sRGBColorspace == cgFrameBuffer.colorspace);
+      CGColorSpaceRelease(sRGBColorspace);
+    } else {
+      assert(cgFrameBuffer.colorspace == NULL);      
     }
     
     NSData *pngData = [cgFrameBuffer formatAsPNG];
