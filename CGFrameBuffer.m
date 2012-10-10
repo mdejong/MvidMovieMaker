@@ -93,7 +93,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
   // 16bpp -> 2 bytes per pixel, 24bpp and 32bpp -> 4 bytes per pixel
   
-  int bytesPerPixel;
+  size_t bytesPerPixel;
   if (bitsPerPixel == 16) {
     bytesPerPixel = 2;
   } else if (bitsPerPixel == 24 || bitsPerPixel == 32) {
@@ -102,18 +102,19 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
     NSAssert(FALSE, @"bitsPerPixel is invalid");
   }
   
-	int inNumBytes = numPixelsToAllocate * bytesPerPixel;
+	size_t inNumBytes = numPixelsToAllocate * bytesPerPixel;
     
 	char* buffer;
   size_t allocNumBytes;
   allocNumBytes = inNumBytes;
   
-  int pagesize = getpagesize();
-  int numpages = (inNumBytes / pagesize);
+  size_t pagesize = getpagesize();
+  size_t numpages = (inNumBytes / pagesize);
   if (inNumBytes % pagesize) {
     numpages++;
   }
-  int allocNumBytesInPages = numpages * pagesize;
+  size_t allocNumBytesInPages = numpages * pagesize;
+  assert(allocNumBytesInPages > numpages); // watch for overflow
   buffer = (char*) valloc(allocNumBytesInPages);
   if (buffer) {
     bzero(buffer, allocNumBytesInPages);
