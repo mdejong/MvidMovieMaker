@@ -19,7 +19,7 @@ NSString *movie_prefix;
 CGFrameBuffer *prevFrameBuffer = nil;
 
 // Define this symbol to create a -test option that can be run from the command line.
-#define TESTMODE
+//#define TESTMODE
 
 // A MovieOptions struct is filled in as the user passes
 // specific command line options.
@@ -681,9 +681,17 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     assert(depth == 16 || depth == 24 || depth == 32);
     
+    if (depth == 16) {
+      // FIXME: currently, 16bpp data is upsampled to 24bpp and then downsampled to 16bpp again.
+      // This can lead to a loss in exact color representation in certain cases.
+      mvidBPP = 16;
+    }
+    
     // For 16BPP Animation, we need to get at the data directly?
     
     // http://www.mailinglistarchive.com/quicktime-api@lists.apple.com/msg06593.html
+    
+    // http://svn.perian.org/trunk/MkvExportPrivate.cpp
     
     DisposeHandle((Handle)desc);
   }
@@ -736,17 +744,22 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   
   int firstDuration = [[durations objectAtIndex:0] intValue];
   BOOL allSame = TRUE;
+  int smallestDuration = firstDuration;
   for (NSNumber *durationNumber in durations) {
     int currentDuration = [durationNumber intValue];
     if (currentDuration != firstDuration) {
       allSame = FALSE;
+    }
+    if (currentDuration < smallestDuration) {
+      smallestDuration = currentDuration;
     }
   }
   
   if (allSame) {
     frameTime = QTMakeTime(firstDuration, duration.timeScale);
   } else {
-    assert(0);
+    // In the case where frame durations are different lengths, pick the smallest one.
+    frameTime = QTMakeTime(smallestDuration, duration.timeScale);
   }
   
   // The frame interval is now known, so recalculate the total number of frames
@@ -777,6 +790,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
 
   fprintf(stdout, "extracting %d frame(s) from QT Movie\n", totalNumFrames);
   fprintf(stdout, "frame duration is %f seconds\n", (float)timeInterval);
+  fprintf(stdout, "movie pixels at %dBPP\n", mvidBPP);
   
   AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, mvidBPP, timeInterval, totalNumFrames);
   
