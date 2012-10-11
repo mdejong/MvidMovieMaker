@@ -693,6 +693,12 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     // http://svn.perian.org/trunk/MkvExportPrivate.cpp
     
+    // http://developer.apple.com/library/mac/#documentation/QuickTime/Reference/QTRef_TrackAndMedia/Reference/reference.html
+    
+    // http://vasi.dyndns.info:3130/svn/QTSplit/QTKit+Extensions.m  *
+    
+    // https://helixbeta.org/projects/client/doxygen/hxclient_4_0_1_brizo/da/da9/QTVideoReader_8cpp-source.html
+    
     DisposeHandle((Handle)desc);
   }
   
