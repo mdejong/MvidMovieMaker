@@ -21,6 +21,9 @@ CGFrameBuffer *prevFrameBuffer = nil;
 // Define this symbol to create a -test option that can be run from the command line.
 //#define TESTMODE
 
+// Define to enable mode that will split the RGB+A into RGB and A in two different mvid files
+#define SPLITALPHA
+
 // A MovieOptions struct is filled in as the user passes
 // specific command line options.
 
@@ -60,17 +63,25 @@ typedef struct
 //  mvidmoviemaker -info movie.mvid
 // ------------------------------------------------------------------------
 
-#define USAGE \
-"usage: mvidmoviemaker INFILE.mov OUTFILE.mvid ?OPTIONS?" "\n" \
-"or   : mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?" "\n" \
-"or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n" \
-"or   : mvidmoviemaker -info movie.mvid" "\n" \
-"OPTIONS:\n" \
-"-fps FLOAT : required when creating .mvid from a series of images\n" \
-"-framerate FLOAT : alternative way to indicate 1.0/fps\n" \
-"-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n" \
-"-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n" \
+static
+char *usageArray =
+"usage: mvidmoviemaker INFILE.mov OUTFILE.mvid ?OPTIONS?" "\n"
+"or   : mvidmoviemaker INFILE.mvid OUTFILE.mov ?OPTIONS?" "\n"
+"or   : mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?" "\n"
+"or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
+"or   : mvidmoviemaker -info movie.mvid" "\n"
+#if defined(SPLITALPHA)
+"or   : mvidmoviemaker -splitalpha movie.mvid" "\n"
+#endif
+"OPTIONS:\n"
+"-fps FLOAT : required when creating .mvid from a series of images\n"
+"-framerate FLOAT : alternative way to indicate 1.0/fps\n"
+"-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n"
+"-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n"
 "-colorspace srgb|rgb : defaults to srgb, rgb indicates no colorspace mapping\n"
+;
+
+#define USAGE (char*)usageArray
 
 // Create a CGImageRef given a filename. Image data is read from the file
 
@@ -572,7 +583,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   BOOL isMov = [movFilename hasSuffix:@".mov"];
   
   if (isMov == FALSE) {
-    fprintf(stderr, USAGE);
+    fprintf(stderr, "%s", USAGE);
     exit(1);
   }
   
@@ -581,7 +592,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   BOOL isMvid = [mvidFilename hasSuffix:@".mvid"];
   
   if (isMvid == FALSE) {
-    fprintf(stderr, USAGE);
+    fprintf(stderr, "%s", USAGE);
     exit(1);
   }
   
@@ -709,7 +720,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         
     GetMediaNextInterestingTime(firstTrackQuicktimeMedia,
                                 nextTimeFlags,
-                                currentTime.timeValue,
+                                (TimeValue)currentTime.timeValue,
                                 1,
                                 &nextInteresting,
                                 &nextInterestingDuration);
@@ -901,7 +912,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   BOOL isMvid = [mvidFilename hasSuffix:@".mvid"];
   
   if (isMvid == FALSE) {
-    fprintf(stderr, USAGE);
+    fprintf(stderr, "%s", USAGE);
     exit(1);
   }
   
@@ -1166,6 +1177,90 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   fprintf(stdout, "%d\n", numFrames);
     
   [frameDecoder close];
+}
+
+// convertMvidToMov
+//
+// This method will encode the contents of a .mvid file as a Quicktime .mov using
+// the Animation codec. This method supports 24BPP and 32BPP pixel modes.
+
+void convertMvidToMov(
+                      NSString *mvidFilename,
+                      NSString *movFilename
+                      )
+{
+  QTMovie *outMovie;
+  NSError *error;
+  outMovie = [[QTMovie alloc] initToWritableFile:movFilename error:&error];
+
+  if (outMovie == NULL) {
+    fprintf(stderr, "Could not create Quicktime mov \"%s\" : %s", [movFilename UTF8String], [[error description] UTF8String]);
+    exit(1);
+  }
+  
+  [outMovie setAttribute:[NSNumber numberWithBool:YES] forKey:QTMovieEditableAttribute];
+  
+  NSString *codec;
+  
+  codec = @"rle "; // Quicktime Animation codec
+  //codec = @"jpeg"; // Quicktime MJPEG codec
+
+  // FIXME: how can timescale be adjusted to fit movie framerate?
+  long timeScale      = 600;
+  
+  long quality;
+  quality = codecMaxQuality;
+  //quality = codecHighQuality;
+  
+  NSDictionary *outputMovieAttribs = [NSDictionary dictionaryWithObjectsAndKeys:
+                                      codec, QTAddImageCodecType,
+                                      [NSNumber numberWithLong:quality], QTAddImageCodecQuality,
+                                      [NSNumber numberWithLong:timeScale], QTTrackTimeScaleAttribute,
+                                      nil];
+  
+  for (int frame = 0; frame < 2; frame++)
+  {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    // create a QTTime value to be used as a duration when adding
+    // the image to the movie
+    
+    long long timeValue = 600;
+    QTTime duration     = QTMakeTime(timeValue, timeScale);
+    
+    NSImage *image;
+
+    if (TRUE) {
+      NSString *inFilename = @"Colorbands_sRGB.png";
+      CGImageRef cgImage = createImageFromFile(inFilename);
+      assert(cgImage);
+      CGSize cgSize = CGSizeMake(CGImageGetWidth(cgImage), CGImageGetHeight(cgImage));
+      image = [[[NSImage alloc] initWithCGImage:cgImage size:NSSizeFromCGSize(cgSize)] autorelease];
+      assert(image);
+      CGImageRelease(cgImage);
+    } else {
+      NSString *inFilename = @"Colorbands_sRGB.png";
+      NSURL *fileUrl = [NSURL fileURLWithPath:inFilename];
+      image = [[[NSImage alloc] initWithContentsOfURL:fileUrl] autorelease];
+    }
+    
+    // Adds an image for the specified duration to the QTMovie
+    [outMovie addImage:image
+           forDuration:duration
+        withAttributes:outputMovieAttribs];
+    
+    [pool drain];
+  }
+  
+  [outMovie updateMovieFile];
+  
+  // Deallocate movie
+  
+  [outMovie release];
+  
+  fprintf(stdout, "wrote %s", [movFilename UTF8String]);
+  
+  return;
 }
 
 // testmode() runs a series of basic test logic having to do with rendering
@@ -1637,6 +1732,148 @@ void testmode()
 }
 #endif // TESTMODE
 
+#if defined(SPLITALPHA)
+
+void
+splitalpha(char *mvidFilenameCstr)
+{
+	NSString *mvidPath = [NSString stringWithUTF8String:mvidFilenameCstr];
+  
+  BOOL isMvid = [mvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+
+  // Create "xyz_rgb.mvid" and "xyz_alpha.mvid" output filenames
+  
+  NSString *mvidFilename = [mvidPath lastPathComponent];
+  NSString *mvidFilenameNoExtension = [mvidFilename stringByDeletingPathExtension];
+
+  NSString *rgbFilename = [NSString stringWithFormat:@"%@_rgb.mvid", mvidFilenameNoExtension];
+  NSString *alphaFilename = [NSString stringWithFormat:@"%@_alpha.mvid", mvidFilenameNoExtension];
+  
+  // Read in frames from input file, then split the RGB and ALPHA components such that
+  // the premultiplied color values are writted to one file and the ALPHA (grayscale)
+  // values are written to the other.
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:mvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", mvidFilenameCstr);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
+  
+  if (bpp != 32) {
+    fprintf(stderr, "%s", "-splitalpha can only be used on a 32BPP MVID movie");
+    exit(1);
+  }
+
+  // Verify that the input color data has been mapped to the sRGB colorspace.
+  
+  if ([frameDecoder isSRGB] == FALSE) {
+    fprintf(stderr, "%s", "-splitalpha can only be used on MVID movie in the sRGB colorspace");
+    exit(1);
+  }
+  
+  // Writer that will write the RGB values
+  
+  AVMvidFileWriter *rgbWriter = makeMVidWriter(rgbFilename, 24, frameDuration, numFrames);
+  
+  rgbWriter.movieSize = CGSizeMake(width, height);
+  rgbWriter.isSRGB = TRUE;
+  
+  // Writer that will write the ALPHA values as grayscale
+
+  AVMvidFileWriter *alphaWriter = makeMVidWriter(alphaFilename, 24, frameDuration, numFrames);
+  
+  alphaWriter.movieSize = CGSizeMake(width, height);
+  alphaWriter.isSRGB = TRUE;
+
+  // Loop over each frame, split RGB and ALPHA data into two framebuffers
+  
+  CGFrameBuffer *rgbFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
+  CGFrameBuffer *alphaFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+
+    // sRGB
+    
+    if (frameIndex == 0) {
+      rgbFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+      alphaFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+    }
+    
+    // Split RGB and ALPHA
+    
+    NSUInteger numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
+    uint32_t *pixels = (uint32_t*)cgFrameBuffer.pixels;
+    uint32_t *rgbPixels = (uint32_t*)rgbFrameBuffer.pixels;
+    uint32_t *alphaPixels = (uint32_t*)alphaFrameBuffer.pixels;
+    
+    for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+      uint32_t pixel = pixels[pixeli];
+      
+      uint32_t alpha = (pixel >> 24) & 0xFF;
+      
+      uint32_t alphaPixel = (alpha << 16) | (alpha << 8) | alpha;
+      
+      alphaPixels[pixeli] = alphaPixel;
+      
+      uint32_t rgbPixel = pixel & 0xFFFFFF;
+      
+      rgbPixels[pixeli] = rgbPixel;
+    }
+    
+    // Write RGB framebuffer
+    
+    [rgbWriter writeKeyframe:(char*)rgbPixels bufferSize:numPixels*sizeof(uint32_t)];
+    
+    [alphaWriter writeKeyframe:(char*)alphaPixels bufferSize:numPixels*sizeof(uint32_t)];
+    
+    [pool drain];
+  }
+  
+  [rgbWriter rewriteHeader];
+  [rgbWriter close];
+  
+  [alphaWriter rewriteHeader];
+  [alphaWriter close];
+  
+  NSLog(@"Wrote %@", rgbWriter.mvidPath);
+  NSLog(@"Wrote %@", alphaWriter.mvidPath);
+  
+  return;
+}
+
+#endif // SPLITALPHA
+
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
@@ -1665,20 +1902,41 @@ int main (int argc, const char * argv[]) {
 	} else if (argc == 2 && (strcmp(argv[1], "-test") == 0)) {
     testmode();
 #endif // TESTMODE
+#if defined(SPLITALPHA)
+	} else if (argc == 3 && (strcmp(argv[1], "-splitalpha") == 0)) {
+    // mvidmoviemaker -splitalpha INFILE.mvid
+    char *mvidFilenameCstr = (char*)argv[2];
+    splitalpha(mvidFilenameCstr);
+#endif // SPLITALPHA
   } else if (argc >= 3) {
     // Either:
     //
     // mvidmoviemaker INFILE.mov OUTFILE.mvid ?OPTIONS?
+    // mvidmoviemaker INFILE.mvid OUTFILE.mov ?OPTIONS?
     // mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?
-        
+    
     char *firstFilenameCstr = (char*)argv[1];
-    char *mvidFilenameCstr = (char*)argv[2];
+    char *secondFilenameCstr = (char*)argv[2];
     
     if (TRUE) {
       fprintf(stderr, "%s\n", firstFilenameCstr);
-      fprintf(stderr, "%s\n", mvidFilenameCstr);
+      fprintf(stderr, "%s\n", secondFilenameCstr);
+    }
+    
+    NSString *firstFilenameStr = [NSString stringWithUTF8String:firstFilenameCstr];
+    NSString *secondFilenameStr = [NSString stringWithUTF8String:secondFilenameCstr];
+    
+    // If the arguments are INFILE.mvid OUTFILE.mvid, then convert video data
+    // back to Quicktime format and write to a new movie file.
+    
+    if ([firstFilenameStr hasSuffix:@".mvid"] && [secondFilenameStr hasSuffix:@".mov"])
+    {
+      convertMvidToMov(firstFilenameStr, secondFilenameStr);
+      exit(0);
     }
 
+    char *mvidFilenameCstr = secondFilenameCstr;
+    
     // The second argument has to be "*.mvid"
     
     NSString *mvidFilename = [NSString stringWithUTF8String:mvidFilenameCstr];
@@ -1686,7 +1944,7 @@ int main (int argc, const char * argv[]) {
     BOOL isMvid = [mvidFilename hasSuffix:@".mvid"];
     
     if (isMvid == FALSE) {
-      fprintf(stderr, USAGE);
+      fprintf(stderr, "%s", USAGE);
       exit(1);
     }
 
@@ -1728,7 +1986,7 @@ int main (int argc, const char * argv[]) {
           float fps = [valueStr floatValue];
           
           if ((fps <= 0.0f) || (fps >= 90.0f)) {
-            fprintf(stderr, USAGE);
+            fprintf(stderr, "%s", USAGE);
             exit(1);
           }
           
@@ -1757,7 +2015,7 @@ int main (int argc, const char * argv[]) {
           int keyframe = [valueStr intValue];
           
           if (keyframe <= 0) {
-            fprintf(stderr, USAGE);
+            fprintf(stderr, "%s", USAGE);
             exit(1);
           }
           
@@ -1828,7 +2086,7 @@ int main (int argc, const char * argv[]) {
       }
     }
 	} else {
-    fprintf(stderr, USAGE);
+    fprintf(stderr, "%s", USAGE);
     exit(1);
   }
   
