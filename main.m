@@ -1183,6 +1183,8 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
 //
 // This method will encode the contents of a .mvid file as a Quicktime .mov using
 // the Animation codec. This method supports 24BPP and 32BPP pixel modes.
+// Note that this method will reject an old "non-sRGB" MVID file since we do
+// not know exactly what the RGB and gamma values in that type of file might be.
 
 void convertMvidToMov(
                       NSString *mvidFilename,
@@ -1191,10 +1193,53 @@ void convertMvidToMov(
 {
   QTMovie *outMovie;
   NSError *error;
+ 
+  // Open up the .mvid file and read settings
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:mvidFilename];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", [mvidFilename UTF8String]);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  long timeScale      = 600; // 600 "clicks" in a clock second
+  long long timeValue;
+  
+  timeValue = (long long) round(frameDuration * timeScale);
+  
+  QTTime frameDurationTime = QTMakeTime(timeValue, timeScale);
+  
+  //int bpp = [frameDecoder header]->bpp;
+  
+  //int width = [frameDecoder width];
+  //int height = [frameDecoder height];
+  
+  // Note that a 16BPP input .mvid will be converted to 24BPP implicitly
+  
+  // Verify that the input color data has been mapped to the sRGB colorspace.
+  
+  if ([frameDecoder isSRGB] == FALSE) {
+    fprintf(stderr, "%s\n", "converting MVID to MOV is only support for MVID in sRGB colorspace");
+    exit(1);
+  }
+  
+  // Open up the .mov
+  
   outMovie = [[QTMovie alloc] initToWritableFile:movFilename error:&error];
 
   if (outMovie == NULL) {
-    fprintf(stderr, "Could not create Quicktime mov \"%s\" : %s", [movFilename UTF8String], [[error description] UTF8String]);
+    fprintf(stderr, "Could not create Quicktime mov \"%s\" : %s\n", [movFilename UTF8String], [[error description] UTF8String]);
     exit(1);
   }
   
@@ -1202,14 +1247,14 @@ void convertMvidToMov(
   
   NSString *codec;
   
-  codec = @"rle "; // Quicktime Animation codec
-  //codec = @"jpeg"; // Quicktime MJPEG codec
-
-  // FIXME: how can timescale be adjusted to fit movie framerate?
-  long timeScale      = 600;
+  //codec = @"rle "; // Animation codec
+  //codec = @"jpeg"; // MJPEG codec
+  //codec = @"ap4h"; // Apple ProRes 4444
+  codec = @"png ";   // Apple PNG
   
   long quality;
-  quality = codecMaxQuality;
+  quality = codecLosslessQuality;
+  //quality = codecMaxQuality;
   //quality = codecHighQuality;
   
   NSDictionary *outputMovieAttribs = [NSDictionary dictionaryWithObjectsAndKeys:
@@ -1218,19 +1263,12 @@ void convertMvidToMov(
                                       [NSNumber numberWithLong:timeScale], QTTrackTimeScaleAttribute,
                                       nil];
   
-  for (int frame = 0; frame < 2; frame++)
+  for (int frame = 0; frame < numFrames; frame++)
   {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    
-    // create a QTTime value to be used as a duration when adding
-    // the image to the movie
-    
-    long long timeValue = 600;
-    QTTime duration     = QTMakeTime(timeValue, timeScale);
-    
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];    
     NSImage *image;
 
-    if (TRUE) {
+    if (FALSE) {
       NSString *inFilename = @"Colorbands_sRGB.png";
       CGImageRef cgImage = createImageFromFile(inFilename);
       assert(cgImage);
@@ -1238,15 +1276,20 @@ void convertMvidToMov(
       image = [[[NSImage alloc] initWithCGImage:cgImage size:NSSizeFromCGSize(cgSize)] autorelease];
       assert(image);
       CGImageRelease(cgImage);
-    } else {
+    } else if (FALSE) {
       NSString *inFilename = @"Colorbands_sRGB.png";
       NSURL *fileUrl = [NSURL fileURLWithPath:inFilename];
       image = [[[NSImage alloc] initWithContentsOfURL:fileUrl] autorelease];
+    } else {
+      AVFrame *frameObj = [frameDecoder advanceToFrame:frame];
+      assert(frameObj);
+      image = frameObj.image;
+      assert(image);
     }
     
     // Adds an image for the specified duration to the QTMovie
     [outMovie addImage:image
-           forDuration:duration
+           forDuration:frameDurationTime
         withAttributes:outputMovieAttribs];
     
     [pool drain];
@@ -1781,14 +1824,14 @@ splitalpha(char *mvidFilenameCstr)
   int height = [frameDecoder height];
   
   if (bpp != 32) {
-    fprintf(stderr, "%s", "-splitalpha can only be used on a 32BPP MVID movie");
+    fprintf(stderr, "%s\n", "-splitalpha can only be used on a 32BPP MVID movie");
     exit(1);
   }
 
   // Verify that the input color data has been mapped to the sRGB colorspace.
   
   if ([frameDecoder isSRGB] == FALSE) {
-    fprintf(stderr, "%s", "-splitalpha can only be used on MVID movie in the sRGB colorspace");
+    fprintf(stderr, "%s\n", "-splitalpha can only be used on MVID movie in the sRGB colorspace");
     exit(1);
   }
   
