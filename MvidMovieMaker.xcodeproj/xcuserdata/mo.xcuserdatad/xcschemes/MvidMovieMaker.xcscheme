@@ -59,11 +59,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "TestOpaque/TestOpaque.mvid"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "TestOpaque/TestOpaque.mov"
+            argument = "-test"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -19,7 +19,7 @@ NSString *movie_prefix;
 CGFrameBuffer *prevFrameBuffer = nil;
 
 // Define this symbol to create a -test option that can be run from the command line.
-//#define TESTMODE
+#define TESTMODE
 
 // Define to enable mode that will split the RGB+A into RGB and A in two different mvid files
 #define SPLITALPHA
@@ -1220,10 +1220,10 @@ void convertMvidToMov(
   
   QTTime frameDurationTime = QTMakeTime(timeValue, timeScale);
   
-  //int bpp = [frameDecoder header]->bpp;
+  int bpp = [frameDecoder header]->bpp;
   
-  //int width = [frameDecoder width];
-  //int height = [frameDecoder height];
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
   
   // Note that a 16BPP input .mvid will be converted to 24BPP implicitly
   
@@ -1247,14 +1247,14 @@ void convertMvidToMov(
   
   NSString *codec;
   
-  //codec = @"rle "; // Animation codec
+  codec = @"rle "; // Animation codec
   //codec = @"jpeg"; // MJPEG codec
   //codec = @"ap4h"; // Apple ProRes 4444
-  codec = @"png ";   // Apple PNG
+  //codec = @"png ";   // Apple PNG
   
   long quality;
-  quality = codecLosslessQuality;
-  //quality = codecMaxQuality;
+  //quality = codecLosslessQuality;
+  quality = codecMaxQuality;
   //quality = codecHighQuality;
   
   NSDictionary *outputMovieAttribs = [NSDictionary dictionaryWithObjectsAndKeys:
@@ -1262,6 +1262,8 @@ void convertMvidToMov(
                                       [NSNumber numberWithLong:quality], QTAddImageCodecQuality,
                                       [NSNumber numberWithLong:timeScale], QTTrackTimeScaleAttribute,
                                       nil];
+  
+  CGFrameBuffer *conversionFramebuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
   
   for (int frame = 0; frame < numFrames; frame++)
   {
@@ -1283,7 +1285,36 @@ void convertMvidToMov(
     } else {
       AVFrame *frameObj = [frameDecoder advanceToFrame:frame];
       assert(frameObj);
-      image = frameObj.image;
+      frameObj.image = nil;
+      
+      // http://www.planet1107.net/blog/tips-tutorials/ios5-core-image-filters/
+      // https://svn.blender.org/svnroot/bf-blender/branches/bge_eigen2/source/blender/quicktime/apple/qtkit_export.m
+      
+      // http://bitfilms.blogspot.com/2011/08/final-cut-exports-look-different-from.html (read about nclc atom)
+      
+      // Convert frame pixel from sRGB (gamma 2.2) to device colorspace (gamma 1.8) so that the RGB values
+      // and in a format expected by Quicktime. The Quicktime support for colorspace is spotty
+      // so we need to avoid sending sRGB data otherwise the gamma will be wrong.
+      
+      CGImageRef cgImage = [frameObj.cgFrameBuffer createCGImageRef];
+      assert(cgImage);
+      
+      // fixme : would convertion to "GenericRGB" add a profile to the QT file (not a nclc)
+      
+      [conversionFramebuffer renderCGImage:cgImage];
+      CGImageRelease(cgImage);
+      
+      CGImageRef defaultColorspaceImage = [conversionFramebuffer createCGImageRef];
+      
+      CGColorSpaceRef conversionColorspace = CGImageGetColorSpace(defaultColorspaceImage);
+      assert(conversionColorspace);
+      
+      NSSize size = NSMakeSize(width, height);
+      image = [[[NSImage alloc] initWithCGImage:defaultColorspaceImage size:size] autorelease];
+      assert(image);
+      
+      CGImageRelease(defaultColorspaceImage);
+      
       assert(image);
     }
     
@@ -1315,6 +1346,15 @@ static inline
 uint32_t rgba_to_bgra(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
 {
   return (alpha << 24) | (red << 16) | (green << 8) | blue;
+}
+
+static inline
+NSString* bgra_to_string(uint32_t pixel) {
+  uint8_t alpha = (pixel >> 24) & 0xFF;
+  uint8_t red = (pixel >> 16) & 0xFF;
+  uint8_t green = (pixel >> 8) & 0xFF;
+  uint8_t blue = (pixel >> 0) & 0xFF;
+  return [NSString stringWithFormat:@"(%d, %d, %d, %d)", red, green, blue, alpha];
 }
 
 void testmode()
@@ -1771,6 +1811,695 @@ void testmode()
     assert(offset == (256 * 3));
   }
   
+  /*
+  
+  // This test case will create a 1x4 RGB with the pixels (RED, GREEN, BLUE, GRAY)
+  // where gray component is 50% gray. These pixels will then be converted to the
+  // sRGB colorspace and then back to RGB to make sure the SRGB -> RGB is actually
+  // reversing the mapping into sRGB colosspace.
+  
+  @autoreleasepool
+  {
+    int bppNum = 24;
+    int width = 4;
+    int height = 1;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+   
+    CGColorSpaceRef rgbColorSpace;
+    rgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
+    assert(rgbColorSpace);
+    cgBuffer.colorspace = rgbColorSpace;
+    CGColorSpaceRelease(rgbColorSpace);
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    
+    pixels[0] = rgba_to_bgra(0xFF, 0, 0, 0xFF);
+    pixels[1] = rgba_to_bgra(0, 0xFF, 0, 0xFF);
+    pixels[2] = rgba_to_bgra(0, 0, 0xFF, 0xFF);
+    pixels[3] = rgba_to_bgra(0xFF/2, 0xFF/2, 0xFF/2, 0xFF);
+    
+    uint32_t redPixel = pixels[0];
+    uint32_t greenPixel = pixels[1];
+    uint32_t bluePixel = pixels[2];
+    uint32_t grayPixel = pixels[3];
+    
+    NSString *redStr = bgra_to_string(redPixel);
+    NSString *greenStr = bgra_to_string(greenPixel);
+    NSString *blueStr = bgra_to_string(bluePixel);
+    NSString *grayStr = bgra_to_string(grayPixel);
+    
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+        
+    // Create image from test data
+    
+    CGImageRef imageRef = [cgBuffer createCGImageRef];
+    
+    // Render test image into a new CGFrameBuffer in sRGB colorspace and then examine pixel values.
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    CGColorSpaceRef srgbColorSpace;
+    srgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    renderBuffer.colorspace = srgbColorSpace;
+    CGColorSpaceRelease(srgbColorSpace);
+    
+    [renderBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+
+    redPixel = renderPixels[0];
+    greenPixel = renderPixels[1];
+    bluePixel = renderPixels[2];
+    grayPixel = renderPixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    // sRGB values are shifted
+    
+    assert([redStr isEqualToString:@"(255, 38, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 249, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(4, 51, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(145, 145, 145, 255)"]);
+    
+    // Emit "RedGreenBlueGray_sRGB.png"
+    
+    if (TRUE) {
+      NSString *filename = @"RedGreenBlueGray_sRGB.png";
+      
+      NSData *pngData = [renderBuffer formatAsPNG];
+      
+      [pngData writeToFile:filename atomically:NO];
+      
+      NSLog(@"wrote %@", filename);
+    }
+    
+    // Now attempt to convert the sRGB values back to GenericRGB to see if the pixel values match.
+    
+    assert(cgBuffer.isLockedByDataProvider == FALSE);
+    memset(cgBuffer.pixels, 0, cgBuffer.numBytes);
+    
+    imageRef = [renderBuffer createCGImageRef];
+    
+    [cgBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+
+    redPixel = pixels[0];
+    greenPixel = pixels[1];
+    bluePixel = pixels[2];
+    grayPixel = pixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+    
+    // Emit "RedGreenBlueGray_RGB.png"
+    
+    if (TRUE) {
+      NSString *filename = @"RedGreenBlueGray_RGB.png";
+      
+      NSData *pngData = [cgBuffer formatAsPNG];
+      
+      [pngData writeToFile:filename atomically:NO];
+      
+      NSLog(@"wrote %@", filename);
+    }
+  }
+   
+  */
+  
+  /*
+  
+  // This test case will load a 1x4 image from a file on disk. When a file is not tagged
+  // with a specific profile, it defaults to a generic RGB profile. This test attempts
+  // to determine if loading from a file leads to different results when rendering into
+  // sRGB vs setting data directly into a pixel array. One immediate diff to note is
+  // that kCGColorSpaceDeviceRGB is the colorspace for a file loaded from disk that has
+  // no specific colorspace while the generic RGB profile is actually a profile that can
+  // be attached to a file.
+  
+  @autoreleasepool
+  {
+    int bppNum = 24;
+    int width = 4;
+    int height = 1;
+    
+    // Load "RedGreenBlueGray_RawRGB.png";
+    
+    NSString *filename;
+    
+    //filename = @"RedGreenBlueGray_RawRGB.png";
+    filename = @"RedGreenBlueGray_Gimp.bmp";
+    
+    CGImageRef imageRef = createImageFromFile(filename);
+    assert(imageRef);
+    
+    assert(width == CGImageGetWidth(imageRef));
+    assert(height == CGImageGetHeight(imageRef));
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    // When no colorspace is applied to an image, it is loaded with "kCGColorSpaceDeviceRGB"
+    
+    CGColorSpaceRef rgbColorSpace;
+    //rgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
+    rgbColorSpace = CGImageGetColorSpace(imageRef);
+    assert(rgbColorSpace);
+    cgBuffer.colorspace = rgbColorSpace;
+    CGColorSpaceRelease(rgbColorSpace);
+    
+    [cgBuffer renderCGImage:imageRef];
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+        
+    uint32_t redPixel = pixels[0];
+    uint32_t greenPixel = pixels[1];
+    uint32_t bluePixel = pixels[2];
+    uint32_t grayPixel = pixels[3];
+    
+    NSString *redStr = bgra_to_string(redPixel);
+    NSString *greenStr = bgra_to_string(greenPixel);
+    NSString *blueStr = bgra_to_string(bluePixel);
+    NSString *grayStr = bgra_to_string(grayPixel);
+    
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+    
+    // Create image from test data
+    
+    if (FALSE) {
+      CGImageRelease(imageRef);
+      imageRef = [cgBuffer createCGImageRef];
+    }
+    
+    // Render test image into a new CGFrameBuffer in sRGB colorspace and then examine pixel values.
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    CGColorSpaceRef srgbColorSpace;
+    srgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    renderBuffer.colorspace = srgbColorSpace;
+    CGColorSpaceRelease(srgbColorSpace);
+    
+    [renderBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    redPixel = renderPixels[0];
+    greenPixel = renderPixels[1];
+    bluePixel = renderPixels[2];
+    grayPixel = renderPixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    // sRGB values are shifted, not the same as conversion from "Generic RGB"
+    
+    if (TRUE) {
+    assert([redStr isEqualToString:@"(233, 63, 51, 255)"]);
+    assert([greenStr isEqualToString:@"(128, 242, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 72, 251, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+    }
+    
+    // Now attempt to convert the sRGB values back to GenericRGB to see if the pixel values match.
+    
+    assert(cgBuffer.isLockedByDataProvider == FALSE);
+    memset(cgBuffer.pixels, 0, cgBuffer.numBytes);
+    
+    imageRef = [renderBuffer createCGImageRef];
+    
+    [cgBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    redPixel = pixels[0];
+    greenPixel = pixels[1];
+    bluePixel = pixels[2];
+    grayPixel = pixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    if (TRUE) {
+      // Write file that contains the results converting from device RGB to sRGB then back to device RGB
+      
+      if (TRUE) {
+        NSString *filename = @"RedGreenBlueGray_Device2SRGB.png";
+        
+        NSData *pngData = [cgBuffer formatAsPNG];
+        
+        [pngData writeToFile:filename atomically:NO];
+        
+        NSLog(@"wrote %@", filename);
+      }
+
+    }
+    
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);    
+  }
+  
+  */
+  
+  /*
+  
+  // This test case defines an in memory buffer that contains the same results as
+  // would be loaded from RedGreenBlueGray_Gimp.bmp. Loading from a BMP will
+  // not use a specific colorspace, instead the device profile would be attached
+  // automatically by the system. Loading the exact same pixel data with the
+  // same colorspace means a test case can run without an external file.
+  
+  @autoreleasepool
+  {
+    int bppNum = 24;
+    int width = 4;
+    int height = 1;
+    
+    CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    CGColorSpaceRef rgbColorSpace;
+    rgbColorSpace = CGColorSpaceCreateDeviceRGB();
+    assert(rgbColorSpace);
+    cgBuffer.colorspace = rgbColorSpace;
+    CGColorSpaceRelease(rgbColorSpace);
+    
+    uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+    
+    pixels[0] = rgba_to_bgra(0xFF, 0, 0, 0xFF);
+    pixels[1] = rgba_to_bgra(0, 0xFF, 0, 0xFF);
+    pixels[2] = rgba_to_bgra(0, 0, 0xFF, 0xFF);
+    pixels[3] = rgba_to_bgra(0xFF/2, 0xFF/2, 0xFF/2, 0xFF);
+    
+    uint32_t redPixel = pixels[0];
+    uint32_t greenPixel = pixels[1];
+    uint32_t bluePixel = pixels[2];
+    uint32_t grayPixel = pixels[3];
+    
+    NSString *redStr = bgra_to_string(redPixel);
+    NSString *greenStr = bgra_to_string(greenPixel);
+    NSString *blueStr = bgra_to_string(bluePixel);
+    NSString *grayStr = bgra_to_string(grayPixel);
+    
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+    
+    // Render test image into a new CGFrameBuffer in sRGB colorspace and then examine pixel values.
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    CGColorSpaceRef srgbColorSpace;
+    srgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    renderBuffer.colorspace = srgbColorSpace;
+    CGColorSpaceRelease(srgbColorSpace);
+
+    CGImageRef imageRef;
+    imageRef = [cgBuffer createCGImageRef];
+    [renderBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    redPixel = renderPixels[0];
+    greenPixel = renderPixels[1];
+    bluePixel = renderPixels[2];
+    grayPixel = renderPixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    // sRGB values are shifted, not the same as conversion from "Generic RGB"
+    
+    if (TRUE) {
+      assert([redStr isEqualToString:@"(233, 63, 51, 255)"]);
+      assert([greenStr isEqualToString:@"(128, 242, 0, 255)"]);
+      assert([blueStr isEqualToString:@"(0, 72, 251, 255)"]);
+      assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+    }
+    
+    // Now attempt to convert the sRGB values back to GenericRGB to see if the pixel values match.
+    
+    assert(cgBuffer.isLockedByDataProvider == FALSE);
+    memset(cgBuffer.pixels, 0, cgBuffer.numBytes);
+    
+    imageRef = [renderBuffer createCGImageRef];
+    
+    [cgBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    redPixel = pixels[0];
+    greenPixel = pixels[1];
+    bluePixel = pixels[2];
+    grayPixel = pixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    if (FALSE) {
+      // Write file that contains the results converting from device RGB to sRGB then back to device RGB
+      
+      if (TRUE) {
+        NSString *filename = @"RedGreenBlueGray_Device2SRGB.png";
+        
+        NSData *pngData = [cgBuffer formatAsPNG];
+        
+        [pngData writeToFile:filename atomically:NO];
+        
+        NSLog(@"wrote %@", filename);
+      }
+      
+    }
+    
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+  }
+  
+  */
+
+  /*
+  
+  // This test case attempts to work around issues related to conversion from
+  // DeviceRGB to sRGB by detecting when DeviceRGB is being used by default
+  // for untagged content. First, this code will convert from DeviceRGB
+  // to GenericRGB and then to sRGB. If we can then convert from sRGB back
+  // to GenericRGB without losing information then that approach could be
+  // used to avoid color shift on untagged content.
+  
+  // This test case was not useful. Conversion from RGB To GenericRGB also
+  // changed the RGB values in a non-reversable way.
+   
+  @autoreleasepool
+  {
+    int bppNum = 24;
+    int width = 4;
+    int height = 1;
+    
+    uint32_t redPixel;
+    uint32_t greenPixel;
+    uint32_t bluePixel;
+    uint32_t grayPixel;
+    
+    NSString *redStr;
+    NSString *greenStr;
+    NSString *blueStr;
+    NSString *grayStr;
+    
+    CGColorSpaceRef imageRefColorspace;
+    
+    CGFrameBuffer *deviceRGBBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    CGColorSpaceRef deviceRGBColorSpace;
+    deviceRGBColorSpace = CGColorSpaceCreateDeviceRGB();
+    assert(deviceRGBColorSpace);
+    deviceRGBBuffer.colorspace = deviceRGBColorSpace;
+    CGColorSpaceRelease(deviceRGBColorSpace);
+    
+    uint32_t *pixels = (uint32_t *)deviceRGBBuffer.pixels;
+    
+    pixels[0] = rgba_to_bgra(0xFF, 0, 0, 0xFF);
+    pixels[1] = rgba_to_bgra(0, 0xFF, 0, 0xFF);
+    pixels[2] = rgba_to_bgra(0, 0, 0xFF, 0xFF);
+    pixels[3] = rgba_to_bgra(0xFF/2, 0xFF/2, 0xFF/2, 0xFF);
+    
+    redPixel = pixels[0];
+    greenPixel = pixels[1];
+    bluePixel = pixels[2];
+    grayPixel = pixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+    
+    // Render deviceRGBBuffer into genericRGBBuffer
+
+    CGFrameBuffer *genericRGBBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    CGColorSpaceRef genericRGBColorSpace;
+    genericRGBColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
+    assert(genericRGBColorSpace);
+    genericRGBBuffer.colorspace = genericRGBColorSpace;
+    CGColorSpaceRelease(genericRGBColorSpace);
+    
+    CGImageRef imageRef;
+    imageRef = [deviceRGBBuffer createCGImageRef];
+    
+    // The colorspace defined in the image must match deviceRGBColorSpace
+    imageRefColorspace = CGImageGetColorSpace(imageRef);
+    assert(deviceRGBColorSpace == imageRefColorspace);
+    
+    [genericRGBBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    uint32_t *genericRGBPixels = (uint32_t *)genericRGBBuffer.pixels;
+    
+    redPixel = genericRGBPixels[0];
+    greenPixel = genericRGBPixels[1];
+    bluePixel = genericRGBPixels[2];
+    grayPixel = genericRGBPixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    if (FALSE) {
+      
+//       Unclear why these values come out this way!
+//       (lldb) po redStr
+//       (NSString *) $7 = 0x001126f0 (225, 39, 40, 255)
+//       (lldb) po greenStr
+//       (NSString *) $8 = 0x0030dc00 (113, 245, 5, 255)
+//       (lldb) po blueStr
+//       (NSString *) $9 = 0x001131b0 (0, 41, 250, 255)
+//       (lldb) po grayStr
+//       (NSString *) $10 = 0x00113350 (108, 108, 108, 255)
+      
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+    }
+    
+    // Render test image into a new CGFrameBuffer in sRGB colorspace and then examine pixel values.
+    
+    CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+    
+    CGColorSpaceRef srgbColorSpace;
+    srgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    renderBuffer.colorspace = srgbColorSpace;
+    CGColorSpaceRelease(srgbColorSpace);
+    
+    imageRef = [genericRGBBuffer createCGImageRef];
+    
+    // The colorspace defined in the image must match genericRGBColorSpace
+    imageRefColorspace = CGImageGetColorSpace(imageRef);
+    assert(genericRGBColorSpace == imageRefColorspace);
+    
+    [renderBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+    
+    redPixel = renderPixels[0];
+    greenPixel = renderPixels[1];
+    bluePixel = renderPixels[2];
+    grayPixel = renderPixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    // sRGB values are shifted, not the same as conversion from "Generic RGB"
+    
+    if (TRUE) {
+      assert([redStr isEqualToString:@"(233, 63, 51, 255)"]);
+      assert([greenStr isEqualToString:@"(128, 242, 0, 255)"]);
+      assert([blueStr isEqualToString:@"(0, 72, 251, 255)"]);
+      assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+    }
+    
+    // Now attempt to convert the sRGB values back to GenericRGB to see if the pixel values match.
+    
+    assert(genericRGBBuffer.isLockedByDataProvider == FALSE);
+    memset(genericRGBBuffer.pixels, 0, genericRGBBuffer.numBytes);
+    
+    imageRef = [renderBuffer createCGImageRef];
+    
+    [genericRGBBuffer renderCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    redPixel = pixels[0];
+    greenPixel = pixels[1];
+    bluePixel = pixels[2];
+    grayPixel = pixels[3];
+    
+    redStr = bgra_to_string(redPixel);
+    greenStr = bgra_to_string(greenPixel);
+    blueStr = bgra_to_string(bluePixel);
+    grayStr = bgra_to_string(grayPixel);
+    
+    if (FALSE) {
+      // Write file that contains the results converting from device RGB to sRGB then back to device RGB
+      
+      if (TRUE) {
+        NSString *filename = @"RedGreenBlueGray_Device2SRGB.png";
+        
+        NSData *pngData = [genericRGBBuffer formatAsPNG];
+        
+        [pngData writeToFile:filename atomically:NO];
+        
+        NSLog(@"wrote %@", filename);
+      }
+      
+    }
+    
+    assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+    assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+    assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+    assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+  }
+  
+  */
+
+  // This test case will create a 1x4 RGB with the pixels (RED, GREEN, BLUE, GRAY)
+  // where gray component is 50% gray. These pixels are converted from and to the
+  // RGB linear colorspace with a 1.0 gamma.
+  
+  /*
+   @autoreleasepool
+   {
+   int bppNum = 24;
+   int width = 4;
+   int height = 1;
+   
+   CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+   
+   CGColorSpaceRef rgbColorSpace;
+   rgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGBLinear);
+   assert(rgbColorSpace);
+   cgBuffer.colorspace = rgbColorSpace;
+   CGColorSpaceRelease(rgbColorSpace);
+   
+   uint32_t *pixels = (uint32_t *)cgBuffer.pixels;
+   
+   pixels[0] = rgba_to_bgra(0xFF, 0, 0, 0xFF);
+   pixels[1] = rgba_to_bgra(0, 0xFF, 0, 0xFF);
+   pixels[2] = rgba_to_bgra(0, 0, 0xFF, 0xFF);
+   pixels[3] = rgba_to_bgra(0xFF/2, 0xFF/2, 0xFF/2, 0xFF);
+   
+   uint32_t redPixel = pixels[0];
+   uint32_t greenPixel = pixels[1];
+   uint32_t bluePixel = pixels[2];
+   uint32_t grayPixel = pixels[3];
+   
+   NSString *redStr = bgra_to_string(redPixel);
+   NSString *greenStr = bgra_to_string(greenPixel);
+   NSString *blueStr = bgra_to_string(bluePixel);
+   NSString *grayStr = bgra_to_string(grayPixel);
+   
+   assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+   assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+   assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+   assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+   
+   // Create image from test data
+   
+   CGImageRef imageRef = [cgBuffer createCGImageRef];
+   
+   // Render test image into a new CGFrameBuffer in sRGB colorspace and then examine pixel values.
+   
+   CGFrameBuffer *renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:width height:height];
+   
+   CGColorSpaceRef srgbColorSpace;
+   srgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+   renderBuffer.colorspace = srgbColorSpace;
+   CGColorSpaceRelease(srgbColorSpace);
+   
+   [renderBuffer renderCGImage:imageRef];
+   CGImageRelease(imageRef);
+   
+   uint32_t *renderPixels = (uint32_t *)renderBuffer.pixels;
+   
+   redPixel = renderPixels[0];
+   greenPixel = renderPixels[1];
+   bluePixel = renderPixels[2];
+   grayPixel = renderPixels[3];
+   
+   redStr = bgra_to_string(redPixel);
+   greenStr = bgra_to_string(greenPixel);
+   blueStr = bgra_to_string(bluePixel);
+   grayStr = bgra_to_string(grayPixel);
+   
+   // sRGB values are shifted
+   
+   assert([redStr isEqualToString:@"(255, 39, 0, 255)"]);
+   assert([greenStr isEqualToString:@"(0, 249, 0, 255)"]);
+   assert([blueStr isEqualToString:@"(10, 49, 255, 255)"]);
+   assert([grayStr isEqualToString:@"(187, 187, 187, 255)"]);
+   
+   // Now attempt to convert the sRGB values back to GenericRGBLeanear to see if the pixel values match.
+   
+   assert(cgBuffer.isLockedByDataProvider == FALSE);
+   memset(cgBuffer.pixels, 0, cgBuffer.numBytes);
+   
+   imageRef = [renderBuffer createCGImageRef];
+   
+   [cgBuffer renderCGImage:imageRef];
+   CGImageRelease(imageRef);
+   
+   redPixel = pixels[0];
+   greenPixel = pixels[1];
+   bluePixel = pixels[2];
+   grayPixel = pixels[3];
+   
+   redStr = bgra_to_string(redPixel);
+   greenStr = bgra_to_string(greenPixel);
+   blueStr = bgra_to_string(bluePixel);
+   grayStr = bgra_to_string(grayPixel);
+   
+   assert([redStr isEqualToString:@"(255, 0, 0, 255)"]);
+   assert([greenStr isEqualToString:@"(0, 255, 0, 255)"]);
+   assert([blueStr isEqualToString:@"(0, 0, 255, 255)"]);
+   assert([grayStr isEqualToString:@"(127, 127, 127, 255)"]);
+   }
+  */
+  
   return;
 }
 #endif // TESTMODE
@@ -1974,7 +2703,9 @@ int main (int argc, const char * argv[]) {
     
     if ([firstFilenameStr hasSuffix:@".mvid"] && [secondFilenameStr hasSuffix:@".mov"])
     {
-      convertMvidToMov(firstFilenameStr, secondFilenameStr);
+      @autoreleasepool {
+        convertMvidToMov(firstFilenameStr, secondFilenameStr);
+      }
       exit(0);
     }
 
