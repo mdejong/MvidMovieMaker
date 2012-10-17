@@ -1247,10 +1247,10 @@ void convertMvidToMov(
   
   NSString *codec;
   
-  codec = @"rle "; // Animation codec
+  //codec = @"rle "; // Animation codec
   //codec = @"jpeg"; // MJPEG codec
   //codec = @"ap4h"; // Apple ProRes 4444
-  //codec = @"png ";   // Apple PNG
+  codec = @"png ";   // Apple PNG
   
   long quality;
   //quality = codecLosslessQuality;
