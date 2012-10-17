@@ -1299,29 +1299,45 @@ void convertMvidToMov(
       CGImageRef cgImage = [frameObj.cgFrameBuffer createCGImageRef];
       assert(cgImage);
       
-      // fixme : would convertion to "GenericRGB" add a profile to the QT file (not a nclc)
+      // FIXME : would convertion to "GenericRGB" add a profile to the QT file (not a nclc)
       
+      CGColorSpaceRef colorSpace;
+      colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGBLinear);
+      assert(colorSpace);
+      conversionFramebuffer.colorspace = colorSpace;
+      CGColorSpaceRelease(colorSpace);
+
       [conversionFramebuffer renderCGImage:cgImage];
       CGImageRelease(cgImage);
       
-      CGImageRef defaultColorspaceImage = [conversionFramebuffer createCGImageRef];
+      if (TRUE) {
+        NSString *dumpFilename = [NSString stringWithFormat:@"QTEncodeDumpFrame%0.4d.png", frame+1];
+        
+        NSData *pngData = [conversionFramebuffer formatAsPNG];
+        
+        [pngData writeToFile:dumpFilename atomically:NO];
+        
+        NSLog(@"wrote %@", dumpFilename);
+      }
       
-      CGColorSpaceRef conversionColorspace = CGImageGetColorSpace(defaultColorspaceImage);
+      CGImageRef conversionColorspaceImage = [conversionFramebuffer createCGImageRef];
+      
+      CGColorSpaceRef conversionColorspace = CGImageGetColorSpace(conversionColorspaceImage);
       assert(conversionColorspace);
       
       NSSize size = NSMakeSize(width, height);
-      image = [[[NSImage alloc] initWithCGImage:defaultColorspaceImage size:size] autorelease];
+      image = [[[NSImage alloc] initWithCGImage:conversionColorspaceImage size:size] autorelease];
       assert(image);
       
-      CGImageRelease(defaultColorspaceImage);
-      
+      CGImageRelease(conversionColorspaceImage);
+            
       assert(image);
     }
     
     // Adds an image for the specified duration to the QTMovie
     [outMovie addImage:image
            forDuration:frameDurationTime
-        withAttributes:outputMovieAttribs];
+        withAttributes:outputMovieAttribs];    
     
     [pool drain];
   }
