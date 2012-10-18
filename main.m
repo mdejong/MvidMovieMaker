@@ -1249,7 +1249,7 @@ void convertMvidToMov(
   
   Movie qtMovie = outMovie.quickTimeMovie;
   assert(qtMovie);
-  Track qtTrack = NewMovieTrack(qtMovie, (Fixed)width, (Fixed)height, (short)0);
+  Track qtTrack = NewMovieTrack(qtMovie, FixRatio(width, 1), FixRatio(height, 1), (short)0);
 
 	OSErr osError = GetMoviesError();
   if (osError) {
