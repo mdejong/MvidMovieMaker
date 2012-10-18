@@ -1244,6 +1244,179 @@ void convertMvidToMov(
   }
   
   [outMovie setAttribute:[NSNumber numberWithBool:YES] forKey:QTMovieEditableAttribute];
+
+  // Create a QT Track handle
+  
+  Movie qtMovie = outMovie.quickTimeMovie;
+  assert(qtMovie);
+  Track qtTrack = NewMovieTrack(qtMovie, (Fixed)width, (Fixed)height, (short)0);
+
+	OSErr osError = GetMoviesError();
+  if (osError) {
+    fprintf(stderr, "Create Quicktime mov track error %d\n", osError);
+    exit(1);
+  }
+  assert(qtTrack);
+  
+  // http://developer.apple.com/library/mac/#documentation/QuickTime/Reference/QTRef_TrackAndMedia/Reference/reference.html
+  //
+  // Add video media (images) to a track
+  
+  OSType mediaType = VideoMediaType;
+  Handle dataRef = NULL;
+  OSType dataRefType = 0;
+  
+  Media qtMedia = NewTrackMedia(qtTrack, mediaType, (TimeScale)timeScale, dataRef, dataRefType);
+
+  BeginMediaEdits(qtMedia);
+
+  CGFrameBuffer *conversionFramebuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
+  
+  ImageDescriptionHandle desc = (ImageDescriptionHandle)NewHandleClear(sizeof(ImageDescription));
+  
+  // kRawCodecType
+  
+  int qtBPP = 32;
+  if (bpp == 24) {
+    qtBPP = 32;
+  }
+  
+  int pixelsNumBytes = width * height * (qtBPP / 8); // FIXME: is 24BPP still using 32bpp pixels?
+  
+  unsigned long cType = kRawCodecType;
+  
+  (**desc).idSize = sizeof(ImageDescription);
+  (**desc).cType = cType;
+  (**desc).vendor = kAppleManufacturer;  
+  (**desc).version = 0;
+  (**desc).spatialQuality = codecLosslessQuality;
+  (**desc).width = width;
+  (**desc).height = height;
+  (**desc).hRes = 72 << 16; // 72 DPI as a fixed-point number
+  (**desc).vRes = 72 << 16; // 72 DPI as a fixed-point number
+  (**desc).frameCount = 1;
+  (**desc).depth = qtBPP;
+  (**desc).dataSize = pixelsNumBytes;
+  (**desc).clutID = -1;
+  
+  /*
+   
+   (lldb) p *(*desc)
+   (ImageDescription) $6 = {
+   (SInt32) idSize = 118
+   (CodecType) cType = 1111970369
+   (SInt32) resvd1 = 0
+   (SInt16) resvd2 = 0
+   (SInt16) dataRefIndex = 1
+   (SInt16) version = 0
+   (SInt16) revisionLevel = 0
+   (SInt32) vendor = 0
+   (CodecQ) temporalQuality = 0
+   (CodecQ) spatialQuality = 1024
+   (SInt16) width = 512
+   (SInt16) height = 512
+   (Fixed) hRes = 4718592
+   (Fixed) vRes = 4718592
+   (SInt32) dataSize = 0
+   (SInt16) frameCount = 0
+   (Str31) name = {
+   (unsigned char) [0] = '\0'
+   (unsigned char) [1] = '\0'
+   (unsigned char) [2] = '\0'
+   (unsigned char) [3] = '\0'
+   }
+   (SInt16) depth = 32
+   (SInt16) clutID = -1
+   }
+
+   */
+  
+  /*
+   PNG:
+   
+   kPNGCodecType = 'png '
+   
+   (lldb) p *((ImageDescriptionPtr)0x00442620)
+   (ImageDescription) $2 = {
+   (SInt32) idSize = 86
+   (CodecType) cType = 1886283552
+   (SInt32) resvd1 = 0
+   (SInt16) resvd2 = 0
+   (SInt16) dataRefIndex = 1
+   (SInt16) version = 1
+   (SInt16) revisionLevel = 1
+   (SInt32) vendor = 1634758764
+   (CodecQ) temporalQuality = 0
+   (CodecQ) spatialQuality = 512
+   (SInt16) width = 480
+   (SInt16) height = 320
+   (Fixed) hRes = 4718592
+   (Fixed) vRes = 4718592
+   (SInt32) dataSize = 0
+   (SInt16) frameCount = 1
+   (Str31) name = {
+   (unsigned char) [0] = '\x03'
+   (unsigned char) [1] = 'P'
+   (unsigned char) [2] = 'N'
+   (unsigned char) [3] = 'G'
+   (unsigned char) [4] = '\0'
+   ...
+   }
+   (SInt16) depth = 32
+   (SInt16) clutID = -1
+   }
+   */
+  
+  // Add 1 media sample (image)
+  
+  if (TRUE) {
+    NSString *inFilename = @"Colorbands_sRGB.png";
+    CGImageRef cgImage = createImageFromFile(inFilename);
+    assert(cgImage);
+    
+    // Render into sRGB (no colorspace conversion)
+    CGColorSpaceRef colorSpace = CGImageGetColorSpace(cgImage);
+    conversionFramebuffer.colorspace = colorSpace;
+    CGColorSpaceRelease(colorSpace);
+    
+    [conversionFramebuffer renderCGImage:cgImage];
+    CGImageRelease(cgImage);
+    
+    // Image data has now been rendered into buffer of pixels
+    
+    void *pixels = (void*)conversionFramebuffer.pixels;
+    int pixelsOffset = 0;
+        
+    osError = AddMediaSample(qtMedia,
+                             (Handle) &pixels,
+                             pixelsOffset,
+                             pixelsNumBytes,
+                             (TimeValue)timeValue, // durationPerSample
+                             (SampleDescriptionHandle) desc, // sample description
+                             1, // numberOfSamples
+                             0,
+                             (TimeValue*)NULL);
+
+    if (osError) {
+      fprintf(stderr, "Insert Quicktime media segment error %d\n", osError);
+      exit(1);
+    }
+  }
+  
+  EndMediaEdits(qtMedia);
+  
+  DisposeHandle((Handle)desc);
+
+  TimeScale mediaDuration = GetMediaDuration(qtMedia);
+  osError = InsertMediaIntoTrack(qtTrack, (TimeValue)0, (TimeValue)0, mediaDuration, (Fixed)1.0);
+  if (osError) {
+    fprintf(stderr, "Insert Quicktime media track error %d\n", osError);
+    exit(1);
+  }
+
+  /*
+  
+  // Add frames to track
   
   NSString *codec;
   
@@ -1344,6 +1517,8 @@ void convertMvidToMov(
     [pool drain];
   }
   
+  */
+
   [outMovie updateMovieFile];
   
   // Deallocate movie
