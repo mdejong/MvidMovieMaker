@@ -1292,6 +1292,8 @@ void convertMvidToMov(
       
       // http://bitfilms.blogspot.com/2011/08/final-cut-exports-look-different-from.html (read about nclc atom)
       
+      // http://developer.apple.com/library/mac/#technotes/tn2227/_index.html
+      
       // Convert frame pixel from sRGB (gamma 2.2) to device colorspace (gamma 1.8) so that the RGB values
       // and in a format expected by Quicktime. The Quicktime support for colorspace is spotty
       // so we need to avoid sending sRGB data otherwise the gamma will be wrong.
