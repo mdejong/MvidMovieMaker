@@ -1283,10 +1283,8 @@ void convertMvidToMov(
   
   int pixelsNumBytes = width * height * (qtBPP / 8); // FIXME: is 24BPP still using 32bpp pixels?
   
-  unsigned long cType = kRawCodecType;
-  
   (**desc).idSize = sizeof(ImageDescription);
-  (**desc).cType = cType;
+  (**desc).cType = kRawCodecType;
   (**desc).vendor = kAppleManufacturer;  
   (**desc).version = 0;
   (**desc).spatialQuality = codecLosslessQuality;
