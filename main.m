@@ -1270,22 +1270,35 @@ void convertMvidToMov(
 
   BeginMediaEdits(qtMedia);
 
-  CGFrameBuffer *conversionFramebuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
+  //CGFrameBuffer *conversionFramebuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
   
   ImageDescriptionHandle desc = (ImageDescriptionHandle)NewHandleClear(sizeof(ImageDescription));
   
-  // kRawCodecType
+  // In the case of 24BPP, the image buffer is at 32BPP with a constant alpha, but the Quicktime image logic
+  // expects pixels to be 24BPP with no alpha information.
+
+  uint32_t qtBPP;
+  void *outputBuffer = NULL;
+  uint32_t outputBufferSize = 0;
   
-  int qtBPP = 32;
-  if (bpp == 24) {
+  if (bpp == 32) {
     qtBPP = 32;
+  } else if (bpp == 24) {
+    qtBPP = 24;
+    outputBufferSize = width * height * 3; // sizeof 24BPP pixel
+    outputBuffer = malloc(outputBufferSize);
+  } else if (bpp == 16) {
+    qtBPP = 16;
+    assert(0);
+  } else {
+    assert(0);    
   }
   
-  int pixelsNumBytes = width * height * (qtBPP / 8); // FIXME: is 24BPP still using 32bpp pixels?
+  int pixelsNumBytes = width * height * (qtBPP / 8);
   
   (**desc).idSize = sizeof(ImageDescription);
   (**desc).cType = kRawCodecType;
-  (**desc).vendor = kAppleManufacturer;  
+  (**desc).vendor = kAppleManufacturer;
   (**desc).version = 0;
   (**desc).spatialQuality = codecLosslessQuality;
   (**desc).width = width;
@@ -1365,7 +1378,77 @@ void convertMvidToMov(
    }
    */
   
+  // Add media samples, 1 sample for each frame image
+  
+  for (int frame = 0; frame < numFrames; frame++)
+  {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frameObj = [frameDecoder advanceToFrame:frame];
+    assert(frameObj);
+    frameObj.image = nil;
+
+    CGFrameBuffer *frameBuffer = frameObj.cgFrameBuffer;
+    assert(frameBuffer);
+    
+    // Image data has now been rendered into buffer of pixels
+    
+    void *pixels = (void*)frameBuffer.pixels;
+    int pixelsOffset = 0;
+    int pixelsNumBytesOutput;
+    Handle pixlesHandle;
+    
+    if (bpp == 24) {
+      // Copy 24BPP pixels to output buffer
+      
+      NSUInteger numPixels = width * height;
+      uint32_t *inPixels = (uint32_t*)pixels;
+      uint8_t *outPixels = (uint8_t*)outputBuffer;
+      
+      for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+        uint32_t pixel = inPixels[pixeli];
+        
+        uint8_t alpha = (pixel >> 24) & 0xFF;
+        assert(alpha == 0xFF);
+        uint8_t red = (pixel >> 16) & 0xFF;
+        uint8_t green = (pixel >> 8) & 0xFF;
+        uint8_t blue = (pixel >> 0) & 0xFF;
+        
+        *outPixels++ = red;
+        *outPixels++ = green;
+        *outPixels++ = blue;
+      }
+      
+      pixelsNumBytesOutput = outputBufferSize;
+      pixlesHandle = (Handle) &outputBuffer;
+    } else {
+      pixlesHandle = (Handle) &pixels;
+      pixelsNumBytesOutput = pixelsNumBytes;
+    }
+    
+    osError = AddMediaSample(qtMedia,
+                             pixlesHandle,
+                             pixelsOffset,
+                             pixelsNumBytesOutput,
+                             (TimeValue)timeValue, // durationPerSample
+                             (SampleDescriptionHandle) desc, // sample description
+                             1, // numberOfSamples
+                             0,
+                             (TimeValue*)NULL);
+    
+    if (osError) {
+      fprintf(stderr, "Insert Quicktime media segment error %d\n", osError);
+      exit(1);
+    }
+    
+    [pool drain];
+  }
+
+   // ------------------------------------------------------
+  
   // Add 1 media sample (image)
+  
+  /*
   
   if (TRUE) {
     NSString *inFilename = @"Colorbands_sRGB.png";
@@ -1384,11 +1467,23 @@ void convertMvidToMov(
     
     void *pixels = (void*)conversionFramebuffer.pixels;
     int pixelsOffset = 0;
+    int pixelsNumBytesOutput;
+    Handle pixlesHandle;
+    
+    if (bpp == 24) {
+      // FIXME: Copy 24BPP pixels to output buffer
+      
+      pixelsNumBytesOutput = outputBufferSize;
+      pixlesHandle = (Handle) &outputBuffer;
+    } else {
+      pixlesHandle = (Handle) &pixels;
+      pixelsNumBytesOutput = pixelsNumBytes;
+    }
         
     osError = AddMediaSample(qtMedia,
-                             (Handle) &pixels,
+                             pixlesHandle,
                              pixelsOffset,
-                             pixelsNumBytes,
+                             pixelsNumBytesOutput,
                              (TimeValue)timeValue, // durationPerSample
                              (SampleDescriptionHandle) desc, // sample description
                              1, // numberOfSamples
@@ -1400,10 +1495,16 @@ void convertMvidToMov(
       exit(1);
     }
   }
+   
+  */
   
   EndMediaEdits(qtMedia);
   
   DisposeHandle((Handle)desc);
+  
+  if (outputBuffer) {
+    free(outputBuffer);
+  }
 
   TimeScale mediaDuration = GetMediaDuration(qtMedia);
   osError = InsertMediaIntoTrack(qtTrack, (TimeValue)0, (TimeValue)0, mediaDuration, (Fixed)1.0);
@@ -1519,11 +1620,101 @@ void convertMvidToMov(
 
   [outMovie updateMovieFile];
   
+  // Export the completed movie and convert to using the Animation codec
+  
+  fprintf(stdout, "wrote %s\n", [movFilename UTF8String]);
+
+  // kPNGCodecType
+  // kH264CodecType
+  // kAnimationCodecType
+  
+  if (FALSE) {
+    //NSData *exportSettings = nil;
+    NSNumber *exportType = [NSNumber numberWithLong:kAnimationCodecType];
+    NSNumber *manufacturer = [NSNumber numberWithLong:kAppleManufacturer];
+    
+    NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
+                           [NSNumber numberWithBool:YES], QTMovieExport,
+                           exportType, QTMovieExportType,
+                           manufacturer, QTMovieExportManufacturer,
+                           //exportSettings, QTMovieExportSettings,
+                           nil];
+    
+    NSString *exportFilename = @"Out_Ani.mov";
+    
+    NSError *error = NULL;
+    
+    if (fileExists(exportFilename) == TRUE) {
+      fprintf(stderr, "export file exists : %s\n", [exportFilename UTF8String]);
+    }
+    
+    BOOL worked = [outMovie writeToFile:exportFilename withAttributes:attrs error:&error];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "failed to export to Animation codec %s", [exportFilename UTF8String]);
+      exit(1);
+    }
+    
+    fprintf(stdout, "exported %s\n", [exportFilename UTF8String]);
+  }
+  
+  if (FALSE) {
+    // Attempt to open a new movie ref to the finished .mov file (does not fix export)
+    
+    NSError *error = NULL;
+    QTMovie *inputMovie;
+    
+    inputMovie = [[[QTMovie alloc] initWithFile:movFilename error:&error] autorelease];
+    
+    //NSData *exportSettings = nil;
+    NSNumber *exportType = [NSNumber numberWithLong:kAnimationCodecType];
+    NSNumber *manufacturer = [NSNumber numberWithLong:kAppleManufacturer];
+    
+    NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
+                           [NSNumber numberWithBool:YES], QTMovieExport,
+                           exportType, QTMovieExportType,
+                           manufacturer, QTMovieExportManufacturer,
+                           //exportSettings, QTMovieExportSettings,
+                           [NSNumber numberWithLong:codecMaxQuality], QTAddImageCodecQuality,
+                           nil];
+    
+    NSString *exportFilename = @"Out_Ani.mov";
+    
+    if (fileExists(exportFilename) == TRUE) {
+      fprintf(stderr, "export file exists : %s\n", [exportFilename UTF8String]);
+    }
+    
+    BOOL worked = [inputMovie writeToFile:exportFilename withAttributes:attrs error:&error];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "failed to export to Animation codec %s", [exportFilename UTF8String]);
+      exit(1);
+    }
+    
+    fprintf(stdout, "exported %s\n", [exportFilename UTF8String]);
+  }
+  
+  /*
+   - (BOOL)writeMovie:(QTMovie )movie
+   toFile:(NSString )file
+   withComponent:(NSDictionary )component
+   withExportSettings:(NSData )exportSettings {
+   
+   NSDictionary attributes = [[[NSDictionary]] dictionaryWithObjectsAndKeys:
+   [[[NSNumber]] numberWithBool:YES], QTMovieExport,
+   [component objectForKey:@"subtype"], QTMovieExportType,
+   [component objectForKey:@"manufacturer"], QTMovieExportManufacturer,
+   exportSettings, QTMovieExportSettings,
+   // do not set the QTMovieFlatten flag! (causes export settings to be ignored) nil];
+   
+   BOOL result = [movie writeToFile:file withAttributes:attributes]; if(!result) { NSLog(@"Couldn't write movie to file"); return NO; }
+   
+   return YES; }
+   */
+  
   // Deallocate movie
   
   [outMovie release];
-  
-  fprintf(stdout, "wrote %s", [movFilename UTF8String]);
   
   return;
 }
