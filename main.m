@@ -1624,6 +1624,278 @@ void convertMvidToMov(
   
   fprintf(stdout, "wrote %s\n", [movFilename UTF8String]);
 
+  // Grab availableComponents
+  
+  NSMutableArray *availableComponents = nil;
+  
+  if (FALSE)
+  {
+    // Print availableComponents
+    
+    availableComponents = [NSMutableArray array];
+    
+    ComponentDescription cd;
+    Component c = NULL;
+    
+    cd.componentType = MovieExportType;
+    cd.componentSubType = 0;
+    cd.componentManufacturer = 0;
+    cd.componentFlags = canMovieExportFiles;
+    cd.componentFlagsMask = canMovieExportFiles;
+    
+    while((c = FindNextComponent(c, &cd)))
+    {
+      Handle name = NewHandle(4);
+      ComponentDescription exportCD;
+      
+      if (GetComponentInfo(c, &exportCD, name, nil, nil) == noErr)
+      {
+        unsigned char *namePStr = *name;
+        NSString *nameStr = [[NSString alloc] initWithBytes:&namePStr[1]
+                                                     length:namePStr[0]
+                                                   encoding:NSUTF8StringEncoding];
+        
+        NSDictionary *dictionary = [NSDictionary dictionaryWithObjectsAndKeys:
+                                   nameStr, @"name",
+                                   [NSData dataWithBytes:&c length:sizeof(c)], @"component",
+                                   [NSNumber numberWithLong:exportCD.componentType], @"type",
+                                   [NSNumber numberWithLong:exportCD.componentSubType], @"subtype",
+                                   [NSNumber numberWithLong:exportCD.componentManufacturer], @"manufacturer", nil];
+        
+        [availableComponents addObject:dictionary];
+        [nameStr release];
+      }
+      
+      DisposeHandle(name);
+    }
+    
+    NSLog(@"availableComponents : %@", availableComponents);
+  }
+  
+  /*
+   From Above:
+   
+   {
+   component = <06010100>;
+   manufacturer = 1634758764;
+   name = "QuickTime Movie";
+   subtype = 1299148630;
+   type = 1936746868;
+   },
+
+   */
+  
+  NSDictionary *movComponent = [availableComponents objectAtIndex:9];
+
+  if (FALSE)
+  {
+    // Get export settings for a specific component
+    
+    NSData *exportSettings = nil;
+    
+    Component c = NULL;    
+    memcpy(&c, [[movComponent objectForKey:@"component"] bytes], sizeof(c));
+      
+    MovieExportComponent exporter = OpenComponent(c);
+    Boolean canceled;
+    ComponentResult err = MovieExportDoUserDialog(exporter, NULL, NULL, 0, 0, &canceled);
+    if(err) {
+      NSLog(@"Got error %d when calling MovieExportDoUserDialog", (int)err);
+      CloseComponent(exporter);
+      //return nil;
+      assert(0);
+    }
+    if(canceled) {
+      CloseComponent(exporter);
+      //return nil;
+      assert(0);
+    }
+    QTAtomContainer settings; err = MovieExportGetSettingsAsAtomContainer(exporter, &settings);
+    if(err) {
+      NSLog(@"Got error %d when calling MovieExportGetSettingsAsAtomContainer",(int)err);
+      CloseComponent(exporter);
+      //return nil;
+      assert(0);
+    }
+    
+    NSData *data = [NSData dataWithBytes:settings length:GetHandleSize(settings)];
+    DisposeHandle(settings);
+      
+    CloseComponent(exporter);
+      
+    //return data;
+  }
+
+  if (FALSE) {
+    NSError *error = NULL;
+    
+    QTMovie *compressedMovie = [[QTMovie alloc] initToWritableFile:@"OutWritable.mov" error:&error];
+    
+    QTTimeRange timeRange = QTMakeTimeRange(QTZeroTime, [outMovie duration]);
+    QTTime insertionTime = QTMakeTime(0, timeScale);
+    [compressedMovie insertSegmentOfMovie:outMovie timeRange:timeRange atTime:insertionTime];
+
+    NSDictionary *writeAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                                     [NSNumber numberWithBool:YES], QTMovieFlatten,
+                                     nil];
+    
+    NSString *exportFilename = @"Out_Ani.mov";
+    
+    BOOL worked = [compressedMovie writeToFile:exportFilename withAttributes:writeAttributes error:&error];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "failed to export to Animation codec %s", [@"OutWritable.mov" UTF8String]);
+      
+      exit(1);
+    }
+  }
+  
+  // Perhaps whole movie can be included by ref, then flattened on export?
+  
+  if (FALSE) {
+    // Still does not work
+    
+    NSData *exportSettings = nil;
+    
+    exportSettings = [NSData dataWithContentsOfFile:@"/Users/mo/Ani24BPP.data"];
+    assert(exportSettings);
+    
+    NSNumber *exportType = [NSNumber numberWithLong:kQTFileTypeMovie];
+    NSNumber *manufacturer = [NSNumber numberWithLong:MovieMediaType];
+    
+    // kQTFileTypeMovie = 1299148630
+    // MovieMediaType   = 1836019574
+    // AliasDataHandlerSubType = 1634494835
+    
+    // subtype = 1299148630; -> kQTFileTypeMovie
+    // type = 1936746868;
+     // What is 1634758764 ?
+    // VideoMediaType ?
+    
+    NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
+                           [NSNumber numberWithBool:YES], QTMovieExport,
+                           exportType, QTMovieExportType,
+                           manufacturer, QTMovieExportManufacturer,
+                           exportSettings, QTMovieExportSettings,
+                           nil];
+        
+    NSString *exportFilename = @"Out_Ani.mov";
+    
+    NSError *error = NULL;
+    
+    if (fileExists(exportFilename) == TRUE) {
+      fprintf(stderr, "export file exists : %s\n", [exportFilename UTF8String]);
+    }
+    
+    BOOL worked = [outMovie writeToFile:exportFilename withAttributes:attrs error:&error];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "failed to export to Animation codec %s", [exportFilename UTF8String]);
+      
+      exit(1);
+    }
+    
+    fprintf(stdout, "exported %s\n", [exportFilename UTF8String]);
+  }
+
+  if (FALSE) {
+    // Does not change the encoding type (still None)
+    
+    NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
+                           @"jpeg", QTAddImageCodecType,
+                           [NSNumber numberWithInt: codecNormalQuality], QTAddImageCodecQuality,
+                           nil];
+    
+    NSString *exportFilename = @"Out_Ani.mov";
+    
+    NSError *error = NULL;
+    
+    if (fileExists(exportFilename) == TRUE) {
+      fprintf(stderr, "export file exists : %s\n", [exportFilename UTF8String]);
+    }
+    
+    BOOL worked = [outMovie writeToFile:exportFilename withAttributes:attrs error:&error];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "failed to export to Animation codec %s", [exportFilename UTF8String]);
+      exit(1);
+    }
+    
+    fprintf(stdout, "exported %s\n", [exportFilename UTF8String]);
+  }
+  
+  if (FALSE) {
+    // Does not work
+    
+    NSData *exportSettings = nil;
+    
+    exportSettings = [NSData dataWithContentsOfFile:@"/Users/mo/Ani24BPP.data"];
+    assert(exportSettings);
+    
+    //NSNumber *exportType = [NSNumber numberWithLong:kAnimationCodecType];
+    //NSNumber *manufacturer = [NSNumber numberWithLong:kAppleManufacturer];
+    
+    NSNumber *exportType = [NSNumber numberWithLong:1299148630]; // Quicktime Movie ( )
+    NSNumber *manufacturer = [NSNumber numberWithLong:1634758764]; // Apple ( )
+    
+    NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
+                           [NSNumber numberWithBool:YES], QTMovieExport,
+                           exportType, QTMovieExportType,
+                           manufacturer, QTMovieExportManufacturer,
+                           exportSettings, QTMovieExportSettings,
+                           nil];
+    
+    NSString *exportFilename = @"Out_Ani.mov";
+    
+    NSError *error = NULL;
+    
+    if (fileExists(exportFilename) == TRUE) {
+      fprintf(stderr, "export file exists : %s\n", [exportFilename UTF8String]);
+    }
+    
+    BOOL worked = [outMovie writeToFile:exportFilename withAttributes:attrs error:&error];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "failed to export to Animation codec %s", [exportFilename UTF8String]);
+      exit(1);
+    }
+    
+    fprintf(stdout, "exported %s\n", [exportFilename UTF8String]);
+  }
+  
+  // Export with just the "rle" type (does not work)
+  
+  if (FALSE) {
+    //NSData *exportSettings = nil;
+    NSNumber *exportType = [NSNumber numberWithLong:kAnimationCodecType];
+    NSNumber *manufacturer = [NSNumber numberWithLong:kAppleManufacturer];
+    
+    NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
+                           [NSNumber numberWithBool:YES], QTMovieExport,
+                           exportType, QTMovieExportType,
+                           manufacturer, QTMovieExportManufacturer,
+                           //exportSettings, QTMovieExportSettings,
+                           nil];
+    
+    NSString *exportFilename = @"Out_Ani.mov";
+    
+    NSError *error = NULL;
+    
+    if (fileExists(exportFilename) == TRUE) {
+      fprintf(stderr, "export file exists : %s\n", [exportFilename UTF8String]);
+    }
+    
+    BOOL worked = [outMovie writeToFile:exportFilename withAttributes:attrs error:&error];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "failed to export to Animation codec %s", [exportFilename UTF8String]);
+      exit(1);
+    }
+    
+    fprintf(stdout, "exported %s\n", [exportFilename UTF8String]);
+  }
+  
+  
   // kPNGCodecType
   // kH264CodecType
   // kAnimationCodecType
