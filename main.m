@@ -1310,6 +1310,47 @@ void convertMvidToMov(
   (**desc).dataSize = pixelsNumBytes;
   (**desc).clutID = -1;
   
+  // additional properties
+  
+  OSStatus status;
+  
+  // Add 'gama' 2.2 atom to make sure to avoid gamma shift when reading this MOV
+  
+  Fixed gammav = kQTCCIR601VideoGammaLevel;
+  status = ICMImageDescriptionSetProperty(desc,
+                                 kQTPropertyClass_ImageDescription,
+                                 kICMImageDescriptionPropertyID_GammaLevel,
+                                 sizeof(Fixed),
+                                 &gammav);
+  
+  if (status) {
+    fprintf(stderr, "Count not set gamma property for MOV : %d\n", (int)status);
+    exit(1);
+  }
+
+  // Embed sRGB color profile
+  
+  CGColorSpaceRef srgbColorspace;
+  srgbColorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  assert(srgbColorspace);
+  
+	CFDataRef srgbColorspaceICC = CGColorSpaceCopyICCProfile(srgbColorspace);
+  assert(srgbColorspaceICC);
+	
+	status = ICMImageDescriptionSetProperty(desc,
+                                 kQTPropertyClass_ImageDescription,
+                                 kICMImageDescriptionPropertyID_ICCProfile,
+                                 sizeof(CFDataRef),
+                                 &srgbColorspaceICC);
+	CFRelease(srgbColorspaceICC);
+  
+  CGColorSpaceRelease(srgbColorspace);
+  
+  if (status) {
+    fprintf(stderr, "Count not set colorspace property for MOV : %d\n", (int)status);
+    exit(1);
+  }
+  
   /*
    
    (lldb) p *(*desc)
