@@ -18,6 +18,10 @@ NSString *movie_prefix;
 
 CGFrameBuffer *prevFrameBuffer = nil;
 
+Media writingMovMedia = NULL;
+BOOL initImageDescription = FALSE;
+int imageDescriptionBPP = 0;
+
 // Define this symbol to create a -test option that can be run from the command line.
 #define TESTMODE
 
@@ -1179,6 +1183,174 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   [frameDecoder close];
 }
 
+// callback to write frames to movie
+
+static OSStatus
+writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
+                         ICMCompressionSessionRef session,
+                         OSStatus err,
+                         ICMEncodedFrameRef encodedFrame,
+                         void *reserved )
+{
+	if (err) {
+		fprintf( stderr, "writeEncodedFrameToMovie received an error (%d)\n", (int)err );
+		goto bail;
+	}
+
+  ImageDescriptionHandle imageDesc = NULL;
+  
+  // Note that frame description is the same as the session description
+  
+  err = ICMEncodedFrameGetImageDescription(encodedFrame, &imageDesc);
+  if (err) {
+    fprintf( stderr, "ICMEncodedFrameGetImageDescription() failed (%d)\n", (int)err );
+    goto bail;
+  }
+  
+  assert((**imageDesc).depth == imageDescriptionBPP);
+  assert((**imageDesc).spatialQuality == codecMaxQuality);
+  
+  if (initImageDescription == FALSE)
+  {
+    initImageDescription = TRUE;
+    
+    // Add 'gama' 2.2 atom to make sure to avoid gamma shift when reading this MOV
+    
+    Fixed gammav = kQTCCIR601VideoGammaLevel;
+    err = ICMImageDescriptionSetProperty(imageDesc,
+                                            kQTPropertyClass_ImageDescription,
+                                            kICMImageDescriptionPropertyID_GammaLevel,
+                                            sizeof(Fixed),
+                                            &gammav);
+    
+    if (err) {
+      fprintf(stderr, "Count not set gamma property for MOV : %d\n", (int)err);
+      goto bail;
+    }
+    
+    // Embed sRGB color profile
+    
+    CGColorSpaceRef srgbColorspace;
+    srgbColorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    assert(srgbColorspace);
+    
+    CFDataRef srgbColorspaceICC = CGColorSpaceCopyICCProfile(srgbColorspace);
+    assert(srgbColorspaceICC);
+    
+    err = ICMImageDescriptionSetProperty(imageDesc,
+                                            kQTPropertyClass_ImageDescription,
+                                            kICMImageDescriptionPropertyID_ICCProfile,
+                                            sizeof(CFDataRef),
+                                            &srgbColorspaceICC);
+    CFRelease(srgbColorspaceICC);
+    
+    CGColorSpaceRelease(srgbColorspace);
+    
+    if (err) {
+      fprintf(stderr, "Count not set colorspace property for MOV : %d\n", (int)err);
+      goto bail;
+    }  
+  }
+  
+  /*
+   (**desc).idSize = sizeof(ImageDescription);
+   (**desc).cType = kAnimationCodecType;
+   (**desc).vendor = kAppleManufacturer;
+   (**desc).version = 0;
+   (**desc).spatialQuality = codecLosslessQuality;
+   (**desc).width = width;
+   (**desc).height = height;
+   (**desc).hRes = 72 << 16; // 72 DPI as a fixed-point number
+   (**desc).vRes = 72 << 16; // 72 DPI as a fixed-point number
+   (**desc).frameCount = 1;
+   (**desc).depth = qtBPP;
+   (**desc).dataSize = pixelsNumBytes;
+   (**desc).clutID = -1;
+   */
+  
+  /*
+   // additional properties
+   
+   
+   
+  */
+  
+  /*
+   MungDataPtr pMungData = encodedFrameOutputRefCon;
+
+   TimeValue64 decodeDuration;
+   
+   if( err ) {
+   fprintf( stderr, "writeEncodedFrameToMovie received an error (%d)\n", err );
+   goto bail;
+   }
+   
+   err = ICMEncodedFrameGetImageDescription( encodedFrame, &imageDesc );
+   if( err ) {
+   fprintf( stderr, "ICMEncodedFrameGetImageDescription() failed (%d)\n", err );
+   goto bail;
+   }
+   
+   if( ! pMungData->outputVideoMedia ) {
+   err = createVideoMedia( pMungData, imageDesc, ICMEncodedFrameGetTimeScale( encodedFrame ) );
+   if( err )
+   goto bail;
+   }
+   
+   decodeDuration = ICMEncodedFrameGetDecodeDuration( encodedFrame );
+   if( decodeDuration == 0 ) {
+   // You can't add zero-duration samples to a media.  If you try you'll just get invalidDuration back.
+   // Because we don't tell the ICM what the source frame durations are,
+   // the ICM calculates frame durations using the gaps between timestamps.
+   // It can't do that for the final frame because it doesn't know the "next timestamp"
+   // (because in this example we don't pass a "final timestamp" to ICMCompressionSessionCompleteFrames).
+   // So we'll give the final frame our minimum frame duration.
+   decodeDuration = pMungData->minimumFrameDuration * ICMEncodedFrameGetTimeScale( encodedFrame ) / pMungData->timeScale;
+   }
+   
+   if( pMungData->verbose ) {
+   printf( "adding %ld byte sample: decode duration %ld, display offset %ld, flags %#lx",
+   (long)ICMEncodedFrameGetDataSize( encodedFrame ),
+   (long)decodeDuration,
+   (long)ICMEncodedFrameGetDisplayOffset( encodedFrame ),
+   (long)ICMEncodedFrameGetMediaSampleFlags( encodedFrame ) );
+   if( true ) {
+   ICMValidTimeFlags validTimeFlags = ICMEncodedFrameGetValidTimeFlags( encodedFrame );
+   if( kICMValidTime_DecodeTimeStampIsValid & validTimeFlags )
+   printf( ", decode time stamp %ld", (long)ICMEncodedFrameGetDecodeTimeStamp( encodedFrame ) );
+   if( kICMValidTime_DisplayTimeStampIsValid & validTimeFlags )
+   printf( ", display time stamp %ld", (long)ICMEncodedFrameGetDisplayTimeStamp( encodedFrame ) );
+   }
+   printf( "\n" );
+   }
+   
+   err = AddMediaSample2(
+   pMungData->outputVideoMedia,
+   ICMEncodedFrameGetDataPtr( encodedFrame ),
+   ICMEncodedFrameGetDataSize( encodedFrame ),
+   decodeDuration,
+   ICMEncodedFrameGetDisplayOffset( encodedFrame ),
+   (SampleDescriptionHandle)imageDesc,
+   1,
+   ICMEncodedFrameGetMediaSampleFlags( encodedFrame ),
+   NULL );
+   if( err ) {
+   fprintf( stderr, "AddMediaSample2() failed (%d)\n", err );
+   goto bail;
+   }
+   */
+  
+  assert(writingMovMedia);
+	err = AddMediaSampleFromEncodedFrame(writingMovMedia, encodedFrame, NULL);
+	if( err ) {
+    fprintf( stderr, "AddMediaSampleFromEncodedFrame() failed (%d)\n", (int)err );
+    goto bail;
+  }
+	
+bail:
+	return err;
+}
+
 // convertMvidToMov
 //
 // This method will encode the contents of a .mvid file as a Quicktime .mov using
@@ -1267,37 +1439,157 @@ void convertMvidToMov(
   OSType dataRefType = 0;
   
   Media qtMedia = NewTrackMedia(qtTrack, mediaType, (TimeScale)timeScale, dataRef, dataRefType);
+  writingMovMedia = qtMedia;
 
   BeginMediaEdits(qtMedia);
-
-  //CGFrameBuffer *conversionFramebuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
   
-  ImageDescriptionHandle desc = (ImageDescriptionHandle)NewHandleClear(sizeof(ImageDescription));
+  // Image compression setup
+  
+	ICMCompressionSessionRef compressionSession;
+  {
+    OSStatus err = noErr;
+    ICMEncodedFrameOutputRecord encodedFrameOutputRecord = {0};
+    ICMCompressionSessionOptionsRef sessionOptions = NULL;
+
+    // Setup compression options
+    
+    err = ICMCompressionSessionOptionsCreate(NULL, &sessionOptions);
+    assert(err == 0);
+    
+    err = ICMCompressionSessionOptionsSetMaxKeyFrameInterval(sessionOptions, 30);
+    assert(err == 0);
+    
+    // Setup compression session
+    
+    CodecType					codecType;	// codec
+    
+    codecType = kAnimationCodecType;
+    
+    // Class identifier for compression session options object properties
+    // kICMCompressionSessionOptionsPropertyID_CompressorSettings (setting for compressor)
+    // kICMCompressionSessionOptionsPropertyID_Depth => 24 BPP
+    // kICMCompressionSessionOptionsPropertyID_Quality => "Best"
+    
+    // (**desc).spatialQuality = codecMaxQuality;
+    CodecQ quality = codecMaxQuality;
+    err = ICMCompressionSessionOptionsSetProperty(sessionOptions,
+                                                  kQTPropertyClass_ICMCompressionSessionOptions,
+                                                  kICMCompressionSessionOptionsPropertyID_Quality,
+                                                  sizeof(quality),
+                                                  &quality);
+    assert(err == 0);
+    
+    /*
+    // (**desc).depth = bpp;
+    SInt16 depth = bpp;
+    err = ICMCompressionSessionOptionsSetProperty(sessionOptions,
+                                                  kQTPropertyClass_ICMCompressionSessionOptions,
+                                                  kICMCompressionSessionOptionsPropertyID_Depth,
+                                                  sizeof(depth),
+                                                  &depth);
+    assert(err == 0);
+    */
+
+    // (**desc).depth = bpp;
+    UInt32 depth = k32ARGBPixelFormat;
+    if (bpp == 32) {
+      depth = k32BGRAPixelFormat;
+    } else if (bpp == 24) {
+      depth = k24RGBPixelFormat;
+    } else if (bpp == 16) {
+      depth = kCVPixelFormatType_16LE555;
+    } else {
+      assert(0);
+    }
+    err = ICMCompressionSessionOptionsSetProperty(sessionOptions,
+                                                  kQTPropertyClass_ICMCompressionSessionOptions,
+                                                  kICMCompressionSessionOptionsPropertyID_Depth,
+                                                  sizeof(depth),
+                                                  &depth);
+    assert(err == 0);
+    
+    ICMEncodedFrameOutputCallback outputCallback = writeEncodedFrameToMovie;
+    
+  	encodedFrameOutputRecord.encodedFrameOutputCallback = outputCallback;
+    encodedFrameOutputRecord.encodedFrameOutputRefCon = NULL; // void* to pass to func
+    encodedFrameOutputRecord.frameDataAllocator = NULL;
+    
+    err = ICMCompressionSessionCreate(NULL,
+                                      width, height,
+                                      codecType,
+                                      timeScale,
+                                      sessionOptions,
+                                      NULL, // sourcePixelBufferAttributes
+                                      &encodedFrameOutputRecord,
+                                      &compressionSession);
+    
+    assert(err == 0);
+    
+    ICMCompressionSessionOptionsRelease(sessionOptions);
+    assert(err == 0);
+  }
   
   // In the case of 24BPP, the image buffer is at 32BPP with a constant alpha, but the Quicktime image logic
   // expects pixels to be 24BPP with no alpha information.
 
   uint32_t qtBPP;
-  void *outputBuffer = NULL;
-  uint32_t outputBufferSize = 0;
+  OSType osType;
+  //void *outputBuffer = NULL;
+  //uint32_t outputBufferSize = 0;
   
   if (bpp == 32) {
     qtBPP = 32;
+    osType = kCVPixelFormatType_32BGRA;
   } else if (bpp == 24) {
     qtBPP = 24;
-    outputBufferSize = width * height * 3; // sizeof 24BPP pixel
-    outputBuffer = malloc(outputBufferSize);
+    osType = kCVPixelFormatType_24RGB;
   } else if (bpp == 16) {
     qtBPP = 16;
+    osType = kCVPixelFormatType_16LE555;
     assert(0);
   } else {
-    assert(0);    
+    assert(0);
   }
+  imageDescriptionBPP = qtBPP;
   
   int pixelsNumBytes = width * height * (qtBPP / 8);
   
+  // graphics buffer data is copied to when writing
+  
+  CVPixelBufferRef pixelBuffer = NULL;
+  NSDictionary *pixelBufferAttributes = nil;
+  
+  // FIXME: can colorspace be set via these pixel buffer attributes?
+  
+  CVReturn cvReturn;
+  cvReturn = CVPixelBufferCreate(NULL,
+                                 width,
+                                 height,
+                                 osType,
+                                 (CFDictionaryRef)pixelBufferAttributes,
+                                 &pixelBuffer);
+  assert(cvReturn == 0);
+
+  // image description indicates what compressed codec data will be written to the MOV file
+  
+  /*
+   OSStatus ICMImageDescriptionSetProperty (
+   ImageDescriptionHandle inDesc,
+   ComponentPropertyClass inPropClass,
+   ComponentPropertyID inPropID,
+   ByteCount inPropValueSize,
+   ConstComponentValuePtr inPropValueAddress
+   );
+   */
+  
+  //ImageDescriptionHandle desc;
+  
+  //osError = ICMCompressionSessionGetImageDescription(compressionSession, &desc);
+  //assert(osError == 0);
+
+  /*
   (**desc).idSize = sizeof(ImageDescription);
-  (**desc).cType = kRawCodecType;
+  (**desc).cType = kAnimationCodecType;
   (**desc).vendor = kAppleManufacturer;
   (**desc).version = 0;
   (**desc).spatialQuality = codecLosslessQuality;
@@ -1309,7 +1601,9 @@ void convertMvidToMov(
   (**desc).depth = qtBPP;
   (**desc).dataSize = pixelsNumBytes;
   (**desc).clutID = -1;
+  */
   
+  /*
   // additional properties
   
   OSStatus status;
@@ -1350,6 +1644,8 @@ void convertMvidToMov(
     fprintf(stderr, "Count not set colorspace property for MOV : %d\n", (int)status);
     exit(1);
   }
+   
+  */
   
   /*
    
@@ -1435,16 +1731,20 @@ void convertMvidToMov(
     // Image data has now been rendered into buffer of pixels
     
     void *pixels = (void*)frameBuffer.pixels;
-    int pixelsOffset = 0;
-    int pixelsNumBytesOutput;
-    Handle pixlesHandle;
     
-    if (bpp == 24) {
-      // Copy 24BPP pixels to output buffer
+    osError = CVPixelBufferLockBaseAddress(pixelBuffer, 0);
+    assert( osError == 0 );
+    void *baseAddr = CVPixelBufferGetBaseAddress(pixelBuffer);
+    
+    if ((bpp == 32) || (bpp == 16)) {
+      // BGRA to BGRA (premultiplied) otherwise rgb555
+      memcpy(baseAddr, pixels, pixelsNumBytes);
+    } else if (bpp == 24) {
+      // Copy 24BPP BGRA to RGB bytes
       
       NSUInteger numPixels = width * height;
       uint32_t *inPixels = (uint32_t*)pixels;
-      uint8_t *outPixels = (uint8_t*)outputBuffer;
+      uint8_t *outPixels = (uint8_t*)baseAddr;
       
       for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
         uint32_t pixel = inPixels[pixeli];
@@ -1459,13 +1759,24 @@ void convertMvidToMov(
         *outPixels++ = green;
         *outPixels++ = blue;
       }
-      
-      pixelsNumBytesOutput = outputBufferSize;
-      pixlesHandle = (Handle) &outputBuffer;
     } else {
-      pixlesHandle = (Handle) &pixels;
-      pixelsNumBytesOutput = pixelsNumBytes;
+      assert(0);
     }
+        
+    // encode specific frames
+    
+    osError = ICMCompressionSessionEncodeFrame(compressionSession,
+                                               pixelBuffer,
+                                               0, // timeStamp
+                                               frameDuration,
+                                               kICMValidTime_DisplayDurationIsValid,
+                                               NULL, NULL, NULL);
+    assert(osError == 0);
+    
+    osError = CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+    assert(osError == 0);
+
+    /*
     
     osError = AddMediaSample(qtMedia,
                              pixlesHandle,
@@ -1481,10 +1792,24 @@ void convertMvidToMov(
       fprintf(stderr, "Insert Quicktime media segment error %d\n", osError);
       exit(1);
     }
+     
+    */
     
     [pool drain];
   }
+  
+  // It is important to push out any remaining frames before we release the compression session.
+  // If we knew the timestamp following the last source frame, you should pass it in here.
+  
+  ICMCompressionSessionCompleteFrames(compressionSession, TRUE, 0, 0);
+  ICMCompressionSessionRelease(compressionSession);
 
+  CVPixelBufferRelease(pixelBuffer);
+  
+  writingMovMedia = NULL;
+  
+  // FIXME: can we query media handle here and add additional color parameters like sRGB and so on?
+  
    // ------------------------------------------------------
   
   // Add 1 media sample (image)
@@ -1541,12 +1866,6 @@ void convertMvidToMov(
   
   EndMediaEdits(qtMedia);
   
-  DisposeHandle((Handle)desc);
-  
-  if (outputBuffer) {
-    free(outputBuffer);
-  }
-
   TimeScale mediaDuration = GetMediaDuration(qtMedia);
   osError = InsertMediaIntoTrack(qtTrack, (TimeValue)0, (TimeValue)0, mediaDuration, (Fixed)1.0);
   if (osError) {

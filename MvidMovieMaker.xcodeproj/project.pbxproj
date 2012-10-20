@@ -20,6 +20,7 @@
 		CDD23BA715EFD3F80021D00C /* libz.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = CDD23BA615EFD3F80021D00C /* libz.dylib */; };
 		CDE6D04B15EE6E570084FFAA /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDE6D04A15EE6E570084FFAA /* Cocoa.framework */; };
 		CDE728261606305400B34FB6 /* QuickTime.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDE728251606305400B34FB6 /* QuickTime.framework */; };
+		CDFD9BCE1632733600906116 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDFD9BCD1632733600906116 /* CoreVideo.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -57,6 +58,7 @@
 		CDD41E7C15EDB1A6008B77A1 /* mvidmoviemaker */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = mvidmoviemaker; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDE6D04A15EE6E570084FFAA /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		CDE728251606305400B34FB6 /* QuickTime.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickTime.framework; path = System/Library/Frameworks/QuickTime.framework; sourceTree = SDKROOT; };
+		CDFD9BCD1632733600906116 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +66,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDFD9BCE1632733600906116 /* CoreVideo.framework in Frameworks */,
 				CDE728261606305400B34FB6 /* QuickTime.framework in Frameworks */,
 				CD96F739160604AD00316089 /* QTKit.framework in Frameworks */,
 				CDD23BA715EFD3F80021D00C /* libz.dylib in Frameworks */,
@@ -77,6 +80,7 @@
 		CDD23BA815EFD4060021D00C /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				CDFD9BCD1632733600906116 /* CoreVideo.framework */,
 				CDE728251606305400B34FB6 /* QuickTime.framework */,
 				CD96F738160604AD00316089 /* QTKit.framework */,
 				CDE6D04A15EE6E570084FFAA /* Cocoa.framework */,

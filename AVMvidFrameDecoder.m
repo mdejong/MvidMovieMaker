@@ -625,9 +625,19 @@
 #ifdef EXTRA_CHECKS
         // FIXME: use zero copy of pointer into mapped file, impl OS page copy in util class
         if (bpp == 16) {
-          NSAssert(inputBuffer32NumBytes == (frameBufferSize * sizeof(uint16_t)), @"framebuffer num bytes");
+          if ((inputBuffer32NumBytes == (frameBufferSize * sizeof(uint16_t))) ||
+              (inputBuffer32NumBytes == ((frameBufferSize+1) * sizeof(uint16_t)))) {
+            // No-op
+          } else {
+            NSAssert(FALSE, @"framebuffer num bytes");
+          }
         } else {
-          NSAssert(inputBuffer32NumBytes == (frameBufferSize * sizeof(uint32_t)), @"framebuffer num bytes");
+          if ((inputBuffer32NumBytes == (frameBufferSize * sizeof(uint32_t))) ||
+              (inputBuffer32NumBytes == ((frameBufferSize+1) * sizeof(uint32_t)))) {
+            // No-op
+          } else {
+            NSAssert(FALSE, @"framebuffer num bytes");
+          }
         }
         NSAssert(((uint32_t)inputBuffer32 % MV_PAGESIZE) == 0, @"framebuffer num bytes");
 #endif // EXTRA_CHECKS
