@@ -68,6 +68,8 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 @synthesize lockedByImageRef = m_lockedByImageRef;
 @synthesize colorspace = m_colorspace;
 
+@synthesize usesBigEndianData = m_usesBigEndianData;
+
 + (CGFrameBuffer*) cGFrameBufferWithBppDimensions:(NSInteger)bitsPerPixel
                                             width:(NSInteger)width
                                            height:(NSInteger)height
@@ -388,14 +390,29 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 {
 	CGBitmapInfo bitmapInfo = 0;
   if (self.bitsPerPixel == 16) {
-    bitmapInfo = kCGBitmapByteOrder16Host | kCGImageAlphaNoneSkipFirst;
+    bitmapInfo |= kCGImageAlphaNoneSkipFirst;
   } else if (self.bitsPerPixel == 24) {
-    bitmapInfo |= kCGBitmapByteOrder32Host | kCGImageAlphaNoneSkipFirst;
+    bitmapInfo |= kCGImageAlphaNoneSkipFirst;
   } else if (self.bitsPerPixel == 32) {
-    bitmapInfo |= kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst;
+    bitmapInfo |= kCGImageAlphaPremultipliedFirst;
   } else {
     assert(0);
   }
+
+  if (self.bitsPerPixel == 16) {
+    if (self.usesBigEndianData == TRUE) {
+      bitmapInfo |= kCGBitmapByteOrder16Big;
+    } else {
+      bitmapInfo |= kCGBitmapByteOrder16Host;
+    }
+  } else {
+    if (self.usesBigEndianData == TRUE) {
+      bitmapInfo |= kCGBitmapByteOrder32Big;
+    } else {
+      bitmapInfo |= kCGBitmapByteOrder32Host;
+    }
+  }
+  
 	return bitmapInfo;
 }
 

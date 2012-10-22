@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "All16BPP.mvid"
+            argument = "TestAlphaGradientFrames/TestAlphaGradient_exp.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "exp_All16BPP.mov"
+            argument = "TestAlphaGradientFrames/TestAlphaGradient_exp.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

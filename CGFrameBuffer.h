@@ -37,6 +37,7 @@
 	int32_t m_isLockedByDataProvider;
 	CGImageRef m_lockedByImageRef;
 	CGColorSpaceRef m_colorspace;
+  BOOL m_usesBigEndianData;
 }
 
 @property (readonly) char *pixels;
@@ -45,6 +46,7 @@
 @property (readonly) size_t height;
 @property (readonly) size_t bitsPerPixel;
 @property (readonly) size_t bytesPerPixel;
+@property (nonatomic, assign) BOOL usesBigEndianData;
 
 @property (nonatomic, assign) BOOL isLockedByDataProvider;
 @property (nonatomic, readonly) CGImageRef lockedByImageRef;

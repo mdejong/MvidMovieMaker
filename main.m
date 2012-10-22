@@ -1499,7 +1499,7 @@ void convertMvidToMov(
     // (**desc).depth = bpp;
     UInt32 depth;
     if (bpp == 32) {
-      depth = k32BGRAPixelFormat;
+      depth = k32ARGBPixelFormat;
     } else if (bpp == 24) {
       depth = k24RGBPixelFormat;
     } else if (bpp == 16) {
@@ -1535,36 +1535,36 @@ void convertMvidToMov(
     assert(err == 0);
   }
   
-  // In the case of 24BPP, the image buffer is at 32BPP with a constant alpha, but the Quicktime image logic
-  // expects pixels to be 24BPP with no alpha information.
+  // Note that these flags describe the format of the pixel buffer passed to the compression module.
+  // The compressed frames are able to write in a more space optimal format
+  // (for example 32 BPP can be written as 24 BPP since the alpha channel is known to be unused)
 
   uint32_t qtBPP;
   OSType osType;
   
   if (bpp == 32) {
     qtBPP = 32;
-    osType = kCVPixelFormatType_32BGRA;
+    osType = kCVPixelFormatType_32ARGB; // was kCVPixelFormatType_32BGRA
   } else if (bpp == 24) {
     qtBPP = 24;
-    osType = kCVPixelFormatType_24RGB;
+    osType = kCVPixelFormatType_32ARGB;
   } else if (bpp == 16) {
     qtBPP = 16;
-    // FIXME: LE or BE pixel format ? Does the compression module handle conversion?
-    //osType = kCVPixelFormatType_16LE555;
     osType = kCVPixelFormatType_16BE555;
   } else {
     assert(0);
   }
   imageDescriptionBPP = qtBPP;
   
-  int pixelsNumBytes = width * height * (qtBPP / 8);
-  
   // graphics buffer data is copied to when writing
   
   CVPixelBufferRef pixelBuffer = NULL;
   NSDictionary *pixelBufferAttributes = nil;
   
-  // FIXME: can colorspace be set via these pixel buffer attributes?
+  pixelBufferAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                     [NSNumber numberWithBool:YES], kCVPixelBufferCGImageCompatibilityKey,
+                     [NSNumber numberWithBool:YES], kCVPixelBufferCGBitmapContextCompatibilityKey,
+                     nil];
   
   CVReturn cvReturn;
   cvReturn = CVPixelBufferCreate(NULL,
@@ -1574,151 +1574,6 @@ void convertMvidToMov(
                                  (CFDictionaryRef)pixelBufferAttributes,
                                  &pixelBuffer);
   assert(cvReturn == 0);
-
-  // image description indicates what compressed codec data will be written to the MOV file
-  
-  /*
-   OSStatus ICMImageDescriptionSetProperty (
-   ImageDescriptionHandle inDesc,
-   ComponentPropertyClass inPropClass,
-   ComponentPropertyID inPropID,
-   ByteCount inPropValueSize,
-   ConstComponentValuePtr inPropValueAddress
-   );
-   */
-  
-  //ImageDescriptionHandle desc;
-  
-  //osError = ICMCompressionSessionGetImageDescription(compressionSession, &desc);
-  //assert(osError == 0);
-
-  /*
-  (**desc).idSize = sizeof(ImageDescription);
-  (**desc).cType = kAnimationCodecType;
-  (**desc).vendor = kAppleManufacturer;
-  (**desc).version = 0;
-  (**desc).spatialQuality = codecLosslessQuality;
-  (**desc).width = width;
-  (**desc).height = height;
-  (**desc).hRes = 72 << 16; // 72 DPI as a fixed-point number
-  (**desc).vRes = 72 << 16; // 72 DPI as a fixed-point number
-  (**desc).frameCount = 1;
-  (**desc).depth = qtBPP;
-  (**desc).dataSize = pixelsNumBytes;
-  (**desc).clutID = -1;
-  */
-  
-  /*
-  // additional properties
-  
-  OSStatus status;
-  
-  // Add 'gama' 2.2 atom to make sure to avoid gamma shift when reading this MOV
-  
-  Fixed gammav = kQTCCIR601VideoGammaLevel;
-  status = ICMImageDescriptionSetProperty(desc,
-                                 kQTPropertyClass_ImageDescription,
-                                 kICMImageDescriptionPropertyID_GammaLevel,
-                                 sizeof(Fixed),
-                                 &gammav);
-  
-  if (status) {
-    fprintf(stderr, "Count not set gamma property for MOV : %d\n", (int)status);
-    exit(1);
-  }
-
-  // Embed sRGB color profile
-  
-  CGColorSpaceRef srgbColorspace;
-  srgbColorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-  assert(srgbColorspace);
-  
-	CFDataRef srgbColorspaceICC = CGColorSpaceCopyICCProfile(srgbColorspace);
-  assert(srgbColorspaceICC);
-	
-	status = ICMImageDescriptionSetProperty(desc,
-                                 kQTPropertyClass_ImageDescription,
-                                 kICMImageDescriptionPropertyID_ICCProfile,
-                                 sizeof(CFDataRef),
-                                 &srgbColorspaceICC);
-	CFRelease(srgbColorspaceICC);
-  
-  CGColorSpaceRelease(srgbColorspace);
-  
-  if (status) {
-    fprintf(stderr, "Count not set colorspace property for MOV : %d\n", (int)status);
-    exit(1);
-  }
-   
-  */
-  
-  /*
-   
-   (lldb) p *(*desc)
-   (ImageDescription) $6 = {
-   (SInt32) idSize = 118
-   (CodecType) cType = 1111970369
-   (SInt32) resvd1 = 0
-   (SInt16) resvd2 = 0
-   (SInt16) dataRefIndex = 1
-   (SInt16) version = 0
-   (SInt16) revisionLevel = 0
-   (SInt32) vendor = 0
-   (CodecQ) temporalQuality = 0
-   (CodecQ) spatialQuality = 1024
-   (SInt16) width = 512
-   (SInt16) height = 512
-   (Fixed) hRes = 4718592
-   (Fixed) vRes = 4718592
-   (SInt32) dataSize = 0
-   (SInt16) frameCount = 0
-   (Str31) name = {
-   (unsigned char) [0] = '\0'
-   (unsigned char) [1] = '\0'
-   (unsigned char) [2] = '\0'
-   (unsigned char) [3] = '\0'
-   }
-   (SInt16) depth = 32
-   (SInt16) clutID = -1
-   }
-
-   */
-  
-  /*
-   PNG:
-   
-   kPNGCodecType = 'png '
-   
-   (lldb) p *((ImageDescriptionPtr)0x00442620)
-   (ImageDescription) $2 = {
-   (SInt32) idSize = 86
-   (CodecType) cType = 1886283552
-   (SInt32) resvd1 = 0
-   (SInt16) resvd2 = 0
-   (SInt16) dataRefIndex = 1
-   (SInt16) version = 1
-   (SInt16) revisionLevel = 1
-   (SInt32) vendor = 1634758764
-   (CodecQ) temporalQuality = 0
-   (CodecQ) spatialQuality = 512
-   (SInt16) width = 480
-   (SInt16) height = 320
-   (Fixed) hRes = 4718592
-   (Fixed) vRes = 4718592
-   (SInt32) dataSize = 0
-   (SInt16) frameCount = 1
-   (Str31) name = {
-   (unsigned char) [0] = '\x03'
-   (unsigned char) [1] = 'P'
-   (unsigned char) [2] = 'N'
-   (unsigned char) [3] = 'G'
-   (unsigned char) [4] = '\0'
-   ...
-   }
-   (SInt16) depth = 32
-   (SInt16) clutID = -1
-   }
-   */
   
   // Add media samples, 1 sample for each frame image
   
@@ -1732,6 +1587,19 @@ void convertMvidToMov(
 
     CGFrameBuffer *frameBuffer = frameObj.cgFrameBuffer;
     assert(frameBuffer);
+    
+    if (TRUE) {
+      // Dump the image data rendered into PNG format before converting
+      // to CVPixelBuffer
+      
+      NSString *dumpFilename = [NSString stringWithFormat:@"QTEncodeDumpPreCVFrame%0.4d.png", frame+1];
+      
+      NSData *pngData = [frameBuffer formatAsPNG];
+      
+      [pngData writeToFile:dumpFilename atomically:NO];
+      
+      NSLog(@"wrote %@", dumpFilename);
+    }
     
     // Image data has now been rendered into buffer of pixels
     
@@ -1759,17 +1627,9 @@ void convertMvidToMov(
         uint16_t pixel = inPixels[pixeli];
         
         if (pixeli == 1) {
-          assert(pixeli == 1);
+          assert(pixeli == 1); // useful when debugging
         }
-        
-        /*
-        uint8_t alpha = (pixel >> 15) & 0x1;
-        assert(alpha == 0x0);
-        uint8_t red = (pixel >> 10) & 0x1F;
-        uint8_t green = (pixel >> 5) & 0x1F;
-        uint8_t blue = (pixel >> 0) & 0x1F;
-        */
- 
+         
         // Write LE 16 bit value as BE 16 bit value
         
         // LE[0] = LOW
@@ -1781,43 +1641,63 @@ void convertMvidToMov(
         // BE[0] = HIGH
         // BE[1] = LOW
 
-        if (TRUE) {
-          // BE
-          *outPixels++ = b1;
-          *outPixels++ = b2;
-        } else {
-          // LE
-          *outPixels++ = b2;
-          *outPixels++ = b1;
-        }
-      }      
-    } else if (bpp == 24) {
-      // Copy 24BPP BGRA to RGB bytes
+        *outPixels++ = b1;
+        *outPixels++ = b2;
+      }
+    } else if ((bpp == 24) || (bpp == 32)) {
+      // In BGRA : Out ARGB
+      
+      // Either 24BPP BGRA or BGRX in LE format is written as BE
+      // Both pixel formats are premultiplied when 32BPP.
+      
+      //int pixelsNumBytes = width * height * sizeof(uint32_t);
+      //memcpy(baseAddr, pixels, pixelsNumBytes);
       
       NSUInteger numPixels = width * height;
       uint32_t *inPixels = (uint32_t*)pixels;
-      uint8_t *outPixels = (uint8_t*)baseAddr;
+      uint8_t  *outPixels = (uint8_t*)baseAddr;
       
       for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
         uint32_t pixel = inPixels[pixeli];
         
-        uint8_t alpha = (pixel >> 24) & 0xFF;
-        assert(alpha == 0xFF);
-        uint8_t red = (pixel >> 16) & 0xFF;
-        uint8_t green = (pixel >> 8) & 0xFF;
-        uint8_t blue = (pixel >> 0) & 0xFF;
+        if (pixeli == 1) {
+          assert(pixeli == 1); // useful when debugging
+        }
+
+        // Write each byte of LE 32BPP pixel as BE 32BPP
         
-        *outPixels++ = red;
-        *outPixels++ = green;
-        *outPixels++ = blue;
+        for (int byteIndex = 3; byteIndex >= 0; byteIndex--) {
+          uint8_t b = (pixel >> (8 * byteIndex)) & 0xFF;
+          *outPixels++ = b;
+        }
       }
-    } else if (bpp == 32) {
-      // BGRA to BGRA (both are premultiplied)
-      memcpy(baseAddr, pixels, pixelsNumBytes);
+
     } else {
       assert(0);
     }
+    
+    // Once the CVPixelBuffer has been filled in, render it as a CIImage so that
+    // the resulting pixels can be written as a PNG
+    
+    if (TRUE) {
+      CGFrameBuffer *beFramebuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
+      beFramebuffer.usesBigEndianData = TRUE;
+      beFramebuffer.colorspace = frameBuffer.colorspace;
+      
+      int pixelsNumBytes = width * height * beFramebuffer.bytesPerPixel;
+      memcpy(beFramebuffer.pixels, baseAddr, pixelsNumBytes);
+      
+      // Dump image data rendered as Big Endian data into a PNG
         
+      NSString *dumpFilename = [NSString stringWithFormat:@"QTEncodeDumpPostCVFrame%0.4d.png", frame+1];
+      
+      NSData *pngData = [beFramebuffer formatAsPNG];
+      
+      [pngData writeToFile:dumpFilename atomically:NO];
+      
+      NSLog(@"wrote %@", dumpFilename);
+    }
+    
     // encode specific frames
     
     osError = ICMCompressionSessionEncodeFrame(compressionSession,
