@@ -1275,6 +1275,23 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
    
   */
   
+  // Check frame duration
+  
+  TimeValue64 decodeDuration;
+  decodeDuration = ICMEncodedFrameGetDecodeDuration(encodedFrame);
+  assert(decodeDuration >= 1);
+  /*
+  if (decodeDuration == 0) {
+    // You can't add zero-duration samples to a media.  If you try you'll just get invalidDuration back.
+    // Because we don't tell the ICM what the source frame durations are,
+    // the ICM calculates frame durations using the gaps between timestamps.
+    // It can't do that for the final frame because it doesn't know the "next timestamp"
+    // (because in this example we don't pass a "final timestamp" to ICMCompressionSessionCompleteFrames).
+    // So we'll give the final frame our minimum frame duration.
+    decodeDuration = pMungData->minimumFrameDuration * ICMEncodedFrameGetTimeScale( encodedFrame ) / pMungData->timeScale;
+  }
+  */
+  
   /*
    MungDataPtr pMungData = encodedFrameOutputRefCon;
 
@@ -1768,7 +1785,7 @@ void convertMvidToMov(
     osError = ICMCompressionSessionEncodeFrame(compressionSession,
                                                pixelBuffer,
                                                0, // timeStamp
-                                               frameDuration,
+                                               timeValue, // TimeValue64 displayDuration
                                                kICMValidTime_DisplayDurationIsValid,
                                                NULL, NULL, NULL);
     assert(osError == 0);
@@ -1866,13 +1883,23 @@ void convertMvidToMov(
   
   EndMediaEdits(qtMedia);
   
-  TimeScale mediaDuration = GetMediaDuration(qtMedia);
-  osError = InsertMediaIntoTrack(qtTrack, (TimeValue)0, (TimeValue)0, mediaDuration, (Fixed)1.0);
+  // Query current track duration
+  
+  TimeValue mediaDuration = GetMediaDuration(qtMedia);
+  osError = InsertMediaIntoTrack(qtTrack, (TimeValue)0, (TimeValue)0, mediaDuration, fixed1);
   if (osError) {
     fprintf(stderr, "Insert Quicktime media track error %d\n", osError);
     exit(1);
   }
 
+  // Query track timescale and duration ?
+  
+  TimeValue trackOffset = GetTrackOffset(qtTrack);
+  TimeValue trackDuration = GetTrackDuration(qtTrack);
+  
+  assert(trackOffset == 0);
+  assert(trackDuration == mediaDuration);
+  
   /*
   
   // Add frames to track
