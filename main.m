@@ -1496,25 +1496,14 @@ void convertMvidToMov(
                                                   &quality);
     assert(err == 0);
     
-    /*
     // (**desc).depth = bpp;
-    SInt16 depth = bpp;
-    err = ICMCompressionSessionOptionsSetProperty(sessionOptions,
-                                                  kQTPropertyClass_ICMCompressionSessionOptions,
-                                                  kICMCompressionSessionOptionsPropertyID_Depth,
-                                                  sizeof(depth),
-                                                  &depth);
-    assert(err == 0);
-    */
-
-    // (**desc).depth = bpp;
-    UInt32 depth = k32ARGBPixelFormat;
+    UInt32 depth;
     if (bpp == 32) {
       depth = k32BGRAPixelFormat;
     } else if (bpp == 24) {
       depth = k24RGBPixelFormat;
     } else if (bpp == 16) {
-      depth = kCVPixelFormatType_16LE555;
+      depth = k16BE555PixelFormat;
     } else {
       assert(0);
     }
@@ -1551,8 +1540,6 @@ void convertMvidToMov(
 
   uint32_t qtBPP;
   OSType osType;
-  //void *outputBuffer = NULL;
-  //uint32_t outputBufferSize = 0;
   
   if (bpp == 32) {
     qtBPP = 32;
@@ -1562,8 +1549,9 @@ void convertMvidToMov(
     osType = kCVPixelFormatType_24RGB;
   } else if (bpp == 16) {
     qtBPP = 16;
-    osType = kCVPixelFormatType_16LE555;
-    assert(0);
+    // FIXME: LE or BE pixel format ? Does the compression module handle conversion?
+    //osType = kCVPixelFormatType_16LE555;
+    osType = kCVPixelFormatType_16BE555;
   } else {
     assert(0);
   }
@@ -1753,9 +1741,56 @@ void convertMvidToMov(
     assert( osError == 0 );
     void *baseAddr = CVPixelBufferGetBaseAddress(pixelBuffer);
     
-    if ((bpp == 32) || (bpp == 16)) {
-      // BGRA to BGRA (premultiplied) otherwise rgb555
-      memcpy(baseAddr, pixels, pixelsNumBytes);
+    if (bpp == 16) {
+      // Copy rgb555 from LE to BE
+      //
+      // Swap byte[0] and byte[1]
+      //
+      // RGB555 (LE) => gggbbbbb arrrrrgg
+      // RGB555 (BE) => arrrrrgg gggbbbbb
+      
+      // XRRRRRGGGGGBBBBB => XRRRRRGG (high) GGGBBBBB (low)
+      
+      NSUInteger numPixels = width * height;
+      uint16_t *inPixels = (uint16_t*)pixels;
+      uint8_t  *outPixels = (uint8_t*)baseAddr;
+
+      for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+        uint16_t pixel = inPixels[pixeli];
+        
+        if (pixeli == 1) {
+          assert(pixeli == 1);
+        }
+        
+        /*
+        uint8_t alpha = (pixel >> 15) & 0x1;
+        assert(alpha == 0x0);
+        uint8_t red = (pixel >> 10) & 0x1F;
+        uint8_t green = (pixel >> 5) & 0x1F;
+        uint8_t blue = (pixel >> 0) & 0x1F;
+        */
+ 
+        // Write LE 16 bit value as BE 16 bit value
+        
+        // LE[0] = LOW
+        // LE[1] = HIGH
+        
+        uint8_t b1 = (pixel >> 8) & 0xFF;
+        uint8_t b2 = pixel & 0xFF;
+        
+        // BE[0] = HIGH
+        // BE[1] = LOW
+
+        if (TRUE) {
+          // BE
+          *outPixels++ = b1;
+          *outPixels++ = b2;
+        } else {
+          // LE
+          *outPixels++ = b2;
+          *outPixels++ = b1;
+        }
+      }      
     } else if (bpp == 24) {
       // Copy 24BPP BGRA to RGB bytes
       
@@ -1776,6 +1811,9 @@ void convertMvidToMov(
         *outPixels++ = green;
         *outPixels++ = blue;
       }
+    } else if (bpp == 32) {
+      // BGRA to BGRA (both are premultiplied)
+      memcpy(baseAddr, pixels, pixelsNumBytes);
     } else {
       assert(0);
     }
@@ -1892,7 +1930,7 @@ void convertMvidToMov(
     exit(1);
   }
 
-  // Query track timescale and duration ?
+  // Query track timescale and duration
   
   TimeValue trackOffset = GetTrackOffset(qtTrack);
   TimeValue trackDuration = GetTrackDuration(qtTrack);
