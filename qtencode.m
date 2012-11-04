@@ -211,7 +211,7 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
       // Encode Frame data as COPY operations. Note that the currentPixelBuffer
       // must be set before this method is invoked, and it is already locked.
     
-      void *baseAddr = CVPixelBufferGetBaseAddress(currentPixelBuffer);      
+      void *baseAddr = CVPixelBufferGetBaseAddress(currentPixelBuffer);
       uint16_t *pixels = baseAddr;
       int width = CVPixelBufferGetWidth(currentPixelBuffer);
       int height = CVPixelBufferGetHeight(currentPixelBuffer);
@@ -340,21 +340,34 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
       int height = CVPixelBufferGetHeight(currentPixelBuffer);
       
       int numBytes = width * height * sizeof(uint16_t);
-      uint16_t *frameBuffer = malloc(numBytes);
-      assert(frameBuffer);
-      memset(frameBuffer, 0, numBytes);
+      uint16_t *decodedFrameBuffer = malloc(numBytes);
+      assert(decodedFrameBuffer);
+      memset(decodedFrameBuffer, 0, numBytes);
                                     
-      exported_decode_rle_sample16(sampleBuffer, sampleBufferSize, isKeyframe, frameBuffer, width, height);
+      exported_decode_rle_sample16(sampleBuffer, sampleBufferSize, isKeyframe, decodedFrameBuffer, width, height);
       
-      // Data in frameBuffer should be the same as the data in original image data
+      // Data in the input buffer is in BE format, need to convert back to host order in order to compare
       
-      void *baseAddr = CVPixelBufferGetBaseAddress(currentPixelBuffer);
-      int result = memcmp(baseAddr, frameBuffer, numBytes);
+      uint16_t *inputBEFramebuffer = CVPixelBufferGetBaseAddress(currentPixelBuffer);
       
-      // FIXME: Why do these not match?
+      uint16_t *convertedFrameBuffer = malloc(numBytes);
+      assert(convertedFrameBuffer);
+      
+      for (int i = 0; i < (width * height); i++) {
+        uint16_t pixel = inputBEFramebuffer[i];
+        // Swap known BE byte order for 16bpp pixels. BE -> host
+        
+        pixel = ntohs(pixel);
+        convertedFrameBuffer[i] = pixel;
+      }
+      
+      // Data in decodedFrameBuffer is in host order, bot BE, compare two buffers now
+      
+      int result = memcmp(convertedFrameBuffer, decodedFrameBuffer, numBytes);
       assert(result == 0);
       
-      free(frameBuffer);
+      free(decodedFrameBuffer);
+      free(convertedFrameBuffer);
     }
     
     const UInt8 *dataIn = data.bytes;
