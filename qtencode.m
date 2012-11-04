@@ -119,17 +119,6 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
   TimeValue64 decodeDuration;
   decodeDuration = ICMEncodedFrameGetDecodeDuration(encodedFrame);
   assert(decodeDuration >= 1);
-  /*
-   if (decodeDuration == 0) {
-   // You can't add zero-duration samples to a media.  If you try you'll just get invalidDuration back.
-   // Because we don't tell the ICM what the source frame durations are,
-   // the ICM calculates frame durations using the gaps between timestamps.
-   // It can't do that for the final frame because it doesn't know the "next timestamp"
-   // (because in this example we don't pass a "final timestamp" to ICMCompressionSessionCompleteFrames).
-   // So we'll give the final frame our minimum frame duration.
-   decodeDuration = pMungData->minimumFrameDuration * ICMEncodedFrameGetTimeScale( encodedFrame ) / pMungData->timeScale;
-   }
-   */
   
   /*
    MungDataPtr pMungData = encodedFrameOutputRefCon;
@@ -246,7 +235,7 @@ void convertMvidToMov(
   
   timeValue = (long long) round(frameDuration * timeScale);
   
-  QTTime frameDurationTime = QTMakeTime(timeValue, timeScale);
+  //QTTime frameDurationTime = QTMakeTime(timeValue, timeScale);
   
   int bpp = [frameDecoder header]->bpp;
   
@@ -657,6 +646,23 @@ void convertMvidToMov(
   assert(trackOffset == 0);
   assert(trackDuration == mediaDuration);
   
+  
+  [outMovie updateMovieFile];
+  
+  // Export the completed movie and convert to using the Animation codec
+  
+  fprintf(stdout, "wrote %s\n", [movFilename UTF8String]);
+  
+  
+  // Deallocate movie
+  
+  [outMovie release];
+  
+  return;
+}
+
+void oldExport()
+{
   /*
    
    // Add frames to track
@@ -762,11 +768,14 @@ void convertMvidToMov(
    
    */
   
-  [outMovie updateMovieFile];
+}
+
+// This logic is out of date and never worked in the first place, but might be useful for reference purposes
+
+void oldQueryComponents()
+{
   
-  // Export the completed movie and convert to using the Animation codec
-  
-  fprintf(stdout, "wrote %s\n", [movFilename UTF8String]);
+  /*
   
   // Grab availableComponents
   
@@ -816,18 +825,15 @@ void convertMvidToMov(
     NSLog(@"availableComponents : %@", availableComponents);
   }
   
-  /*
-   From Above:
-   
-   {
-   component = <06010100>;
-   manufacturer = 1634758764;
-   name = "QuickTime Movie";
-   subtype = 1299148630;
-   type = 1936746868;
-   },
-   
-   */
+//   From Above:
+//   
+//   {
+//   component = <06010100>;
+//   manufacturer = 1634758764;
+//   name = "QuickTime Movie";
+//   subtype = 1299148630;
+//   type = 1936746868;
+//   }
   
   NSDictionary *movComponent = [availableComponents objectAtIndex:9];
   
@@ -1106,31 +1112,9 @@ void convertMvidToMov(
       fprintf(stderr, "failed to export to Animation codec %s", [exportFilename UTF8String]);
       exit(1);
     }
-    
+   
     fprintf(stdout, "exported %s\n", [exportFilename UTF8String]);
   }
-  
-  /*
-   - (BOOL)writeMovie:(QTMovie )movie
-   toFile:(NSString )file
-   withComponent:(NSDictionary )component
-   withExportSettings:(NSData )exportSettings {
    
-   NSDictionary attributes = [[[NSDictionary]] dictionaryWithObjectsAndKeys:
-   [[[NSNumber]] numberWithBool:YES], QTMovieExport,
-   [component objectForKey:@"subtype"], QTMovieExportType,
-   [component objectForKey:@"manufacturer"], QTMovieExportManufacturer,
-   exportSettings, QTMovieExportSettings,
-   // do not set the QTMovieFlatten flag! (causes export settings to be ignored) nil];
-   
-   BOOL result = [movie writeToFile:file withAttributes:attributes]; if(!result) { NSLog(@"Couldn't write movie to file"); return NO; }
-   
-   return YES; }
    */
-  
-  // Deallocate movie
-  
-  [outMovie release];
-  
-  return;
 }
