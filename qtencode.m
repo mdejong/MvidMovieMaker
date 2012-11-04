@@ -15,11 +15,19 @@
 
 #import <QuickTime/Movies.h>
 
+#import "movdata.h"
+
 // static data
 
 Media writingMovMedia = NULL;
 BOOL initImageDescription = FALSE;
 int imageDescriptionBPP = 0;
+
+// Note that this pixel buffer is non-NULL when the writeEncodedFrameToMovie method is about to
+// be invoked. This is a workaround for a bug in the encoder for 16BPP data.
+
+static
+CVPixelBufferRef currentPixelBuffer = NULL;
 
 // callback to write frames to movie
 
@@ -186,12 +194,199 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
    */
   
   assert(writingMovMedia);
-	err = AddMediaSampleFromEncodedFrame(writingMovMedia, encodedFrame, NULL);
-	if( err ) {
-    fprintf( stderr, "AddMediaSampleFromEncodedFrame() failed (%d)\n", (int)err );
-    goto bail;
+  
+  if (imageDescriptionBPP == 16) {
+    // When in 16BPP mode, the encoder logic fails to actually encode 16bpp pixel data
+    // correctly. This corruption creates output data that is unusable. Work around
+    // the problem by taking the original input 16BPP data and encoding it explicitly
+    // as a buffer of raw Animation codec data.
+    
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    assert(currentPixelBuffer);
+    
+    NSMutableData *mData = [NSMutableData dataWithCapacity:1024];
+    
+    if (TRUE) {
+      // Encode Frame data as COPY operations. Note that the currentPixelBuffer
+      // must be set before this method is invoked, and it is already locked.
+    
+      void *baseAddr = CVPixelBufferGetBaseAddress(currentPixelBuffer);      
+      uint16_t *pixels = baseAddr;
+      int width = CVPixelBufferGetWidth(currentPixelBuffer);
+      int height = CVPixelBufferGetHeight(currentPixelBuffer);
+      
+      NSMutableData *encodedPixelData = [NSMutableData dataWithCapacity:1024];
+      
+      uint8_t skipCode = 0;
+      int8_t rleCode = 0;
+      
+      int max7Bits = 0x7F;
+      int pixelCount = 0;
+      int pixelsEncoded = 0;
+      
+      // One "copy" rle operation can contain up to max7Bits 16 bit pixels
+      
+      NSMutableData *copyPixels = [NSMutableData dataWithCapacity:1024];
+            
+      for (int row=0; row < height; row++) {
+        // Encode "skip 0 pixels" before the RLE codes
+        
+        skipCode = 1; // always 1 to indicate "do not skip any pixels"
+        [encodedPixelData appendBytes:&skipCode length:sizeof(skipCode)];
+        
+        for (int column=0; column < width; column++) {
+          if (pixelCount == max7Bits) {
+            int numPixels = copyPixels.length / 2;
+            assert(numPixels == pixelCount);
+            rleCode = numPixels; // positive value indicates number of pixels to copy
+            assert(rleCode != 0);
+            assert(rleCode > 0);
+            assert(rleCode <= max7Bits);
+            [encodedPixelData appendBytes:&rleCode length:sizeof(rleCode)];
+            [encodedPixelData appendData:copyPixels];
+            pixelsEncoded += numPixels;
+            
+            [copyPixels setLength:0];
+            pixelCount = 0;
+          }
+          
+          // Pixel is already in BE format at this point
+          uint16_t pixel = *pixels++;
+          [copyPixels appendBytes:&pixel length:sizeof(pixel)];
+          pixelCount += 1;
+        }
+        
+        // At the end of one line, emit any unwritten pixels and then write -1 as the rle code
+        
+        if (copyPixels.length > 0) {
+          int numPixels = copyPixels.length / 2;
+          assert(numPixels == pixelCount);
+          rleCode = numPixels; // positive value indicates number of pixels to copy
+          assert(rleCode != 0);
+          assert(rleCode > 0);
+          assert(rleCode <= max7Bits);
+          [encodedPixelData appendBytes:&rleCode length:sizeof(rleCode)];
+          [encodedPixelData appendData:copyPixels];
+          pixelsEncoded += numPixels;
+          
+          [copyPixels setLength:0];
+          pixelCount = 0;
+        }
+        
+        rleCode = -1;
+        [encodedPixelData appendBytes:&rleCode length:sizeof(rleCode)];
+      }
+      
+      assert(copyPixels.length == 0);      
+      assert(pixelsEncoded = (width * height));
+      
+      // After all the normal codes, a zero skip pixel appears to indicate the end of the sample.
+      
+      skipCode = 0;
+      [encodedPixelData appendBytes:&skipCode length:sizeof(skipCode)];
+      
+      // All data has been appended to the sample buffer at this point, it is now possible
+      // to fill in the header information for the sample record.
+      
+      // Emit 1 set of compressed sample data for each row in the image. This should
+      // avoid any limit issues with COPY or DUP frames.
+      
+      // http://wiki.multimedia.cx/index.php?title=Apple_QuickTime_RLE
+      //
+      // sample size : 4 bytes
+      // header : 2 bytes
+      // optional : 8 bytes
+      //  starting line at which to begin updating frame : 2 bytes
+      //  unknown : 2 bytes
+      //  the number of lines to update : 2 bytes
+      //  unknown
+      // compressed lines : ?
+
+      // Sample size, this field looks like a 1 byte flags value and then a 24 bit length
+      // value (size & 0xFFFFFF) results in a correct 24 bit length. The flag element seems to
+      // be 0x1 when set. But, this field is undocumented and can be safely skipped because
+      // the sample length is already known.
+      
+      // 4 bytes for int32 header
+      
+      uint32_t sampleSize = encodedPixelData.length + 4 + 2; // data plus header size
+      
+      [mData appendBytes:&sampleSize length:sizeof(sampleSize)];
+      
+      // 2 bytes header is either 0x0 or 0x0008 to indicate if the optional larger header
+      // is included. Emit 0 here to indicate a keyframe of RLE data.
+      
+      uint16_t header = 0x0;
+      
+      [mData appendBytes:&header length:sizeof(header)];
+      
+      // Append all the pixel data after the header info
+      
+      [mData appendData:encodedPixelData];
+    }
+    
+    NSData *data = [NSData dataWithData:mData];
+    
+    // FIXME: Now that we have sample data in a buffer, need to run decoding logic to make sure
+    // that when this sample buffer is decoded, that the same pixels are extracted.
+    
+    if (TRUE) {      
+      void *sampleBuffer = (void*)data.bytes;
+      uint32_t sampleBufferSize = data.length;
+      uint32_t isKeyframe = TRUE;
+      
+      int width = CVPixelBufferGetWidth(currentPixelBuffer);
+      int height = CVPixelBufferGetHeight(currentPixelBuffer);
+      
+      int numBytes = width * height * sizeof(uint16_t);
+      uint16_t *frameBuffer = malloc(numBytes);
+      assert(frameBuffer);
+      memset(frameBuffer, 0, numBytes);
+                                    
+      exported_decode_rle_sample16(sampleBuffer, sampleBufferSize, isKeyframe, frameBuffer, width, height);
+      
+      // Data in frameBuffer should be the same as the data in original image data
+      
+      void *baseAddr = CVPixelBufferGetBaseAddress(currentPixelBuffer);
+      int result = memcmp(baseAddr, frameBuffer, numBytes);
+      
+      // FIXME: Why do these not match?
+      assert(result == 0);
+      
+      free(frameBuffer);
+    }
+    
+    const UInt8 *dataIn = data.bytes;
+    ByteCount byteCount = data.length;
+    
+    MediaSampleFlags sampleFlags = ICMEncodedFrameGetMediaSampleFlags(encodedFrame);
+    TimeValue64 displayOffset = ICMEncodedFrameGetDisplayOffset(encodedFrame);
+    
+    err = AddMediaSample2(writingMovMedia,
+                          dataIn,
+                          byteCount,
+                          decodeDuration,
+                          displayOffset,
+                          (SampleDescriptionHandle)imageDesc,
+                          1, // numberOfSamples
+                          sampleFlags,
+                          NULL );
+    
+    [pool drain];
+    
+    if( err ) {
+      fprintf( stderr, "AddMediaSample2() failed (%d)\n", (int)err );
+      goto bail;
+    }
+  } else {
+    err = AddMediaSampleFromEncodedFrame(writingMovMedia, encodedFrame, NULL);
+    if( err ) {
+      fprintf( stderr, "AddMediaSampleFromEncodedFrame() failed (%d)\n", (int)err );
+      goto bail;
+    }
   }
-	
+  
 bail:
 	return err;
 }
@@ -528,12 +723,14 @@ void convertMvidToMov(
     
     // encode specific frames
     
+    currentPixelBuffer = pixelBuffer;
     osError = ICMCompressionSessionEncodeFrame(compressionSession,
                                                pixelBuffer,
                                                0, // timeStamp
                                                timeValue, // TimeValue64 displayDuration
                                                kICMValidTime_DisplayDurationIsValid,
                                                NULL, NULL, NULL);
+    currentPixelBuffer = NULL;
     assert(osError == 0);
     
     osError = CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
