@@ -11,6 +11,7 @@
 		CD7E243815F341A000027DA6 /* AVFrameDecoder.m in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243415F341A000027DA6 /* AVFrameDecoder.m */; };
 		CD7E243915F341A000027DA6 /* AVMvidFrameDecoder.m in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243615F341A000027DA6 /* AVMvidFrameDecoder.m */; };
 		CD7E243A15F341A000027DA6 /* maxvid_decode.c in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243715F341A000027DA6 /* maxvid_decode.c */; };
+		CD9070D816462E8F00EEF4DF /* qtencode.m in Sources */ = {isa = PBXBuildFile; fileRef = CD9070D716462E8F00EEF4DF /* qtencode.m */; };
 		CD96F739160604AD00316089 /* QTKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CD96F738160604AD00316089 /* QTKit.framework */; };
 		CDAEB66515EDB6FB005A148B /* CGFrameBuffer.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */; };
 		CDAEB66815EDB6FB005A148B /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = CDAEB65915EDB6FB005A148B /* main.m */; };
@@ -43,6 +44,8 @@
 		CD7E243515F341A000027DA6 /* AVMvidFrameDecoder.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AVMvidFrameDecoder.h; sourceTree = SOURCE_ROOT; };
 		CD7E243615F341A000027DA6 /* AVMvidFrameDecoder.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AVMvidFrameDecoder.m; sourceTree = SOURCE_ROOT; };
 		CD7E243715F341A000027DA6 /* maxvid_decode.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = maxvid_decode.c; sourceTree = SOURCE_ROOT; };
+		CD9070D616462E8F00EEF4DF /* qtencode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = qtencode.h; sourceTree = SOURCE_ROOT; };
+		CD9070D716462E8F00EEF4DF /* qtencode.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = qtencode.m; sourceTree = SOURCE_ROOT; };
 		CD96F738160604AD00316089 /* QTKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QTKit.framework; path = System/Library/Frameworks/QTKit.framework; sourceTree = SDKROOT; };
 		CDAEB65215EDB6FB005A148B /* CGFrameBuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CGFrameBuffer.h; sourceTree = SOURCE_ROOT; };
 		CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CGFrameBuffer.m; sourceTree = SOURCE_ROOT; };
@@ -110,6 +113,8 @@
 			isa = PBXGroup;
 			children = (
 				CDAEB65915EDB6FB005A148B /* main.m */,
+				CD9070D616462E8F00EEF4DF /* qtencode.h */,
+				CD9070D716462E8F00EEF4DF /* qtencode.m */,
 				CDAEB65215EDB6FB005A148B /* CGFrameBuffer.h */,
 				CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */,
 				CDCC050715F2036E00C08C52 /* AVMvidFileWriter.h */,
@@ -189,6 +194,7 @@
 				CD7E243915F341A000027DA6 /* AVMvidFrameDecoder.m in Sources */,
 				CD7E243A15F341A000027DA6 /* maxvid_decode.c in Sources */,
 				CD1E74F615F3432B001D5C64 /* AVFrame.m in Sources */,
+				CD9070D816462E8F00EEF4DF /* qtencode.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
