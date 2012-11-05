@@ -308,18 +308,48 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
       // be 0x1 when set. But, this field is undocumented and can be safely skipped because
       // the sample length is already known.
       
+      // Quicktime emits the following for a 29 byte sample:
+      // 40 00 00 1d
+      //
+      // Current Output:
+      // 00 00 00 1d
+      
       // 4 bytes for int32 header
       
-      uint32_t sampleSize = encodedPixelData.length + 4 + 2; // data plus header size
-      
+      uint32_t sampleSize = 4 + 2 + 8 + encodedPixelData.length; // size of header + encoded data
+      sampleSize = htonl(sampleSize);
       [mData appendBytes:&sampleSize length:sizeof(sampleSize)];
       
       // 2 bytes header is either 0x0 or 0x0008 to indicate if the optional larger header
       // is included. Emit 0 here to indicate a keyframe of RLE data.
       
-      uint16_t header = 0x0;
-      
+      uint16_t header = 0x0008;
+      header = htons(header);
       [mData appendBytes:&header length:sizeof(header)];
+      
+      // 2 bytes to indicate starting_line which is always zero for a keyframe
+      
+      uint16_t starting_line = 0;
+      starting_line = htons(starting_line);
+      [mData appendBytes:&starting_line length:sizeof(starting_line)];
+      
+      // 2 unknown bytes.
+      
+      uint16_t unknown1 = 0;
+      unknown1 = htons(unknown1);
+      [mData appendBytes:&unknown1 length:sizeof(unknown1)];
+      
+      // 2 bytes to indicate how many lines to update (all of them)
+      
+      uint16_t lines_to_update = height;
+      lines_to_update = htons(lines_to_update);
+      [mData appendBytes:&lines_to_update length:sizeof(lines_to_update)];
+      
+      // 2 unknown bytes.
+      
+      uint16_t unknown2 = 0;
+      unknown2 = htons(unknown2);
+      [mData appendBytes:&unknown2 length:sizeof(unknown2)];
       
       // Append all the pixel data after the header info
       
