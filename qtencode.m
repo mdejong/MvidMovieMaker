@@ -1,5 +1,5 @@
 //
-//  qtencode.h
+//  qtencode.m
 //
 //  Created by Moses DeJong on 11/3/12.
 //

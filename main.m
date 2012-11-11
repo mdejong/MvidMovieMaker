@@ -9,6 +9,7 @@
 #include "maxvid_encode.h"
 
 #import "qtencode.h"
+#import "qtdecode.h"
 
 #import <QTKit/QTKit.h>
 
@@ -619,15 +620,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
 
   //NSDictionary *movieAttributes = [movie movieAttributes];
   //fprintf(stdout, "movieAttributes : %s", [[movieAttributes description] UTF8String]);
-  
-  // Passing QTMovieFrameImagePixelFormat for type 
-  
-  NSDictionary *attributes = [[[NSDictionary alloc] initWithObjectsAndKeys:
-                               QTMovieFrameImageTypeCGImageRef, QTMovieFrameImageType,
-                               [NSNumber numberWithBool:YES], QTMovieFrameImageHighQuality,
-                               nil]
-                              autorelease];
-  
+    
   BOOL done = FALSE;
   BOOL extractedFirstFrame = FALSE;
   
@@ -822,9 +815,9 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     worked = QTGetTimeInterval(currentTime, &timeInterval);
     assert(worked);
-
+    
     // Note that the CGImageRef here has been placed in the autorelease pool automatically
-    frameImage = [movie frameImageAtTime:currentTime withAttributes:attributes error:&errState];
+    frameImage = getMovFrameAtTime(movie, currentTime);
     worked = (frameImage != nil);
         
     if (worked == FALSE) {
@@ -862,6 +855,12 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidBPP, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
       frameIndex++;
     }
+    
+    // FIXME: need to evaluate how the QTTime maps to "real time" to deal with
+    // the case where the fixed integer values do not map exactly the floating
+    // point representation of time. Does adding a fixed QT time over and over
+    // actually lead to round off error when converted to wall clock? Would the
+    // emitted file get out of sync if the file was long enough?
     
     currentTime = QTTimeIncrement(currentTime, frameTime);
     
