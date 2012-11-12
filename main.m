@@ -806,6 +806,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   
   AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, mvidBPP, timeInterval, totalNumFrames);
   
+  setupMovFrameAtTime(movie, firstTrackMedia, mvidBPP);
+  
   done = FALSE;
   currentTime = startTime;
   int frameIndex = 0;
@@ -816,8 +818,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     worked = QTGetTimeInterval(currentTime, &timeInterval);
     assert(worked);
     
-    // Note that the CGImageRef here has been placed in the autorelease pool automatically
-    frameImage = getMovFrameAtTime(movie, currentTime);
+    frameImage = getMovFrameAtTime(currentTime);
     worked = (frameImage != nil);
         
     if (worked == FALSE) {
@@ -870,10 +871,12 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       done = TRUE;
     }
     
-    //CGImageRelease(frameImage);
+    CGImageRelease(frameImage);
         
     [pool drain];
-  }
+  } // end while !done loop
+  
+  cleanupMovFrameAtTime();
   
   if (extractedFirstFrame == FALSE) {
     fprintf(stderr, "Could not extract initial frame from movie file %s\n", movFilenameCstr);

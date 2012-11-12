@@ -580,6 +580,10 @@ void convertMvidToMov(
                                                   &depth);
     assert(err == 0);
     
+    // FIXME: Enable RLE and delta compression
+    // ICMCompressionSessionOptionsSetAllowTemporalCompression
+    // ICMCompressionSessionOptionsSetAllowFrameReordering
+    
     ICMEncodedFrameOutputCallback outputCallback = writeEncodedFrameToMovie;
     
   	encodedFrameOutputRecord.encodedFrameOutputCallback = outputCallback;

@@ -16,10 +16,12 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 
-// Decode a frame at a specific time, note that this CGImageRef must be placed in the
-// autorelease pool.
+// Primary module entry points for decode of a specific frame logic
 
-CGImageRef getMovFrameAtTime(
-                      QTMovie *movie,
-                      QTTime atTime
-                      );
+void setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, int expectedBpp);
+
+void cleanupMovFrameAtTime();
+
+// Decode a frame at a specific time. The returned CGImageRef must be released explicitly
+
+CGImageRef getMovFrameAtTime(QTTime atTime);

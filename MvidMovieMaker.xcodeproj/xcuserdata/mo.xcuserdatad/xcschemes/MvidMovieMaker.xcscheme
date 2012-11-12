@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "TestAll16/All16BPP.mov"
+            argument = "2x2_black_blue_24BPP.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "TestAll16/All16BPP_reexp.mvid"
+            argument = "2x2_black_blue_24BPP_reexp.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
