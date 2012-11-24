@@ -107,14 +107,12 @@ CGImageRef createCGImageRefFromPixelBuffer(CVPixelBufferRef pixelBuffer)
   
   OSType pixelType = CVPixelBufferGetPixelFormatType(pixelBuffer);
   
+  CGBitmapInfo bitmapInfo;
+  
   if (pixelType == kCVPixelFormatType_32ARGB) {
-    //bitmapInfo = kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipFirst;
-    bytesPerRow = 1;
-  }
-  else if (pixelType == kCVPixelFormatType_32BGRA) {
-    //bitmapInfo = kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst;
-    bytesPerRow = 2;
-    assert(0);
+    bitmapInfo = kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedFirst;
+  } else if (pixelType == kCVPixelFormatType_32BGRA) {
+    bitmapInfo = kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst;
   } else {
     assert(0);
   }
@@ -163,11 +161,7 @@ CGImageRef createCGImageRefFromPixelBuffer(CVPixelBufferRef pixelBuffer)
   // FIXME: We have no idea what colorspace the incoming pixels are in ?
   
   CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-  
-  // FIXME: Assume host ARGB
-  
-  CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst;
-  
+    
   CGImageRef inImageRef = CGImageCreate(width, height, bitsPerComponent, bitsPerPixel, bytesPerRow,
                                         colorSpace, bitmapInfo, dataProviderRef, NULL,
                                         shouldInterpolate, renderIntent);

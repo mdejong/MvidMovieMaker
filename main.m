@@ -305,6 +305,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     }
 
     CGColorSpaceRelease(colorspace);
+    [colorspaceDescription release];
+    [inputColorspaceDescription release];
   }
 
   BOOL inputIsSRGBColorspace = FALSE;
@@ -319,6 +321,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     }
     
     CGColorSpaceRelease(colorspace);
+    [colorspaceDescription release];
+    [inputColorspaceDescription release];
   }
   
   if (inputIsRGBColorspace) {
