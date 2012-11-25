@@ -31,6 +31,17 @@ int imageDescriptionBPP = 0;
 static
 CVPixelBufferRef currentPixelBuffer = NULL;
 
+static inline
+int unpremultiply(int rgb, float alphaMult)
+{
+  int rgbValue = round(rgb * alphaMult);
+  assert(rgbValue >= 0);
+  if (rgbValue > 255) {
+    rgbValue = 255;
+  }
+  return rgbValue;
+}
+
 // Accept input pixels and convert to encoded Animation codec data
 // that exactly represents the data with COPY operations. Currently,
 // there is no compression supported with this function.
@@ -101,34 +112,47 @@ NSData* encodeAnimationPixels(
         [copyPixels appendBytes:&red length:sizeof(uint8_t)];
         [copyPixels appendBytes:&green length:sizeof(uint8_t)];
         [copyPixels appendBytes:&blue length:sizeof(uint8_t)];
-      } else {
-        // FIXME: Read 32 BPP pixel and then undo the premultiply before exporting.
-        
-        assert(bpp != 32); // Does not work yet
+      } else if (bpp == 32) {
+        // Read 32 BPP pixel and then undo the premultiply before exporting each pixel.
         
         uint8_t alpha = *pixelsBytePtr++;
         uint8_t red = *pixelsBytePtr++;
         uint8_t green = *pixelsBytePtr++;
         uint8_t blue = *pixelsBytePtr++;
         
-        // FIXME: unpremultiply each pixel before writing
+        if (alpha == 0) {
+          red = green = blue = 0;
+        } else if (alpha == 0xFF) {
+          // Nop
+        } else {
+          float alphaMult = 1.0 / alpha;
+          
+          red = unpremultiply(red, alphaMult);
+          green = unpremultiply(green, alphaMult);
+          blue = unpremultiply(blue, alphaMult);
+        }
         
         [copyPixels appendBytes:&alpha length:sizeof(uint8_t)];
         [copyPixels appendBytes:&red length:sizeof(uint8_t)];
         [copyPixels appendBytes:&green length:sizeof(uint8_t)];
         [copyPixels appendBytes:&blue length:sizeof(uint8_t)];
+      } else {
+        assert(0);
       }
+      
       pixelCount += 1;
-    }
+    } 
     
     // At the end of one line, emit any unwritten pixels and then write -1 as the rle code
     
     if (copyPixels.length > 0) {
       int numPixels;
-      if (bpp == 16 || bpp == 32) {
+      if (bpp == 16) {
         numPixels = copyPixels.length / 2;
-      } else {
+      } else if (bpp == 24) {
         numPixels = copyPixels.length / 3;
+      } else if (bpp == 32) {
+        numPixels = copyPixels.length / 4;
       }
       assert(numPixels == pixelCount);
       rleCode = numPixels; // positive value indicates number of pixels to copy
@@ -417,13 +441,11 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
         }
       } else if (imageDescriptionBPP == 32) {
         for (int i = 0; i < numPixels; i++) {
-          // Read ARGB
+          // Read ARGB (both are premultiplied at this point)
           uint32_t alpha = *inputBEFramebuffer++;
           uint32_t red = *inputBEFramebuffer++;
           uint32_t green = *inputBEFramebuffer++;
           uint32_t blue = *inputBEFramebuffer++;
-          
-          // FIXME: unpremultiply
           
           uint32_t pixel = (alpha << 24) | (red << 16) | (green << 8) | blue;
           convertedFrameBuffer32[i] = pixel;
