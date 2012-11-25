@@ -75,13 +75,13 @@
 // in this buffer. The hasDataProvider property
 // will be TRUE while the CGImageRef is in use.
 
-- (CGImageRef) createCGImageRef;
+- (CGImageRef) createCGImageRef CF_RETURNS_RETAINED;
 
 // Defines the pixel layout, could be overloaded in a derived class
 
 - (CGBitmapInfo) getBitmapInfo;
 
-- (NSData*) copyData;
+//- (NSData*) copyData;
 
 // Convert pixels to a PNG image format that can be easily saved to disk.
 

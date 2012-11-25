@@ -875,8 +875,10 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       done = TRUE;
     }
     
-    CGImageRelease(frameImage);
-        
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
     [pool drain];
   } // end while !done loop
   

@@ -416,10 +416,10 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 	return bitmapInfo;
 }
 
-- (NSData*) copyData
-{
-	return [NSData dataWithBytes:self.pixels length:self.numBytes];
-}
+//- (NSData*) copyData
+//{
+//	return [NSData dataWithBytes:self.pixels length:self.numBytes];
+//}
 
 // These properties are implemented explicitly to aid
 // in debugging of read/write operations. These method

@@ -16,6 +16,8 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 
+#import "CGFrameBuffer.h" // For CF_RETURNS_RETAINED
+
 // Primary module entry points for decode of a specific frame logic
 
 void setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, int expectedBpp);
@@ -24,4 +26,4 @@ void cleanupMovFrameAtTime();
 
 // Decode a frame at a specific time. The returned CGImageRef must be released explicitly
 
-CGImageRef getMovFrameAtTime(QTTime atTime);
+CGImageRef getMovFrameAtTime(QTTime atTime) CF_RETURNS_RETAINED;

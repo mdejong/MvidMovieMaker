@@ -758,12 +758,14 @@ process_atoms(FILE *movFile, MovData *movData, uint32_t maxOffset)
         if (read_be_uint32(movFile, &entry->size) != 0) {
           movData->errCode = ERR_READ;
           snprintf(movData->errMsg, sizeof(movData->errMsg), "read error for dref table entry size");
+          free(table);
           return 1;
         }
         
         if (read_uint32(movFile, &entry->type) != 0) {
           movData->errCode = ERR_READ;
           snprintf(movData->errMsg, sizeof(movData->errMsg), "read error for dref table entry type");
+          free(table);
           return 1;
         }
         // type must be 'dref' ?
@@ -1476,7 +1478,7 @@ process_sample_tables(FILE *movFile, MovData *movData) {
     movData->errCode = ERR_INVALID_FIELD;
     snprintf(movData->errMsg, sizeof(movData->errMsg),
              "found invalid smallest sample duration, re-exporting from Quicktime may fix this");
-    return 1;
+    goto reterr;
   }  
   
   // Use the effective frame rate to calculate the approx FPS and
@@ -1505,7 +1507,7 @@ process_sample_tables(FILE *movFile, MovData *movData) {
     snprintf(movData->errMsg, sizeof(movData->errMsg),
              "found %d samples, but only %d frames of video, re-exporting from Quicktime may fix this",
              num_samples, numFramesInt);
-    return 1;
+    goto reterr;
   }
     
   movData->frames = malloc(sizeof(MovSample*) * numFramesInt);
