@@ -34,7 +34,7 @@ CVPixelBufferRef currentPixelBuffer = NULL;
 static inline
 int unpremultiply(int rgb, float alphaMult)
 {
-  int rgbValue = round(rgb * alphaMult);
+  int rgbValue = (int)round(rgb * alphaMult);
   assert(rgbValue >= 0);
   if (rgbValue > 255) {
     rgbValue = 255;
@@ -81,7 +81,15 @@ NSData* encodeAnimationPixels(
     
     for (int column=0; column < width; column++) {
       if (pixelCount == max7Bits) {
-        int numPixels = copyPixels.length / 2;
+        int numPixels;
+        if (bpp == 16) {
+          numPixels = copyPixels.length / 2;
+        } else if (bpp == 24) {
+          numPixels = copyPixels.length / 3;
+        } else if (bpp == 32) {
+          numPixels = copyPixels.length / 4;
+        }
+
         assert(numPixels == pixelCount);
         rleCode = numPixels; // positive value indicates number of pixels to copy
         assert(rleCode != 0);
@@ -125,7 +133,7 @@ NSData* encodeAnimationPixels(
         } else if (alpha == 0xFF) {
           // Nop
         } else {
-          float alphaMult = 1.0 / alpha;
+          float alphaMult = 1.0 / (alpha / 255.0);
           
           red = unpremultiply(red, alphaMult);
           green = unpremultiply(green, alphaMult);
