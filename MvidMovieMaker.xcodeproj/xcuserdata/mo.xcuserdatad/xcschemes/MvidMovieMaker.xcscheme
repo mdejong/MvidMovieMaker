@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-extract"
+            argument = "-adler"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "TestAlphaGradientFrames/TestAlphaGradient_exp.mvid"
+            argument = "TestAll16/All16BPP_exp.mov"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

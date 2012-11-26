@@ -15,9 +15,17 @@
 
 #import <CoreFoundation/CoreFoundation.h>
 
+// This implementation attempts to use QTKit's basic decode logic, but this code is broken
 //#define QTKIT_FRAME_IMAGE_AT_TIME_IMPL
 
+// This decoder implementation makes use of session APIs to decode whatever codec data is
+// found inside the .mov file. This implementation has the advantage that it should work
+// with any codec that Quicktime supports.
 #define QTKIT_DECODE_SESSION_IMPL
+
+// This implementation would decode Animation codec directly with know working code.
+// Bypassing the session APIs would be needed in the case where the session APIs to buggy.
+//#define QTKIT_DECODE_ANIMATION_IMPL
 
 static
 QTMovie *movieRef = NULL;
@@ -476,7 +484,8 @@ void decodeSession_cleanupMovFrameAtTime()
 
 // -----------------------------------------
 
-// Primary module entry point for decode of a specific frame
+// Primary module entry point for decode of a specific frame. These functions will
+// invoke specific implementation functions based on the #define constants earlier in the file.
 
 void setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, int expectedBpp)
 {

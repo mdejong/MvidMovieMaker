@@ -30,6 +30,8 @@
 
 @property (nonatomic, retain) AVFrame *lastFrame;
 
+@property (nonatomic, assign) MVFrame *mvFrames;
+
 @end
 
 
@@ -40,6 +42,7 @@
 @synthesize currentFrameBuffer = m_currentFrameBuffer;
 @synthesize cgFrameBuffers = m_cgFrameBuffers;
 @synthesize lastFrame = m_lastFrame;
+@synthesize mvFrames = m_mvFrames;
 
 #if defined(REGRESSION_TESTS)
 @synthesize simulateMemoryMapFailure = m_simulateMemoryMapFailure;

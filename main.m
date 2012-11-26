@@ -73,6 +73,7 @@ char *usageArray =
 "or   : mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?" "\n"
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
 "or   : mvidmoviemaker -info movie.mvid" "\n"
+"or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha movie.mvid" "\n"
 #endif
@@ -2498,6 +2499,106 @@ splitalpha(char *mvidFilenameCstr)
 
 #endif // SPLITALPHA
 
+// This method will iterate through all the frames defined in a .mvid file and
+// print out the adler32 checksum for the video data in the specific frame.
+// With an mvid file, this checksum is already created at the time the .mvid
+// file is created, so this function is trivial to implement since we just
+// iterate over the frames and print the values.
+
+// private properties declaration for class AVMvidFrameDecoder, used here
+// to implete looking directly into the file header.
+
+@interface AVMvidFrameDecoder ()
+@property (nonatomic, assign) MVFrame *mvFrames;
+@end
+
+void printMvidFrameAdler(NSString *mvidFilename)
+{
+	BOOL worked;
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  worked = [frameDecoder openForReading:mvidFilename];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", [mvidFilename UTF8String]);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  //fprintf(stdout, "%s\n", [[mvidFilename lastPathComponent] UTF8String]);
+  
+  MVFrame *mvFrames = frameDecoder.mvFrames;
+  assert(mvFrames);
+  
+  uint32_t lastAdler = 0x0;
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    MVFrame *frame = maxvid_file_frame(mvFrames, frameIndex);
+    assert(frame);
+    
+    uint32_t currentAdler = frame->adler;
+
+    if (maxvid_frame_isnopframe(frame)) {
+      currentAdler = lastAdler;
+    } else {
+      lastAdler = currentAdler;
+    }
+    
+    fprintf(stdout, "0x%X\n", currentAdler);
+    
+    [pool drain];
+  }
+  
+  [frameDecoder close];
+  
+	return;
+}
+
+// This method will iterate over the images defined in a .mov and then calculate
+// an adler32 checksum for the uncompressed video data. Then, this checksum is
+// printed out one line for each frame. This logic enables to comparison of
+// decompressed image data so that it is possible to know if the conversion to
+// .mov format is working as expected. In addition, it makes testing possible
+// since the adler output of a .mov file can be compared to the same adler
+// output for a .mvid file to determine if the video data contants match.
+
+void printMovFrameAdler(NSString *movFilename)
+{
+  // Convert the .mvid input file to a tmp.mvid file that we will then run printMvidFrameAdler
+  // on to print out the decoded adler values. This conversion logic ensures that we get the
+  // exact pixel values that the decoding logic would convert to.
+  
+  MovieOptions options;
+  options.framerate = 1.0f;
+  //options.bpp = 32;
+  options.bpp = -1;
+  options.keyframe = 10000;
+  options.sRGB = TRUE;
+  
+  NSString *tmpFilename = @"_tmp.mvid";
+  
+  if (fileExists(tmpFilename)) {
+    [[NSFileManager defaultManager] removeItemAtPath:tmpFilename error:nil];
+  }
+  
+  @autoreleasepool {
+    encodeMvidFromMovMain((char*)[movFilename UTF8String], (char*)[tmpFilename UTF8String], &options);
+    printMvidFrameAdler(tmpFilename);
+  }
+  
+  if (fileExists(tmpFilename)) {
+    [[NSFileManager defaultManager] removeItemAtPath:tmpFilename error:nil];
+  }  
+}
+
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
@@ -2522,6 +2623,24 @@ int main (int argc, const char * argv[]) {
     char *mvidFilename = (char *)argv[2];
     
     printMovieHeaderInfo(mvidFilename);
+	} else if ((argc == 3) && (strcmp(argv[1], "-adler") == 0)) {
+    // mvidmoviemaker -info movie.mvid
+    // mvidmoviemaker -info movie.mov
+    
+    char *firstFilenameCstr = (char*)argv[2];
+    NSString *firstFilenameStr = [NSString stringWithUTF8String:firstFilenameCstr];
+    
+    if ([firstFilenameStr hasSuffix:@".mvid"])
+    {
+      printMvidFrameAdler(firstFilenameStr);
+      exit(0);
+    } else if ([firstFilenameStr hasSuffix:@".mov"]) {
+      printMovFrameAdler(firstFilenameStr);
+      exit(0);
+    } else {
+      fprintf(stderr, "error: FILENAME must be a .mvid or .mov file : %s\n", firstFilenameCstr);
+      exit(1);
+    }
 #if defined(TESTMODE)
 	} else if (argc == 2 && (strcmp(argv[1], "-test") == 0)) {
     testmode();
