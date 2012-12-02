@@ -15,17 +15,19 @@
 
 #import <CoreFoundation/CoreFoundation.h>
 
+#import <QuickTime/QuickTimeErrors.h>
+
 // This implementation attempts to use QTKit's basic decode logic, but this code is broken
 //#define QTKIT_FRAME_IMAGE_AT_TIME_IMPL
 
 // This decoder implementation makes use of session APIs to decode whatever codec data is
 // found inside the .mov file. This implementation has the advantage that it should work
 // with any codec that Quicktime supports.
-#define QTKIT_DECODE_SESSION_IMPL
+//#define QTKIT_DECODE_SESSION_IMPL
 
-// This implementation would decode Animation codec directly with know working code.
-// Bypassing the session APIs would be needed in the case where the session APIs to buggy.
-//#define QTKIT_DECODE_ANIMATION_IMPL
+// This implementation would decode Animation codec directly with known working Animation codec logic.
+// Bypassing the session APIs would be needed in the case where the session APIs contain bugs.
+#define QTKIT_DECODE_ANIMATION_IMPL
 
 static
 QTMovie *movieRef = NULL;
@@ -39,10 +41,15 @@ QTMedia *mediaRef = NULL;
 static
 ICMDecompressionSessionRef decompressionSession = NULL;
 
+#endif // QTKIT_DECODE_SESSION_IMPL
+
+
+#if defined(QTKIT_DECODE_SESSION_IMPL) || defined(QTKIT_DECODE_ANIMATION_IMPL)
+
 static
 CGFrameBuffer *renderBuffer = NULL;
 
-#endif // QTKIT_DECODE_SESSION_IMPL
+#endif // QTKIT_DECODE_SESSION_IMPL || QTKIT_DECODE_ANIMATION_IMPL
 
 static
 void frameImageAtTime_setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, int expectedBpp)
@@ -80,6 +87,7 @@ static
 void frameImageAtTime_cleanupMovFrameAtTime()
 {
   movieRef = NULL;
+  mediaRef = NULL;
 }
 
 // ---------------------------------
@@ -180,6 +188,8 @@ CGImageRef createCGImageRefFromPixelBuffer(CVPixelBufferRef pixelBuffer)
   
   return inImageRef;
 }
+
+#if defined(QTKIT_DECODE_SESSION_IMPL)
 
 // This tracking callback is invoked as frames are decoded
 
@@ -470,11 +480,208 @@ static
 void decodeSession_cleanupMovFrameAtTime()
 {
   movieRef = NULL;
+  mediaRef = NULL;
   
   // cleanup decompressionSession
   
   assert(decompressionSession);
   ICMDecompressionSessionRelease(decompressionSession);
+  
+  if (renderBuffer) {
+    [renderBuffer release];
+    renderBuffer = NULL;
+  }
+}
+
+#endif // QTKIT_DECODE_SESSION_IMPL
+
+// -----------------------------------------
+
+static
+void decodeAnimation_setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, int expectedBpp)
+{
+  
+  assert(movie);
+  assert(trackMedia);
+  movieRef = movie;
+  mediaRef = trackMedia;
+
+  int width = -1;
+  int height = -1;
+  OSStatus err = noErr;
+  
+  assert(expectedBpp == 16 || expectedBpp == 24 || expectedBpp == 32);
+  
+  // Drop into QT to determine what kind of samples are inside of the Media object
+  
+  ImageDescriptionHandle desc = (ImageDescriptionHandle)NewHandleClear(sizeof(ImageDescription));
+  
+  Media firstTrackQuicktimeMedia = [trackMedia quickTimeMedia];
+  
+  GetMediaSampleDescription(firstTrackQuicktimeMedia, 1, (SampleDescriptionHandle)desc);
+  
+  width = (*desc)->width;
+  height = (*desc)->height;
+  
+  // Setup render buffer, this object will be the destination where the CoreVideo buffer
+  // will be rendered out as 32BPP BGRA data.
+  
+  if (renderBuffer == NULL)
+  {
+    renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:expectedBpp width:width height:height];
+    [renderBuffer retain];
+  }
+  
+  // Test the image description to determine if the codec has an associated color profile.
+  // If the color profile is SRGB, then we know that this .mov file can be marked as
+  // SRGB data so that no color conversion will be done automatically when writing color
+  // data into the .mvid file.
+  
+  CFDataRef movColorspaceICC = NULL;
+  
+  err = ICMImageDescriptionGetProperty(desc,
+                                       kQTPropertyClass_ImageDescription,
+                                       kICMImageDescriptionPropertyID_ICCProfile,
+                                       sizeof(CFDataRef),
+                                       &movColorspaceICC,
+                                       NULL);
+  
+  // err will be kQTPropertyNotSupportedErr if the .mov does not contain an ICC profile.
+  
+  if (err == kQTPropertyNotSupportedErr) {
+    // No ICC profile, so just leave the render buffer colorspace as undefined
+  } else if (err == noErr) {
+    // Could be SRGB color profile, or might be another profile. We want to just grab
+    // the profile and assign it to the framebuffer so that the next stage will detect
+    // a nop for the case where SRGB is the input pixel format.
+    
+    CGColorSpaceRef colorspace = NULL;
+    err = ICMImageDescriptionGetProperty(desc,
+                                         kQTPropertyClass_ImageDescription,
+                                         kICMImageDescriptionPropertyID_CGColorSpace,
+                                         sizeof(CGColorSpaceRef),
+                                         &colorspace,
+                                         NULL);
+    assert(err == noErr);
+    
+    assert(renderBuffer);
+    renderBuffer.colorspace = colorspace;
+    
+    if (colorspace) {
+      CGColorSpaceRelease(colorspace);
+    }
+    
+  } else {
+    assert(FALSE);
+  }
+  
+  if (movColorspaceICC) {
+    CFRelease(movColorspaceICC);
+  }
+  
+  DisposeHandle((Handle)desc);
+
+  return;
+}
+
+static
+CGImageRef decodeAnimation_getMovFrameAtTime(QTTime atTime)
+{
+  CGImageRef frameImage = NULL;
+  
+  OSStatus err = noErr;
+  
+  assert(mediaRef != NULL);
+  
+  // Get the encoded buffer info before actually extracing the encoded sample data
+  
+  ByteCount sampleDataSize = 0;
+  TimeValue64 decodeTime = atTime.timeValue;
+  TimeValue64 duration;
+  MediaSampleFlags sampleFlags;
+  void *sampleData = NULL;
+  
+  err = GetMediaSample2(
+                        mediaRef.quickTimeMedia,
+                        NULL,
+                        0,
+                        &sampleDataSize,
+                        decodeTime,
+                        NULL, NULL, NULL, NULL, NULL, 1, NULL,
+                        &sampleFlags);
+  assert(err == noErr);
+  
+  sampleData = malloc(sampleDataSize);
+  assert(sampleData);
+  memset(sampleData, 0, sampleDataSize);
+  
+  // Now invoke GetMediaSample2() again to really read the data
+  
+  err = GetMediaSample2(
+                        mediaRef.quickTimeMedia,
+                        sampleData, //data out
+                        sampleDataSize, //max data size
+                        NULL, // bytes
+                        decodeTime, //decodeTime
+                        NULL, //sampledecodetime
+                        &duration, //sample duration
+                        NULL,
+                        NULL,
+                        NULL, //sampledescription index
+                        1, //max number of samples
+                        NULL, //number of samples
+                        &sampleFlags //flags
+                        );
+  assert(err == noErr);
+  
+  // Decode Animation codec data using movdata module. Note that the colorspace could have been
+  // defined on the renderBuffer already as either SRGB or some other colorspace.
+  
+  {
+    void *sampleBuffer = sampleData;
+    uint32_t sampleBufferSize = sampleDataSize;
+    
+    void *decodedFrameBuffer = renderBuffer.pixels;
+    int bpp = renderBuffer.bitsPerPixel;
+    int width = renderBuffer.width;
+    int height = renderBuffer.height;
+    uint32_t isKeyframe = FALSE; // unused unless printing log messages
+    
+    if (bpp == 16) {
+      exported_decode_rle_sample16(sampleBuffer, sampleBufferSize, isKeyframe, decodedFrameBuffer, width, height);
+    } else if (bpp == 24) {
+      exported_decode_rle_sample24(sampleBuffer, sampleBufferSize, isKeyframe, decodedFrameBuffer, width, height);
+    } else {
+      exported_decode_rle_sample32(sampleBuffer, sampleBufferSize, isKeyframe, decodedFrameBuffer, width, height);
+    }
+  }
+
+  free(sampleData);
+  
+  if (TRUE) {
+    NSString *dumpFilename = [NSString stringWithFormat:@"RenderDumpFrame.png"];
+    
+    NSData *pngData = [renderBuffer formatAsPNG];
+    
+    [pngData writeToFile:dumpFilename atomically:NO];
+    
+    NSLog(@"wrote %@", dumpFilename);
+  }
+  
+  // Now create CGImageRef from the rendered buffer sent to the other function.
+  
+  frameImage = [renderBuffer createCGImageRef];
+  
+  assert(frameImage);
+  
+  return frameImage;
+}
+
+static
+void decodeAnimation_cleanupMovFrameAtTime()
+{
+  movieRef = NULL;
+  mediaRef = NULL;
   
   if (renderBuffer) {
     [renderBuffer release];
@@ -493,6 +700,8 @@ void setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, int expectedBpp)
   return frameImageAtTime_setupMovFrameAtTime(movie, trackMedia, expectedBpp);
 #elif defined(QTKIT_DECODE_SESSION_IMPL)
   return decodeSession_setupMovFrameAtTime(movie, trackMedia, expectedBpp);
+#elif defined(QTKIT_DECODE_ANIMATION_IMPL)
+  return decodeAnimation_setupMovFrameAtTime(movie, trackMedia, expectedBpp);
 #else
 # error "no impl found"
 #endif
@@ -506,6 +715,8 @@ CGImageRef getMovFrameAtTime(QTTime atTime)
   return frameImageAtTime_getMovFrameAtTime(atTime);
 #elif defined(QTKIT_DECODE_SESSION_IMPL)
   return decodeSession_getMovFrameAtTime(atTime);
+#elif defined(QTKIT_DECODE_ANIMATION_IMPL)
+  return decodeAnimation_getMovFrameAtTime(atTime);
 #else
 # error "no impl found"
 #endif
@@ -519,6 +730,8 @@ void cleanupMovFrameAtTime()
   return frameImageAtTime_cleanupMovFrameAtTime();
 #elif defined(QTKIT_DECODE_SESSION_IMPL)
   return decodeSession_cleanupMovFrameAtTime();
+#elif defined(QTKIT_DECODE_ANIMATION_IMPL)
+  return decodeAnimation_cleanupMovFrameAtTime();
 #else
 # error "no impl found"
 #endif

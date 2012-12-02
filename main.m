@@ -686,11 +686,28 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       isAnimationCodec = TRUE;
     }
     
+    // Print an error message if the .mov file contains anything other than "Animation" codec data.
+    
+    if (isAnimationCodec == FALSE) {
+      char c1 = (cType >> 24) & 0xFF;
+      char c2 = (cType >> 16) & 0xFF;
+      char c3 = (cType >> 8) & 0xFF;
+      char c4 = (cType >> 0) & 0xFF;
+      
+      fprintf(stderr, "The .mov must contain Animation codec video data, not '%c%c%c%c'\n", c1, c2, c3, c4);
+      exit(2);
+    }
+    
     int depth = (*desc)->depth;
     
-    // 16
+    if (depth == 16 || depth == 24 || depth == 32) {
+      // No-op
+    } else {
+      fprintf(stderr, "The .mov Animation codec BPP must be 16, 24, or 32 bits, not %d\n", depth);
+      exit(2);
+    }
     
-    assert(depth == 16 || depth == 24 || depth == 32);
+    // 16 (unlike 24 or 32, there is no alpha detection logic for 16 bpp).
     
     if (depth == 16) {
       // FIXME: currently, 16bpp data is upsampled to 24bpp and then downsampled to 16bpp again.
