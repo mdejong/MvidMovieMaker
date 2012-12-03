@@ -700,6 +700,11 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     int depth = (*desc)->depth;
     
+    // When Animation codec declares the BPP as 32BPP, it is possible that an alpha channel will
+    // be used. But it is also possible that the data could have been exported as "Millions+"
+    // but it might not actually use the alpha channel. In this case, attempt to detect the
+    // case of 24BPP in 32BPP pixels.
+    
     if (depth == 16 || depth == 24 || depth == 32) {
       // No-op
     } else {
@@ -710,8 +715,6 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     // 16 (unlike 24 or 32, there is no alpha detection logic for 16 bpp).
     
     if (depth == 16) {
-      // FIXME: currently, 16bpp data is upsampled to 24bpp and then downsampled to 16bpp again.
-      // This can lead to a loss in exact color representation in certain cases.
       mvidBPP = 16;
     }
     

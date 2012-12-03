@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "2x2_black_blue_16BPP_SRGB.mov"
+            argument = "RGBGA_Test/RedGreenBlueGray_exp.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "2x2_black_blue_16BPP_exp.mvid"
+            argument = "RGBGA_Test/RedGreenBlueGray_exp.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

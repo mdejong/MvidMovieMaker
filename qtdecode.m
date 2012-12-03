@@ -510,7 +510,15 @@ void decodeAnimation_setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, in
   int height = -1;
   OSStatus err = noErr;
   
+  // Note that while expectedBpp
+  
   assert(expectedBpp == 16 || expectedBpp == 24 || expectedBpp == 32);
+  
+  // Note that we ignore expectedBpp here since the actualy BPP detected inside the MOV
+  // file is used no matter what. It is possible that 32BPP pixels contain 24BPP data,
+  // but that logic is handled when writing frames to detect when a 32BPP Animation codec
+  // movie does not actually make use of an alpha channel. Explicitly set the BPP
+  // of the render buffer to track the detected MOV BPP.
   
   // Drop into QT to determine what kind of samples are inside of the Media object
   
@@ -523,12 +531,25 @@ void decodeAnimation_setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, in
   width = (*desc)->width;
   height = (*desc)->height;
   
+  int depth = (*desc)->depth;
+  
+  // When Animation codec declares the BPP as 32BPP, it is possible that an alpha channel will
+  // be used. But it is also possible that the data could have been exported as "Millions+"
+  // but it might not actually use the alpha channel. In this case, attempt to detect the
+  // case of 24BPP in 32BPP pixels.
+  
+  if (depth == 16 || depth == 24 || depth == 32) {
+    // No-op
+  } else {
+    assert(FALSE);
+  }
+  
   // Setup render buffer, this object will be the destination where the CoreVideo buffer
   // will be rendered out as 32BPP BGRA data.
   
   if (renderBuffer == NULL)
   {
-    renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:expectedBpp width:width height:height];
+    renderBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:depth width:width height:height];
     [renderBuffer retain];
   }
   
