@@ -75,7 +75,8 @@ char *usageArray =
 "or   : mvidmoviemaker -info movie.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
 #if defined(SPLITALPHA)
-"or   : mvidmoviemaker -splitalpha movie.mvid" "\n"
+"or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
+"or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 #endif
 "OPTIONS:\n"
 "-fps FLOAT : required when creating .mvid from a series of images\n"
@@ -2499,6 +2500,8 @@ splitalpha(char *mvidFilenameCstr)
     // Write RGB framebuffer
     
     [rgbWriter writeKeyframe:(char*)rgbPixels bufferSize:numPixels*sizeof(uint32_t)];
+
+    // Write A framebuffer
     
     [alphaWriter writeKeyframe:(char*)alphaPixels bufferSize:numPixels*sizeof(uint32_t)];
     
@@ -2514,6 +2517,221 @@ splitalpha(char *mvidFilenameCstr)
   NSLog(@"Wrote %@", rgbWriter.mvidPath);
   NSLog(@"Wrote %@", alphaWriter.mvidPath);
   
+  return;
+}
+
+void
+joinalpha(char *mvidFilenameCstr)
+{
+	NSString *mvidPath = [NSString stringWithUTF8String:mvidFilenameCstr];
+  
+  BOOL isMvid = [mvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+
+  // The join alpha logic needs to be able to find FILE_rgb.mvid and FILE_alpha.mvid
+  // in the same directory as FILE.mvid
+  
+  NSString *mvidFilename = [mvidPath lastPathComponent];
+  NSString *mvidFilenameNoExtension = [mvidFilename stringByDeletingPathExtension];
+  
+  NSString *rgbFilename = [NSString stringWithFormat:@"%@_rgb.mvid", mvidFilenameNoExtension];
+  NSString *alphaFilename = [NSString stringWithFormat:@"%@_alpha.mvid", mvidFilenameNoExtension];
+  
+  // Reconstruct the fully qualified path for the RGB and ALPHA filenames
+  
+  NSArray *mvidPathComponents = [mvidPath pathComponents];
+  assert(mvidPathComponents);
+  
+  NSArray *pathPrefixComponents = [NSArray array];
+  if ([mvidPathComponents count] > 1) {
+    NSRange range;
+    range.location = 0;
+    range.length = [mvidPathComponents count] - 1;
+    pathPrefixComponents = [mvidPathComponents subarrayWithRange:range];
+  }
+  NSString *pathPrefix = nil;
+  if ([pathPrefixComponents count] > 0) {
+    pathPrefix = [NSString pathWithComponents:pathPrefixComponents];
+  }
+  
+  NSString *rgbPath = rgbFilename;
+  if (pathPrefix != nil) {
+    rgbPath = [pathPrefix stringByAppendingPathComponent:rgbFilename];
+  }
+
+  NSString *alphaPath = alphaFilename;
+  if (pathPrefix != nil) {
+    alphaPath = [pathPrefix stringByAppendingPathComponent:alphaFilename];
+  }
+  
+  if (fileExists(rgbPath) == FALSE) {
+    fprintf(stderr, "Cannot find input RGB file %s\n", [rgbPath UTF8String]);
+    exit(1);
+  }
+
+  if (fileExists(alphaPath) == FALSE) {
+    fprintf(stderr, "Cannot find input ALPHA file %s\n", [alphaPath UTF8String]);
+    exit(1);
+  }
+  
+  // Remove output file if it exists
+  
+  if (fileExists(mvidPath) == FALSE) {
+    [[NSFileManager defaultManager] removeItemAtPath:mvidPath error:nil];
+  }
+  
+  // Open both the rgb and alpha mvid files for reading
+  
+  AVMvidFrameDecoder *frameDecoderRGB = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  AVMvidFrameDecoder *frameDecoderAlpha = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked;
+  worked = [frameDecoderRGB openForReading:rgbPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open RGB mvid filename \"%s\"\n", [rgbPath UTF8String]);
+    exit(1);
+  }
+  
+  if ([frameDecoderRGB isSRGB] == FALSE) {
+    fprintf(stderr, "%s\n", "-joinalpha can only be used with a SRGB input MVID movie");
+    exit(1);
+  }
+
+  worked = [frameDecoderAlpha openForReading:alphaPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open RGB mvid filename \"%s\"\n", [alphaPath UTF8String]);
+    exit(1);
+  }
+  
+  if ([frameDecoderAlpha isSRGB] == FALSE) {
+    fprintf(stderr, "%s\n", "-joinalpha can only be used with a SRGB input MVID movie");
+    exit(1);
+  }
+    
+  [frameDecoderRGB allocateDecodeResources];
+  [frameDecoderAlpha allocateDecodeResources];
+  
+  // Create output file writer object
+  
+  NSTimeInterval frameRate = frameDecoderRGB.frameDuration;
+  NSUInteger numFrames = [frameDecoderRGB numFrames];
+  int width = [frameDecoderRGB width];
+  int height = [frameDecoderRGB height];
+  CGSize size = CGSizeMake(width, height);
+  
+  // Size of Alpha movie must match size of RGB movie
+  
+  CGSize alphaMovieSize;
+  
+  alphaMovieSize = CGSizeMake(frameDecoderAlpha.width, frameDecoderAlpha.height);
+  if (CGSizeEqualToSize(size, alphaMovieSize) == FALSE) {
+    fprintf(stderr, "RGB movie size (%d, %d) does not match alpha movie size (%d, %d)\n",
+            (int)width, (int)height,
+            (int)alphaMovieSize.width, (int)alphaMovieSize.height);
+    exit(1);
+  }
+  
+  AVMvidFileWriter *fileWriter = makeMVidWriter(mvidPath, 32, frameRate, numFrames);
+
+  fileWriter.movieSize = size;
+  fileWriter.isSRGB = TRUE;
+  
+  CGFrameBuffer *combinedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:32 width:width height:height];
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    // FIXME: Each input frame should be 24 BPP
+    
+    AVFrame *frameRGB = [frameDecoderRGB advanceToFrame:frameIndex];
+    assert(frameRGB);
+
+    AVFrame *frameAlpha = [frameDecoderAlpha advanceToFrame:frameIndex];
+    assert(frameAlpha);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frameRGB.image = nil;
+    frameAlpha.image = nil;
+    
+    CGFrameBuffer *cgFrameBufferRGB = frameRGB.cgFrameBuffer;
+    assert(cgFrameBufferRGB);
+    
+    CGFrameBuffer *cgFrameBufferAlpha = frameAlpha.cgFrameBuffer;
+    assert(cgFrameBufferAlpha);
+
+    int bpp;
+    
+    bpp = cgFrameBufferRGB.bitsPerPixel;
+    if (bpp != 24) {
+      fprintf(stderr, "-joinalpha can only be used with a 24BPP MVID input movie (not %d bpp)\n", bpp);
+      exit(1);
+    }
+    
+    bpp = cgFrameBufferAlpha.bitsPerPixel;
+    if (bpp != 24) {
+      fprintf(stderr, "-joinalpha can only be used with a 24BPP MVID input movie (not %d bpp)\n", bpp);
+      exit(1);
+    }
+    
+    // sRGB
+    
+    if (frameIndex == 0) {
+      combinedFrameBuffer.colorspace = cgFrameBufferRGB.colorspace;
+    }
+    
+    // Join RGB and ALPHA
+    
+    NSUInteger numPixels = width * height;
+    uint32_t *combinedPixels = (uint32_t*)combinedFrameBuffer.pixels;
+    uint32_t *rgbPixels = (uint32_t*)cgFrameBufferRGB.pixels;
+    uint32_t *alphaPixels = (uint32_t*)cgFrameBufferAlpha.pixels;
+    
+    for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+      uint32_t pixelAlpha = alphaPixels[pixeli];
+      
+      // All 3 components of the ALPHA pixel need to be the same.
+
+      uint32_t pixelAlphaRed = (pixelAlpha >> 16) & 0xFF;
+      uint32_t pixelAlphaGreen = (pixelAlpha >> 8) & 0xFF;
+      uint32_t pixelAlphaBlue = (pixelAlpha >> 0) & 0xFF;
+      
+      if (pixelAlphaRed != pixelAlphaGreen || pixelAlphaRed != pixelAlphaBlue) {
+        fprintf(stderr, "Input Alpha MVID input movie R G B components do not match at pixel %d in frame %d\n", pixeli, frameIndex);
+        exit(1);
+      }
+      
+      // RGB componenets are 24 BPP premultiplied
+      
+      uint32_t pixelRGB = rgbPixels[pixeli];
+      
+      pixelRGB = pixelRGB & 0xFFFFFF;
+      
+      uint32_t combinedPixel = (pixelAlphaRed << 24) | pixelRGB;
+      
+      combinedPixels[pixeli] = combinedPixel;
+    }
+    
+    // Write combined RGBA pixles
+    
+    // FIXME: This output method could be improved by using the general purpose "emit and detect"
+    // logic that is able to compress delta frames down. Currently, a joined RGBA movie is very
+    // large because the output frames are always written as keyframes. Not critical.
+    
+    [fileWriter writeKeyframe:(char*)combinedPixels bufferSize:numPixels*sizeof(uint32_t)];
+    
+    [pool drain];
+  }
+  
+  [fileWriter rewriteHeader];
+  [fileWriter close];
+  
+  NSLog(@"Wrote %@", fileWriter.mvidPath);
   return;
 }
 
@@ -2670,6 +2888,10 @@ int main (int argc, const char * argv[]) {
     // mvidmoviemaker -splitalpha INFILE.mvid
     char *mvidFilenameCstr = (char*)argv[2];
     splitalpha(mvidFilenameCstr);
+	} else if (argc == 3 && (strcmp(argv[1], "-joinalpha") == 0)) {
+    // mvidmoviemaker -joinalpha OUTFILE.mvid
+    char *mvidFilenameCstr = (char*)argv[2];
+    joinalpha(mvidFilenameCstr);
 #endif // SPLITALPHA
   } else if (argc >= 3) {
     // Either:

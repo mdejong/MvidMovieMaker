@@ -115,7 +115,10 @@ NSData* encodeAnimationPixels(
         uint8_t green = *pixelsBytePtr++;
         uint8_t blue = *pixelsBytePtr++;
         
-        assert(alpha == 0xFF);
+        // Alpha does not get written to the Animation data since it will always be 0xFF.
+        // Just ignore the alpha value on input as long as it is 0x0 or 0xFF.
+        
+        assert(alpha == 0xFF || alpha == 0x0);
 
         [copyPixels appendBytes:&red length:sizeof(uint8_t)];
         [copyPixels appendBytes:&green length:sizeof(uint8_t)];
@@ -439,9 +442,10 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
           uint32_t green = *inputBEFramebuffer++;
           uint32_t blue = *inputBEFramebuffer++;
           
-          assert(alpha == 0xFF);
-          // While input alpha is always 0xFF, the decoded alpha from exported_decode_rle_sample24()
-          // is always 0x0 and it is ignored.
+          // Alpha does not get written to the Animation data since it will always be 0xFF.
+          // Just ignore the alpha value on input as long as it is 0x0 or 0xFF.
+          
+          assert(alpha == 0xFF || alpha == 0x0);
           alpha = 0x0;
           
           uint32_t pixel = (alpha << 24) | (red << 16) | (green << 8) | blue;

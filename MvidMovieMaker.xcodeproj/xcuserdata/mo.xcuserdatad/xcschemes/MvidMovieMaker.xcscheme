@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "RGBGA_Test/RedGreenBlueGray_exp.mov"
+            argument = "-extract"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "RGBGA_Test/RedGreenBlueGray_exp.mvid"
+            argument = "TestAlphaGradientFrames/AlphaSplitAttempt2/TestAlphaGradient.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
