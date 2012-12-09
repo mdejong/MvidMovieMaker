@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-extract"
+            argument = "-splitalpha"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "TestAlphaGradientFrames/AlphaSplitAttempt2/TestAlphaGradient.mvid"
+            argument = "Explosion/ExplosionCroppedSplit/RetestJoin/Explosion.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

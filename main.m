@@ -2439,6 +2439,8 @@ splitalpha(char *mvidFilenameCstr)
     exit(1);
   }
   
+  fprintf(stdout, "Split %s RGB+A as %s and %s\n", [mvidFilename UTF8String], [rgbFilename UTF8String], [alphaFilename UTF8String]);
+  
   // Writer that will write the RGB values
   
   AVMvidFileWriter *fileWriter;
@@ -2565,8 +2567,8 @@ splitalpha(char *mvidFilenameCstr)
     [fileWriter close];
   }
   
-  NSLog(@"Wrote %@", rgbFilename);
-  NSLog(@"Wrote %@", alphaFilename);
+  fprintf(stdout, "Wrote %s\n", [rgbFilename UTF8String]);
+  fprintf(stdout, "Wrote %s\n", [alphaFilename UTF8String]);
   
   return;
 }
@@ -2634,6 +2636,8 @@ joinalpha(char *mvidFilenameCstr)
   if (fileExists(mvidPath) == FALSE) {
     [[NSFileManager defaultManager] removeItemAtPath:mvidPath error:nil];
   }
+  
+  fprintf(stdout, "Combining %s and %s as %s\n", [rgbFilename UTF8String], [alphaFilename UTF8String], [mvidFilename UTF8String]);
   
   // Open both the rgb and alpha mvid files for reading
   
@@ -2770,11 +2774,24 @@ joinalpha(char *mvidFilenameCstr)
     
     // Write combined RGBA pixles
     
-    // FIXME: This output method could be improved by using the general purpose "emit and detect"
-    // logic that is able to compress delta frames down. Currently, a joined RGBA movie is very
-    // large because the output frames are always written as keyframes. Not critical.
+    // Copy RGB data into a CGImage and apply frame delta compression to output
     
-    [fileWriter writeKeyframe:(char*)combinedPixels bufferSize:numPixels*sizeof(uint32_t)];
+    CGImageRef frameImage = [combinedFrameBuffer createCGImageRef];
+    
+    BOOL checkAlphaChannel = FALSE;
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    
+    BOOL isSRGB = TRUE;
+    
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, 32, checkAlphaChannel, isKeyframe, isSRGB);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
     
     [pool drain];
   }
@@ -2782,7 +2799,7 @@ joinalpha(char *mvidFilenameCstr)
   [fileWriter rewriteHeader];
   [fileWriter close];
   
-  NSLog(@"Wrote %@", fileWriter.mvidPath);
+  fprintf(stdout, "Wrote %s\n", [fileWriter.mvidPath UTF8String]);
   return;
 }
 
