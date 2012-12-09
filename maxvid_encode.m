@@ -2192,21 +2192,10 @@ maxvid_write_delta_pixels(AVMvidFileWriter *mvidWriter,
   
   int bpp = mvidWriter.bpp;
   
-  // Calculate adler32 checksum on original frame data. Note that in the
-  // case where the inputBufferNumBytes includes zero padding, we generate
-  // the adler using only the actual filled in pixel values.
-  
-  uint32_t unPaddedInputBufferSize;
-  if (bpp == 16) {
-    unPaddedInputBufferSize = frameBufferNumPixels * sizeof(uint16_t);
-  } else if (bpp == 24 || bpp == 32) {
-    unPaddedInputBufferSize = frameBufferNumPixels * sizeof(uint32_t);
-  } else {
-    assert(FALSE);
-  }
+  // Calculate adlre32 checksum on original frame data
   
   uint32_t adler = 0;
-  adler = maxvid_adler32(0, (unsigned char *)inputBuffer, unPaddedInputBufferSize);
+  adler = maxvid_adler32(0, (unsigned char *)inputBuffer, inputBufferNumBytes);
   assert(adler != 0);
   
   // Convert the generic maxvid codes to the optimized c4 encoding and append to the output file
