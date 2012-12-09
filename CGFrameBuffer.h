@@ -101,4 +101,10 @@
 
 - (void) zeroCopyPixels:(void*)zeroCopyPtr mappedData:(NSData*)mappedData;
 
+// Crop copy a rectangle out of a second framebuffer object.
+
+- (void) cropCopyPixels:(CGFrameBuffer*)anotherFrameBuffer
+                  cropX:(NSInteger)cropX
+                  cropY:(NSInteger)cropY;
+
 @end

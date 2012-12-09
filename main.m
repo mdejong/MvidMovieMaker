@@ -74,6 +74,7 @@ char *usageArray =
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
 "or   : mvidmoviemaker -info movie.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
+"or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
@@ -2737,6 +2738,183 @@ joinalpha(char *mvidFilenameCstr)
 
 #endif // SPLITALPHA
 
+// This method provides a command line interface that makes it possible to crop
+// each frame of a movie and emit a new file containing the cropped portion
+// of each frame. This is a very simple operation, but it can be very difficult
+// to do using Quicktime or other command line tools. A high end video editor
+// would do this easily, this implementation makes it easy to do on the command line.
+
+void
+cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenameCstr)
+{
+	NSString *inMvidPath = [NSString stringWithUTF8String:inMvidFilenameCstr];
+	NSString *outMvidPath = [NSString stringWithUTF8String:outMvidFilenameCstr];
+  
+  BOOL isMvid;
+
+  isMvid = [inMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+
+  isMvid = [outMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  // Check the CROP spec, it should be 4 integer values that indicate the X Y W H
+  // for the output movie.
+  
+	NSString *cropSpec = [NSString stringWithUTF8String:cropSpecCstr];
+  NSArray *elements  = [cropSpec componentsSeparatedByString:@" "];
+  
+  if ([elements count] != 4) {
+    fprintf(stderr, "CROP specification must be X Y WIDTH HEIGHT : not %s\n", cropSpecCstr);
+    exit(1);
+  }
+
+  NSInteger cropX = [((NSString*)[elements objectAtIndex:0]) intValue];
+  NSInteger cropY = [((NSString*)[elements objectAtIndex:1]) intValue];
+  NSInteger cropW = [((NSString*)[elements objectAtIndex:2]) intValue];
+  NSInteger cropH = [((NSString*)[elements objectAtIndex:3]) intValue];
+    
+  // Read in existing file into from the input file and create an output file
+  // that has exactly the same options.
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:inMvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open input mvid filename \"%s\"\n", [inMvidPath UTF8String]);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
+  
+  // Verify the crop spec info once info from input file is available
+
+  BOOL cropXYInvalid = FALSE;
+  BOOL cropWHInvalid = FALSE;
+
+  if (cropX < 0 || cropY < 0) {
+    cropXYInvalid = TRUE;
+  }
+
+  if (cropW <= 0 || cropW <= 0) {
+    cropWHInvalid = TRUE;
+  }
+  
+  // Output size has to be the same or smaller than the input size
+  // X,Y must be greater than 0 and smaller than W,H of the input movie
+  // W,H must be greater than 0 and smaller than W,H of the input movie
+  
+  if (cropW > width) {
+    cropWHInvalid = TRUE;
+  }
+  
+  if (cropH > height) {
+    cropWHInvalid = TRUE;
+  }
+  
+  int outputX2 = cropX + cropW;
+  if (outputX2 > width) {
+    cropWHInvalid = TRUE;
+  }
+
+  int outputY2 = cropY + cropH;
+  if (outputY2 > height) {
+    cropWHInvalid = TRUE;
+  }
+  
+  if (cropXYInvalid || cropWHInvalid) {
+    NSString *movieDimensionsStr = [NSString stringWithFormat:@"%d x %d", width, height];
+    fprintf(stderr, "error: invalid -crop specification \"%s\" for movie with dimensions \"%s\"\n", cropSpecCstr, [movieDimensionsStr UTF8String]);
+    exit(1);
+  }
+  
+  // Writer that will write the RGB values. Note that invoking process_frame_file()
+  // will define the SRGB and width/height on the output.
+  
+  AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
+  
+  // Allocate a new framebuffer for each frame when emitting with process_frame_file() since the
+  // previous framebuffer needs to be held in order to implete frame delta compression.
+  
+  CGFrameBuffer *croppedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:cropW height:cropH];
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+        
+    // sRGB support
+    
+    if (frameIndex == 0) {
+      croppedFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+    }
+    
+    // Copy cropped area into the croppedFrameBuffer
+    
+    BOOL worked;
+    CGImageRef frameImage = nil;
+    
+    // Crop pixels from cgFrameBuffer while doing a copy into croppedFrameBuffer. Note that this
+    // API currently assumes that input and output are the same BPP.
+    
+    [croppedFrameBuffer cropCopyPixels:cgFrameBuffer cropX:cropX cropY:cropY];
+    
+    frameImage = [croppedFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    BOOL checkAlphaChannel = FALSE;
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    
+    BOOL isSRGB = [frameDecoder isSRGB];
+    
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe, isSRGB);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+        
+    [pool drain];
+  }
+  
+  [fileWriter rewriteHeader];
+  [fileWriter close];
+  
+  NSLog(@"Wrote %@", fileWriter.mvidPath);
+  return;
+}
+
 // This method will iterate through all the frames defined in a .mvid file and
 // print out the adler32 checksum for the video data in the specific frame.
 // With an mvid file, this checksum is already created at the time the .mvid
@@ -2855,6 +3033,14 @@ int main (int argc, const char * argv[]) {
     }
     
 		extractFramesFromMvidMain(mvidFilename, framesFilePrefix);
+	} else if ((argc == 5) && (strcmp(argv[1], "-crop") == 0)) {
+    // mvidmoviemaker -crop "X Y WIDTH HEIGHT" INMOVIE.mvid OUTMOVIE.mvid
+    
+    char *cropSpec = (char *)argv[2];
+    char *inMvidFilename = (char *)argv[3];
+    char *outMvidFilename = (char *)argv[4];
+    
+    cropMvidMovie(cropSpec, inMvidFilename, outMvidFilename);
 	} else if ((argc == 3) && (strcmp(argv[1], "-info") == 0)) {
     // mvidmoviemaker -info movie.mvid
     

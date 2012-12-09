@@ -697,6 +697,51 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   self->m_colorspace = colorspace;
 }
 
+// Crop copy a rectangle out of a second framebuffer object.
+
+- (void) cropCopyPixels:(CGFrameBuffer*)anotherFrameBuffer
+                  cropX:(NSInteger)cropX
+                  cropY:(NSInteger)cropY
+{
+  // The buffer we copy from must be the same size or larger than
+  // the crop buffer.
+
+  assert(self.width <= anotherFrameBuffer.width);
+  assert(self.height <= anotherFrameBuffer.height);
+  
+  // Create a CGImage from anotherFrameBuffer that contains just the pixels
+  // indicated in the crop region. Then, render this image into the current
+  // framebuffer.
+
+  CGImageRef fullImage = nil;
+  CGImageRef croppedImage = nil;
+  
+  fullImage = [anotherFrameBuffer createCGImageRef];
+  
+  CGRect cropRect = CGRectMake(cropX, cropY, self.width, self.height);
+  
+  croppedImage = CGImageCreateWithImageInRect(fullImage, cropRect);
+  
+  assert(croppedImage);
+  
+  BOOL worked;
+  worked = [self renderCGImage:croppedImage];
+  assert(worked);
+  
+  if (fullImage) {
+    CGImageRelease(fullImage);
+  }
+
+  if (croppedImage) {
+    CGImageRelease(croppedImage);
+  }
+
+  assert(anotherFrameBuffer.isLockedByDataProvider == FALSE);
+  assert(self.isLockedByDataProvider == FALSE);
+  
+  return;
+}
+
 @end
 
 // C callback invoked by core graphics when done with a buffer, this is tricky
