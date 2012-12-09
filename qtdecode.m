@@ -457,7 +457,7 @@ CGImageRef decodeSession_getMovFrameAtTime(QTTime atTime)
   // The statis renderBuffer object would have been updated by the frame callback, so
   // it is now safe to use this rendered data as a know format.
   
-  if (TRUE) {
+  if (FALSE) {
     NSString *dumpFilename = [NSString stringWithFormat:@"RenderDumpFrame.png"];
     
     NSData *pngData = [renderBuffer formatAsPNG];
@@ -679,7 +679,7 @@ CGImageRef decodeAnimation_getMovFrameAtTime(QTTime atTime)
 
   free(sampleData);
   
-  if (TRUE) {
+  if (FALSE) {
     NSString *dumpFilename = [NSString stringWithFormat:@"RenderDumpFrame.png"];
     
     NSData *pngData = [renderBuffer formatAsPNG];

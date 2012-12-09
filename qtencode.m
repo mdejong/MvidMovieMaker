@@ -734,7 +734,7 @@ void convertMvidToMov(
     CGFrameBuffer *frameBuffer = frameObj.cgFrameBuffer;
     assert(frameBuffer);
     
-    if (TRUE) {
+    if (FALSE) {
       // Dump the image data rendered into PNG format before converting
       // to CVPixelBuffer
       
@@ -822,7 +822,7 @@ void convertMvidToMov(
     // Once the CVPixelBuffer has been filled in, render it as a CIImage so that
     // the resulting pixels can be written as a PNG
     
-    if (TRUE) {
+    if (FALSE) {
       CGFrameBuffer *beFramebuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
       beFramebuffer.usesBigEndianData = TRUE;
       beFramebuffer.colorspace = frameBuffer.colorspace;
