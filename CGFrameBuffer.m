@@ -709,6 +709,11 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   assert(self.width <= anotherFrameBuffer.width);
   assert(self.height <= anotherFrameBuffer.height);
   
+  // Critically important to zero out memory before doing a paint of
+  // the other image data so that existing framebuffer is data is removed.
+  
+  bzero(self.pixels, self.numBytes);
+  
   // Create a CGImage from anotherFrameBuffer that contains just the pixels
   // indicated in the crop region. Then, render this image into the current
   // framebuffer.

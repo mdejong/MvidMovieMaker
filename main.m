@@ -2853,9 +2853,6 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
   
   AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
   
-  // Allocate a new framebuffer for each frame when emitting with process_frame_file() since the
-  // previous framebuffer needs to be held in order to implete frame delta compression.
-  
   CGFrameBuffer *croppedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:cropW height:cropH];
   
   for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
