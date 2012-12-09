@@ -614,7 +614,9 @@
         NSAssert(status == 0, @"status");
         
 #if defined(EXTRA_CHECKS) || defined(ALWAYS_CHECK_ADLER)
-        // If mvid file has adler checksum for frame, verify that it matches the decoded framebuffer contents    
+        // If mvid file has adler checksum for frame, verify that it matches the decoded framebuffer contents.
+        // Note that in the case of an off number of pixels, the adler checksum does not include zero
+        // padding pixels at the end of the buffer.
         if (frame->adler != 0) {
           uint32_t frameAdler = maxvid_adler32(0, (unsigned char*)frameBuffer, frameBufferNumBytes);
           NSAssert(frame->adler == frameAdler, @"frameAdler");
@@ -646,12 +648,14 @@
 #endif // EXTRA_CHECKS
     
 #if defined(EXTRA_CHECKS) || defined(ALWAYS_CHECK_ADLER)
-        // If mvid file has adler checksum for frame, verify that it matches
+        // If mvid file has adler checksum for frame, verify that it matches the decoded framebuffer contents.
+        // Note that in the case of an off number of pixels, the adler checksum does not include zero
+        // padding pixels at the end of the buffer.
         
         if (frame->adler != 0) {
-          uint32_t frameAdler = maxvid_adler32(0, (unsigned char*)inputBuffer32, inputBuffer32NumBytes);
+          uint32_t frameAdler = maxvid_adler32(0, (unsigned char*)inputBuffer32, frameBufferNumBytes);
           NSAssert(frame->adler == frameAdler, @"frameAdler");
-        }        
+        }
 #endif // EXTRA_CHECKS
   
         [nextFrameBuffer zeroCopyPixels:inputBuffer32 mappedData:mappedDataObj];

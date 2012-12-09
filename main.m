@@ -392,9 +392,10 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     // Emit Keyframe
     
     char *buffer = cgBuffer.pixels;
-    int numBytesInBuffer = cgBuffer.numBytes;
+    int bufferSize = cgBuffer.numBytes;
+    int unPaddedBufferSize = cgBuffer.width * cgBuffer.height * cgBuffer.bytesPerPixel;
     
-    worked = [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];
+    worked = [mvidWriter writeKeyframe:buffer bufferSize:bufferSize unPaddedBufferSize:unPaddedBufferSize];
     
     if (worked == FALSE) {
       fprintf(stderr, "can't write keyframe data to mvid file \"%s\"\n", [filenameStr UTF8String]);
@@ -2497,13 +2498,20 @@ splitalpha(char *mvidFilenameCstr)
       rgbPixels[pixeli] = rgbPixel;
     }
     
+    // Note that the buffer size passed in includes and zero padded pixels at
+    // the end of the buffer.
+    
+    assert(rgbFrameBuffer.numBytes == alphaFrameBuffer.numBytes);
+    int bufferSize = rgbFrameBuffer.numBytes;
+    int unPaddedBufferSize = numPixels * rgbFrameBuffer.bytesPerPixel;
+    
     // Write RGB framebuffer
     
-    [rgbWriter writeKeyframe:(char*)rgbPixels bufferSize:numPixels*sizeof(uint32_t)];
+    [rgbWriter writeKeyframe:(char*)rgbPixels bufferSize:bufferSize unPaddedBufferSize:unPaddedBufferSize];
 
     // Write A framebuffer
     
-    [alphaWriter writeKeyframe:(char*)alphaPixels bufferSize:numPixels*sizeof(uint32_t)];
+    [alphaWriter writeKeyframe:(char*)alphaPixels bufferSize:bufferSize unPaddedBufferSize:unPaddedBufferSize];
     
     [pool drain];
   }
@@ -2717,13 +2725,19 @@ joinalpha(char *mvidFilenameCstr)
       combinedPixels[pixeli] = combinedPixel;
     }
     
-    // Write combined RGBA pixles
-    
     // FIXME: This output method could be improved by using the general purpose "emit and detect"
     // logic that is able to compress delta frames down. Currently, a joined RGBA movie is very
     // large because the output frames are always written as keyframes. Not critical.
     
-    [fileWriter writeKeyframe:(char*)combinedPixels bufferSize:numPixels*sizeof(uint32_t)];
+    // Note that the buffer size passed in includes and zero padded pixels at
+    // the end of the buffer.
+    
+    int bufferSize = combinedFrameBuffer.numBytes;
+    int unPaddedBufferSize = combinedFrameBuffer.width * combinedFrameBuffer.height * combinedFrameBuffer.bytesPerPixel;
+    
+    // Write combined RGBA pixles
+    
+    [fileWriter writeKeyframe:(char*)combinedPixels bufferSize:bufferSize unPaddedBufferSize:unPaddedBufferSize];
     
     [pool drain];
   }

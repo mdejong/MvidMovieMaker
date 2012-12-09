@@ -64,15 +64,23 @@
 
 - (void) skipToNextPageBound;
 
-// Write a self contained key frame
+// Write a self contained key frame.
+// The bufferSize vs unPaddedBufferSize arguments are needed to deal with the case where
+// an odd number of pixels means that a zero padding appears at the end of the buffer.
+// The file writing logic writes the buffer with padding, but the adler must not include
+// the padding pixels in the adler32 calculation.
 
-- (BOOL) writeKeyframe:(char*)ptr bufferSize:(int)bufferSize;
+- (BOOL) writeKeyframe:(char*)ptr
+            bufferSize:(int)bufferSize
+    unPaddedBufferSize:(int)unPaddedBufferSize;
 
 // Write a delta frame that depends on the previous frame. The adler needs to be
 // generated in the caller since both previous and current frames would need to be
 // decoded in order to generate the adler.
 
-- (BOOL) writeDeltaframe:(char*)ptr bufferSize:(int)bufferSize adler:(uint32_t)adler;
+- (BOOL) writeDeltaframe:(char*)ptr
+              bufferSize:(int)bufferSize
+                   adler:(uint32_t)adler;
 
 - (BOOL) rewriteHeader;
 

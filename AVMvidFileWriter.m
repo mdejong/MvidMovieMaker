@@ -245,10 +245,18 @@ uint32_t maxvid_file_padding_after_keyframe(FILE *outFile, uint32_t offset) {
   maxvid_frame_setkeyframe(mvFrame);
 }
 
-- (BOOL) writeKeyframe:(char*)ptr bufferSize:(int)bufferSize
+// The bufferSize vs unPaddedBufferSize arguments are needed to deal with the case where
+// an odd number of pixels means that a zero padding appears at the end of the buffer.
+// The file writing logic writes the buffer with padding, but the adler must not include
+// the padding pixels in the adler32 calculation.
+
+- (BOOL) writeKeyframe:(char*)ptr
+            bufferSize:(int)bufferSize
+    unPaddedBufferSize:(int)unPaddedBufferSize
 {
+
 #ifdef LOGGING
-  NSLog(@"writeKeyframe %d : bufferSize %d", frameNum, bufferSize);
+  NSLog(@"writeKeyframe %d : bufferSize %d : unPaddedBufferSize %d", frameNum, bufferSize, unPaddedBufferSize);
 #endif // LOGGING
   
   [self skipToNextPageBound];
@@ -271,7 +279,8 @@ uint32_t maxvid_file_padding_after_keyframe(FILE *outFile, uint32_t offset) {
     // Generate adler32 for pixel data and save into frame data
     
     if (self.genAdler) {
-      mvFrame->adler = maxvid_adler32(0, (unsigned char*)ptr, bufferSize);
+      NSAssert(unPaddedBufferSize <= bufferSize, @"bufferSize");
+      mvFrame->adler = maxvid_adler32(0, (unsigned char*)ptr, unPaddedBufferSize);
       assert(mvFrame->adler != 0);
     }
     
@@ -340,10 +349,12 @@ uint32_t maxvid_file_padding_after_keyframe(FILE *outFile, uint32_t offset) {
 
 // write delta frame, non-zero adler must be passed if adler is enabled
 
-- (BOOL) writeDeltaframe:(char*)ptr bufferSize:(int)bufferSize adler:(uint32_t)adler
+- (BOOL) writeDeltaframe:(char*)ptr
+              bufferSize:(int)bufferSize
+                   adler:(uint32_t)adler
 {
 #ifdef LOGGING
-  NSLog(@"writeDeltaframe %d : bufferSize %d", frameNum, bufferSize);
+  NSLog(@"writeDeltaframe %d : bufferSize %d : adler %d", frameNum, bufferSize, adler);
 #endif // LOGGING
 
   [self saveOffset];
