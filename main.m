@@ -2441,82 +2441,132 @@ splitalpha(char *mvidFilenameCstr)
   
   // Writer that will write the RGB values
   
-  AVMvidFileWriter *rgbWriter = makeMVidWriter(rgbFilename, 24, frameDuration, numFrames);
+  AVMvidFileWriter *fileWriter;
+  fileWriter = makeMVidWriter(rgbFilename, 24, frameDuration, numFrames);
   
-  rgbWriter.movieSize = CGSizeMake(width, height);
-  rgbWriter.isSRGB = TRUE;
-  
-  // Writer that will write the ALPHA values as grayscale
-
-  AVMvidFileWriter *alphaWriter = makeMVidWriter(alphaFilename, 24, frameDuration, numFrames);
-  
-  alphaWriter.movieSize = CGSizeMake(width, height);
-  alphaWriter.isSRGB = TRUE;
-
-  // Loop over each frame, split RGB and ALPHA data into two framebuffers
-  
-  CGFrameBuffer *rgbFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
-  CGFrameBuffer *alphaFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
-  
-  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  {
+    CGFrameBuffer *rgbFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
     
-    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
-    assert(frame);
+    // Loop over all the frame data and emit RGB values without the alpha channel
     
-    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
-    frame.image = nil;
-    
-    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
-    assert(cgFrameBuffer);
-
-    // sRGB
-    
-    if (frameIndex == 0) {
-      rgbFrameBuffer.colorspace = cgFrameBuffer.colorspace;
-      alphaFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+    for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+      NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+      
+      AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+      assert(frame);
+      
+      // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+      frame.image = nil;
+      
+      CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+      assert(cgFrameBuffer);
+      
+      if (frameIndex == 0) {
+        rgbFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+      }
+      
+      NSUInteger numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
+      uint32_t *pixels = (uint32_t*)cgFrameBuffer.pixels;
+      uint32_t *rgbPixels = (uint32_t*)rgbFrameBuffer.pixels;
+      
+      for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+        uint32_t pixel = pixels[pixeli];
+        uint32_t rgbPixel = pixel & 0xFFFFFF;
+        rgbPixels[pixeli] = rgbPixel;
+      }
+      
+      // Copy RGB data into a CGImage and apply frame delta compression to output
+      
+      CGImageRef frameImage = [rgbFrameBuffer createCGImageRef];
+      
+      BOOL checkAlphaChannel = FALSE;
+      
+      BOOL isKeyframe = FALSE;
+      if (frameIndex == 0) {
+        isKeyframe = TRUE;
+      }
+      
+      BOOL isSRGB = TRUE;
+      
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe, isSRGB);
+      
+      if (frameImage) {
+        CGImageRelease(frameImage);
+      }
+      
+      [pool release];
     }
     
-    // Split RGB and ALPHA
-    
-    NSUInteger numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
-    uint32_t *pixels = (uint32_t*)cgFrameBuffer.pixels;
-    uint32_t *rgbPixels = (uint32_t*)rgbFrameBuffer.pixels;
-    uint32_t *alphaPixels = (uint32_t*)alphaFrameBuffer.pixels;
-    
-    for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
-      uint32_t pixel = pixels[pixeli];
-      
-      uint32_t alpha = (pixel >> 24) & 0xFF;
-      
-      uint32_t alphaPixel = (alpha << 16) | (alpha << 8) | alpha;
-      
-      alphaPixels[pixeli] = alphaPixel;
-      
-      uint32_t rgbPixel = pixel & 0xFFFFFF;
-      
-      rgbPixels[pixeli] = rgbPixel;
-    }
-    
-    // Write RGB framebuffer
-    
-    [rgbWriter writeKeyframe:(char*)rgbPixels bufferSize:numPixels*sizeof(uint32_t)];
-
-    // Write A framebuffer
-    
-    [alphaWriter writeKeyframe:(char*)alphaPixels bufferSize:numPixels*sizeof(uint32_t)];
-    
-    [pool drain];
+    [fileWriter rewriteHeader];
+    [fileWriter close];
   }
   
-  [rgbWriter rewriteHeader];
-  [rgbWriter close];
+  // Now process each of the alpha channel pixels and save to another file
   
-  [alphaWriter rewriteHeader];
-  [alphaWriter close];
+  [frameDecoder rewind];
   
-  NSLog(@"Wrote %@", rgbWriter.mvidPath);
-  NSLog(@"Wrote %@", alphaWriter.mvidPath);
+  fileWriter = makeMVidWriter(alphaFilename, 24, frameDuration, numFrames);
+  
+  {
+    CGFrameBuffer *alphaFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
+    
+    // Loop over all the frame data and emit RGB values without the alpha channel
+    
+    for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+      NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+      
+      AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+      assert(frame);
+      
+      // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+      frame.image = nil;
+      
+      CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+      assert(cgFrameBuffer);
+      
+      if (frameIndex == 0) {
+        alphaFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+      }
+      
+      NSUInteger numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
+      uint32_t *pixels = (uint32_t*)cgFrameBuffer.pixels;
+      uint32_t *alphaPixels = (uint32_t*)alphaFrameBuffer.pixels;
+      
+      for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+        uint32_t pixel = pixels[pixeli];        
+        uint32_t alpha = (pixel >> 24) & 0xFF;
+        uint32_t alphaPixel = (alpha << 16) | (alpha << 8) | alpha;
+        alphaPixels[pixeli] = alphaPixel;
+      }
+      
+      // Copy RGB data into a CGImage and apply frame delta compression to output
+      
+      CGImageRef frameImage = [alphaFrameBuffer createCGImageRef];
+      
+      BOOL checkAlphaChannel = FALSE;
+      
+      BOOL isKeyframe = FALSE;
+      if (frameIndex == 0) {
+        isKeyframe = TRUE;
+      }
+      
+      BOOL isSRGB = TRUE;
+      
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe, isSRGB);
+      
+      if (frameImage) {
+        CGImageRelease(frameImage);
+      }
+      
+      [pool release];
+    }
+    
+    [fileWriter rewriteHeader];
+    [fileWriter close];
+  }
+  
+  NSLog(@"Wrote %@", rgbFilename);
+  NSLog(@"Wrote %@", alphaFilename);
   
   return;
 }
