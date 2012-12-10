@@ -72,6 +72,7 @@ char *usageArray =
 "or   : mvidmoviemaker INFILE.mvid OUTFILE.mov ?OPTIONS?" "\n"
 "or   : mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?" "\n"
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
+"or   : mvidmoviemaker -upgrade FILE.mvid" "\n"
 "or   : mvidmoviemaker -info movie.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
 "or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
@@ -1180,6 +1181,10 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   
   fprintStdoutFixedWidth("MVID:");
   fprintf(stdout, "%s\n", [[mvidFilename lastPathComponent] UTF8String]);
+  
+  fprintStdoutFixedWidth("Version:");
+  int version = maxvid_file_version([frameDecoder header]);
+  fprintf(stdout, "%d\n", version);
 
   fprintStdoutFixedWidth("Width:");
   fprintf(stdout, "%d\n", [frameDecoder width]);
@@ -1208,7 +1213,7 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
 
   fprintStdoutFixedWidth("Frames:");
   fprintf(stdout, "%d\n", numFrames);
-    
+  
   [frameDecoder close];
 }
 
@@ -2401,6 +2406,33 @@ splitalpha(char *mvidFilenameCstr)
   NSString *rgbFilename = [NSString stringWithFormat:@"%@_rgb.mvid", mvidFilenameNoExtension];
   NSString *alphaFilename = [NSString stringWithFormat:@"%@_alpha.mvid", mvidFilenameNoExtension];
   
+  // Reconstruct the fully qualified path for the RGB and ALPHA filenames
+  
+  NSArray *mvidPathComponents = [mvidPath pathComponents];
+  assert(mvidPathComponents);
+  
+  NSArray *pathPrefixComponents = [NSArray array];
+  if ([mvidPathComponents count] > 1) {
+    NSRange range;
+    range.location = 0;
+    range.length = [mvidPathComponents count] - 1;
+    pathPrefixComponents = [mvidPathComponents subarrayWithRange:range];
+  }
+  NSString *pathPrefix = nil;
+  if ([pathPrefixComponents count] > 0) {
+    pathPrefix = [NSString pathWithComponents:pathPrefixComponents];
+  }
+  
+  NSString *rgbPath = rgbFilename;
+  if (pathPrefix != nil) {
+    rgbPath = [pathPrefix stringByAppendingPathComponent:rgbFilename];
+  }
+  
+  NSString *alphaPath = alphaFilename;
+  if (pathPrefix != nil) {
+    alphaPath = [pathPrefix stringByAppendingPathComponent:alphaFilename];
+  }
+  
   // Read in frames from input file, then split the RGB and ALPHA components such that
   // the premultiplied color values are writted to one file and the ALPHA (grayscale)
   // values are written to the other.
@@ -2434,6 +2466,11 @@ splitalpha(char *mvidFilenameCstr)
 
   // Verify that the input color data has been mapped to the sRGB colorspace.
   
+  if (maxvid_file_version([frameDecoder header]) == MV_FILE_VERSION_ZERO) {
+    fprintf(stderr, "%s\n", "-splitalpha on MVID is not supported for an old MVID file version 0.");
+    exit(1);
+  }
+  
   if ([frameDecoder isSRGB] == FALSE) {
     fprintf(stderr, "%s\n", "-splitalpha can only be used on MVID movie in the sRGB colorspace");
     exit(1);
@@ -2444,7 +2481,7 @@ splitalpha(char *mvidFilenameCstr)
   // Writer that will write the RGB values
   
   AVMvidFileWriter *fileWriter;
-  fileWriter = makeMVidWriter(rgbFilename, 24, frameDuration, numFrames);
+  fileWriter = makeMVidWriter(rgbPath, 24, frameDuration, numFrames);
   
   {
     CGFrameBuffer *rgbFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
@@ -2507,7 +2544,7 @@ splitalpha(char *mvidFilenameCstr)
   
   [frameDecoder rewind];
   
-  fileWriter = makeMVidWriter(alphaFilename, 24, frameDuration, numFrames);
+  fileWriter = makeMVidWriter(alphaPath, 24, frameDuration, numFrames);
   
   {
     CGFrameBuffer *alphaFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
@@ -2567,8 +2604,8 @@ splitalpha(char *mvidFilenameCstr)
     [fileWriter close];
   }
   
-  fprintf(stdout, "Wrote %s\n", [rgbFilename UTF8String]);
-  fprintf(stdout, "Wrote %s\n", [alphaFilename UTF8String]);
+  fprintf(stdout, "Wrote %s\n", [rgbPath UTF8String]);
+  fprintf(stdout, "Wrote %s\n", [alphaPath UTF8String]);
   
   return;
 }
@@ -2979,6 +3016,126 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
   return;
 }
 
+// This method provides an easy command line operation that will upgrade from a
+// previous mvid version to the most recent mvid version. This logic basically
+// just reads the old video data from a file and then writes a new file. The
+// new file will be written with the most recent version number. If specific
+// file format changes are needed, then will be implemented when the new file
+// is written. This method writes to a tmp file and then the existing mvid
+// file is replace by the tmp file once the operation is complete.
+
+void
+upgradeMvidMovie(char *inMvidFilenameCstr)
+{
+	NSString *inMvidPath = [NSString stringWithUTF8String:inMvidFilenameCstr];
+	NSString *outMvidPath = @"tmp.mvid";
+  
+  BOOL isMvid;
+  
+  isMvid = [inMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+    
+  // Read in existing file into from the input file and create an output file
+  // that has exactly the same options.
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:inMvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open input mvid filename \"%s\"\n", [inMvidPath UTF8String]);
+    exit(1);
+  }
+  
+  // Check for Version 0 -> Version 1 upgrade. Raise error if not MVID version 0.
+  
+  MVFileHeader *header = [frameDecoder header];
+  int version = maxvid_file_version(header);
+  if (version == MV_FILE_VERSION_ZERO) {
+    // No-op
+  } else {
+    // Do not "upgrade" when newer than the previous version
+    fprintf(stderr, "error: cannot upgrade mvid file already at version %d, only files at verion %d can be upgraded\n", version, MV_FILE_VERSION_ZERO);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  //int width = [frameDecoder width];
+  //int height = [frameDecoder height];
+  
+  // Writer that will write the RGB values. Note that invoking process_frame_file()
+  // will define the SRGB property and width/height on the output.
+  
+  AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+        
+    // Copy cropped area into the croppedFrameBuffer
+    
+    BOOL worked;
+    CGImageRef frameImage = nil;
+        
+    frameImage = [cgFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    BOOL checkAlphaChannel = FALSE;
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    
+    BOOL isSRGB = TRUE;
+    
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe, isSRGB);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    [pool drain];
+  }
+  
+  [fileWriter rewriteHeader];
+  [fileWriter close];
+
+  // tmp file is written now, remove the original (old) .mvid and replace it with the upgraded file.
+  
+  worked = [[NSFileManager defaultManager] removeItemAtPath:inMvidPath error:nil];
+  assert(worked);
+
+  worked = [[NSFileManager defaultManager] moveItemAtPath:outMvidPath toPath:inMvidPath error:nil];
+  assert(worked);
+  
+  fprintf(stdout, "Wrote %s\n", [inMvidPath UTF8String]);
+  
+  return;
+}
+
 // This method will iterate through all the frames defined in a .mvid file and
 // print out the adler32 checksum for the video data in the specific frame.
 // With an mvid file, this checksum is already created at the time the .mvid
@@ -3105,6 +3262,12 @@ int main (int argc, const char * argv[]) {
     char *outMvidFilename = (char *)argv[4];
     
     cropMvidMovie(cropSpec, inMvidFilename, outMvidFilename);
+	} else if ((argc == 3) && (strcmp(argv[1], "-upgrade") == 0)) {
+    // mvidmoviemaker -upgrade MOVIE.mvid
+    
+    char *inMvidFilename = (char *)argv[2];
+    
+    upgradeMvidMovie(inMvidFilename);
 	} else if ((argc == 3) && (strcmp(argv[1], "-info") == 0)) {
     // mvidmoviemaker -info movie.mvid
     

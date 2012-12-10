@@ -514,8 +514,8 @@ bail:
 //
 // This method will encode the contents of a .mvid file as a Quicktime .mov using
 // the Animation codec. This method supports 24BPP and 32BPP pixel modes.
-// Note that this method will reject an old "non-sRGB" MVID file since we do
-// not know exactly what the RGB and gamma values in that type of file might be.
+// Note that this method will reject an old version 0 "non-sRGB" MVID file since
+// we do not know exactly what the RGB and gamma values in that type of file might be.
 
 void convertMvidToMov(
                       NSString *mvidFilename,
@@ -559,6 +559,11 @@ void convertMvidToMov(
   // Note that a 16BPP input .mvid will be converted to 24BPP implicitly
   
   // Verify that the input color data has been mapped to the sRGB colorspace.
+
+  if (maxvid_file_version([frameDecoder header]) == MV_FILE_VERSION_ZERO) {
+    fprintf(stderr, "%s\n", "converting MVID to MOV is not supported for an old MVID file version 0.");
+    exit(1);
+  }
   
   if ([frameDecoder isSRGB] == FALSE) {
     fprintf(stderr, "%s\n", "converting MVID to MOV is only support for MVID in sRGB colorspace");

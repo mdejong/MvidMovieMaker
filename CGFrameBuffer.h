@@ -30,6 +30,7 @@
 @protected
 	char *m_pixels;
 	size_t m_numBytes;
+	size_t m_numBytesAllocated;
 	size_t m_width;
 	size_t m_height;
 	size_t m_bitsPerPixel;
@@ -41,7 +42,15 @@
 }
 
 @property (readonly) char *pixels;
+
+// The numBytes property indicates the number of bytes in length
+// of the buffer pointed to by the pixels property. In the event
+// that an odd number of pixels is allocated, this numBytes value
+// could also include a zero padding pixel in order to keep the
+// buffer size an even number of pixels.
+
 @property (readonly) size_t numBytes;
+
 @property (readonly) size_t width;
 @property (readonly) size_t height;
 @property (readonly) size_t bitsPerPixel;

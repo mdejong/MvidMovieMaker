@@ -59,7 +59,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-splitalpha"
+            argument = "-upgrade"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument

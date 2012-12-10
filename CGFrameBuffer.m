@@ -56,10 +56,27 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   return (red << 10) | (green << 5) | blue;
 }
 
+// Private API
+
+@interface CGFrameBuffer ()
+
+// This property indicates the actual size of the allocated buffer pointed to
+// by the pixels property. It is possible that the actual allocated size
+// is larger than the value returned by the numBytes property, but this
+// is an implementation detail of this class and would not need to be known
+// outside this module.
+
+@property (readonly) size_t numBytesAllocated;
+
+@end
+
+// class CGFrameBuffer
+
 @implementation CGFrameBuffer
 
 @synthesize pixels = m_pixels;
 @synthesize numBytes = m_numBytes;
+@synthesize numBytesAllocated = m_numBytesAllocated;
 @synthesize width = m_width;
 @synthesize height = m_height;
 @synthesize bitsPerPixel = m_bitsPerPixel;
@@ -105,7 +122,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   }
   
 	size_t inNumBytes = numPixelsToAllocate * bytesPerPixel;
-    
+  
 	char* buffer;
   size_t allocNumBytes;
   allocNumBytes = inNumBytes;
@@ -131,6 +148,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
     self->m_bytesPerPixel = bytesPerPixel;
     self->m_pixels = buffer;
     self->m_numBytes = allocNumBytes;
+    self->m_numBytesAllocated = allocNumBytesInPages;
     self->m_width = width;
     self->m_height = height;
   } else {
