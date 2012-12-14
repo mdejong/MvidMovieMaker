@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-upgrade"
+            argument = "-splitalpha"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/RetestJoin/Explosion.mvid"
+            argument = "Explosion/ExplosionCroppedSplit/SplitPreH264Encode/Explosion.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

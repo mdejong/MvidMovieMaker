@@ -2540,11 +2540,19 @@ splitalpha(char *mvidFilenameCstr)
     [fileWriter close];
   }
   
-  // Now process each of the alpha channel pixels and save to another file
+  // Now process each of the alpha channel pixels and save to another file.
   
   [frameDecoder rewind];
   
   fileWriter = makeMVidWriter(alphaPath, 24, frameDuration, numFrames);
+  
+  // If alphaAsGreyscale is TRUE, then emit RGB values where the RGB componenets are all equal.
+  // If alphaAsGreyscale is false, then alpha components will be split into different color channels
+  // such that the Green values are used to indicate partial alpha values. The Red channel indicates
+  // where the alpha mask is 0xFF meaning there is no alpha channel and the pixel is opaque.
+  // The Blue channel indicates where the pixel is fully transparent.
+  
+  const BOOL alphaAsGreyscale = TRUE;
   
   {
     CGFrameBuffer *alphaFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
@@ -2572,9 +2580,27 @@ splitalpha(char *mvidFilenameCstr)
       uint32_t *alphaPixels = (uint32_t*)alphaFrameBuffer.pixels;
       
       for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
-        uint32_t pixel = pixels[pixeli];        
+        uint32_t pixel = pixels[pixeli];
         uint32_t alpha = (pixel >> 24) & 0xFF;
-        uint32_t alphaPixel = (alpha << 16) | (alpha << 8) | alpha;
+        uint32_t alphaPixel;
+        if (alphaAsGreyscale) {
+          alphaPixel = (alpha << 16) | (alpha << 8) | alpha;
+        } else {
+          // FIXME: might be better to use R for "transparent" to indicate "no pixel data", then B for opaque
+          // Map to RGB when R = opaque, G = partial, B = transparent
+          uint8_t red = 0x0, green = 0x0, blue = 0x0;
+          if (alpha == 0xFF) {
+            // Fully opaque pixel
+            red = 0xFF;
+          } else if (alpha == 0x0) {
+            // Fully transparent pixel
+            blue = 0xFF;
+          } else {
+            // Partial transparency
+            green = alpha;
+          }
+          alphaPixel = rgba_to_bgra(red, green, blue, 0xFF);
+        }
         alphaPixels[pixeli] = alphaPixel;
       }
       
