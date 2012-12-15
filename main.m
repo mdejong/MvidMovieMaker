@@ -2546,13 +2546,11 @@ splitalpha(char *mvidFilenameCstr)
   
   fileWriter = makeMVidWriter(alphaPath, 24, frameDuration, numFrames);
   
-  // If alphaAsGreyscale is TRUE, then emit RGB values where the RGB componenets are all equal.
-  // If alphaAsGreyscale is false, then alpha components will be split into different color channels
-  // such that the Green values are used to indicate partial alpha values. The Red channel indicates
-  // where the alpha mask is 0xFF meaning there is no alpha channel and the pixel is opaque.
-  // The Blue channel indicates where the pixel is fully transparent.
+  // If alphaAsGrayscale is TRUE, then emit grayscale RGB values where all the componenets are equal.
+  // If alphaAsGrayscale is FASLE, then emit componenet RGB values that are able to make use of
+  // threshold RGB values to further correct Alpha values when decoding.
   
-  const BOOL alphaAsGreyscale = TRUE;
+  const BOOL alphaAsGrayscale = FALSE;
   
   {
     CGFrameBuffer *alphaFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
@@ -2583,18 +2581,22 @@ splitalpha(char *mvidFilenameCstr)
         uint32_t pixel = pixels[pixeli];
         uint32_t alpha = (pixel >> 24) & 0xFF;
         uint32_t alphaPixel;
-        if (alphaAsGreyscale) {
+        if (alphaAsGrayscale) {
           alphaPixel = (alpha << 16) | (alpha << 8) | alpha;
         } else {
-          // FIXME: might be better to use R for "transparent" to indicate "no pixel data", then B for opaque
-          // Map to RGB when R = opaque, G = partial, B = transparent
+          // R = transparent, G = partial transparency, B = opaque.
+          // This logic uses the green channel to map partial transparency
+          // values since the human visual system is able to descern more
+          // precision in the green values and so H264 encoders are more
+          // likely to store green with more precision.
+          
           uint8_t red = 0x0, green = 0x0, blue = 0x0;
           if (alpha == 0xFF) {
             // Fully opaque pixel
-            red = 0xFF;
+            blue = 0xFF;
           } else if (alpha == 0x0) {
             // Fully transparent pixel
-            blue = 0xFF;
+            red = 0xFF;
           } else {
             // Partial transparency
             green = alpha;
@@ -2755,6 +2757,12 @@ joinalpha(char *mvidFilenameCstr)
     exit(1);
   }
   
+  // If alphaAsGrayscale is TRUE, then emit grayscale RGB values where all the componenets are equal.
+  // If alphaAsGrayscale is FASLE, then emit componenet RGB values that are able to make use of
+  // threshold RGB values to further correct Alpha values when decoding.
+  
+  const BOOL alphaAsGrayscale = FALSE;
+  
   AVMvidFileWriter *fileWriter = makeMVidWriter(mvidPath, 32, frameRate, numFrames);
 
   fileWriter.movieSize = size;
@@ -2813,24 +2821,50 @@ joinalpha(char *mvidFilenameCstr)
     for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
       uint32_t pixelAlpha = alphaPixels[pixeli];
       
-      // All 3 components of the ALPHA pixel need to be the same.
+      if (alphaAsGrayscale) {
+        // All 3 components of the ALPHA pixel need to be the same in grayscale mode.
+        
+        uint32_t pixelAlphaRed = (pixelAlpha >> 16) & 0xFF;
+        uint32_t pixelAlphaGreen = (pixelAlpha >> 8) & 0xFF;
+        uint32_t pixelAlphaBlue = (pixelAlpha >> 0) & 0xFF;
+        
+        if (pixelAlphaRed != pixelAlphaGreen || pixelAlphaRed != pixelAlphaBlue) {
+          fprintf(stderr, "Input Alpha MVID input movie R G B components do not match at pixel %d in frame %d\n", pixeli, frameIndex);
+          exit(1);
+        }
+        
+        pixelAlpha = pixelAlphaRed;
+      } else {
+        // R = transparent, G = partial transparency, B = opaque.
+        
+        uint32_t pixelAlphaRed = (pixelAlpha >> 16) & 0xFF;
+        uint32_t pixelAlphaGreen = (pixelAlpha >> 8) & 0xFF;
+        uint32_t pixelAlphaBlue = (pixelAlpha >> 0) & 0xFF;
 
-      uint32_t pixelAlphaRed = (pixelAlpha >> 16) & 0xFF;
-      uint32_t pixelAlphaGreen = (pixelAlpha >> 8) & 0xFF;
-      uint32_t pixelAlphaBlue = (pixelAlpha >> 0) & 0xFF;
-      
-      if (pixelAlphaRed != pixelAlphaGreen || pixelAlphaRed != pixelAlphaBlue) {
-        fprintf(stderr, "Input Alpha MVID input movie R G B components do not match at pixel %d in frame %d\n", pixeli, frameIndex);
-        exit(1);
+        const float thresholdPercent = 0.90;
+        const int thresholdValue = (int) (0xFF * thresholdPercent);
+        
+        if (pixelAlphaRed >= thresholdValue) {
+          // Fully transparent pixel
+          pixelAlpha = 0x0;
+        } else if (pixelAlphaBlue >= thresholdValue) {
+          // Fully opaque pixel
+          pixelAlpha = 0xFF;
+        } else {
+          // Partial transparency
+          pixelAlpha = pixelAlphaGreen;
+          assert(pixelAlpha != 0x0);
+          assert(pixelAlpha != 0xFF);
+        }
       }
-      
+    
       // RGB componenets are 24 BPP premultiplied
       
       uint32_t pixelRGB = rgbPixels[pixeli];
       
       pixelRGB = pixelRGB & 0xFFFFFF;
       
-      uint32_t combinedPixel = (pixelAlphaRed << 24) | pixelRGB;
+      uint32_t combinedPixel = (pixelAlpha << 24) | pixelRGB;
       
       combinedPixels[pixeli] = combinedPixel;
     }
