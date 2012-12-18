@@ -580,6 +580,105 @@ BOOL fileExists(NSString *filePath) {
   }
 }
 
+// This logic will extract "frame durations" information from either the
+// media samples or the track data. Pass a non-NULL value into the
+// media argument or the track argument to indicate which you want
+// to extract from.
+
+NSArray* lookupMediaOrTrackFrameDurations(
+                                      Media firstTrackQuicktimeMedia,
+                                      Track firstTrackQuicktimeTrack,
+                                      QTTime startTime,
+                                      QTTime duration)
+{
+  assert(firstTrackQuicktimeMedia || firstTrackQuicktimeTrack);
+  if (firstTrackQuicktimeMedia) {
+    assert(firstTrackQuicktimeTrack == NULL);
+  }
+  if (firstTrackQuicktimeTrack) {
+    assert(firstTrackQuicktimeMedia == NULL);
+  }
+  
+  // Note that TimeValue is an integer value that indicates "sample num" and needs to be mapped
+  // to duration.timeScale in order to calculate in terms of wall clock time.
+  
+  QTTime currentTime = startTime;
+  
+  TimeValue lastInteresting = 0;
+  TimeValue nextInteresting;
+	TimeValue nextInterestingDuration;
+  short nextTimeFlags = nextTimeStep; // note that (nextTimeMediaSample | nextTimeEdgeOK) fails
+  
+  NSTimeInterval timeInterval;
+  
+  NSMutableArray *durations = [NSMutableArray array];
+  
+  BOOL worked;
+  BOOL done;
+  
+  for (done = FALSE, lastInteresting = 0; !done ; ) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    if (firstTrackQuicktimeMedia) {
+      GetMediaNextInterestingTime(firstTrackQuicktimeMedia,
+                                  nextTimeFlags,
+                                  (TimeValue)currentTime.timeValue,
+                                  1,
+                                  &nextInteresting,
+                                  &nextInterestingDuration);
+    } else {
+      GetTrackNextInterestingTime(firstTrackQuicktimeTrack,
+                                  nextTimeFlags,
+                                  (TimeValue)currentTime.timeValue,
+                                  1,
+                                  &nextInteresting,
+                                  &nextInterestingDuration);
+    }
+    
+    if (nextInteresting == -1) {
+      done = TRUE;
+    } else {
+      //fprintf(stdout, "next interesting time %d\n", (int)nextInteresting);
+      //fprintf(stdout, "next interesting duration %d\n", (int)nextInterestingDuration);
+      //fprintf(stdout, "last interesting time %d\n", (int)lastInteresting);
+      
+      TimeValue interestingDuration = nextInteresting - lastInteresting;
+      lastInteresting = nextInteresting;
+      
+      [durations addObject:[NSNumber numberWithInt:(int)interestingDuration]];
+      
+      currentTime = QTMakeTime(nextInteresting, duration.timeScale);
+      
+      worked = QTGetTimeInterval(currentTime, &timeInterval);
+      assert(worked);
+      
+      //fprintf(stdout, "found delta at time %.4f with duration %d\n", (float)timeInterval, (int)interestingDuration);
+    }
+    
+    [pool drain];
+  }
+  
+  //fprintf(stdout, "durations count %d\n", [durations count]);
+  //fprintf(stdout, "durations : %s\n", [[durations description] UTF8String]);
+  
+  if ([durations count] == 0) {
+    // If one single frame is displayed for the entire length of the movie, then the
+    // duration is the actual frame rate. The trouble with that approach is that
+    // an animation is assumed to have at least 2 frames. Work around the assumption
+    // by creating a framerate that is exactly half of the duration in this case.
+    
+    int halfDuration = (int)duration.timeValue / (int)2;
+    NSNumber *halfDurationNum = [NSNumber numberWithInt:halfDuration];
+    
+    [durations addObject:halfDurationNum];
+    [durations addObject:halfDurationNum];
+  }
+  
+  assert([durations count] > 0);
+  
+  return [NSArray arrayWithArray:durations];
+}
+
 // Entry point for logic that will extract video frames from a Quicktime .mov file
 // and then write the frames as a .mvid file. The options argument is normally not
 // used, but if the user indicated values then these values can overwrite defaults
@@ -613,7 +712,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   }
 
   BOOL worked;
-  NSError *errState;  
+  NSError *errState;
   QTTime duration;
   QTTime startTime;
   QTTime currentTime;
@@ -634,19 +733,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   
   duration = [[movie attributeForKey:QTMovieDurationAttribute] QTTimeValue];
   startTime = QTMakeTime(0, duration.timeScale);
-  currentTime = startTime;
   
-  // Iterate over the "interesting" times in the movie and calculate framerate.
-  // Typically, the first couple of frames appear at the exact frame bound,
-  // but then the times can be in flux depending on the movie. If the movie starts
-  // with a very long frame display time but then a small frame rate appears
-  // later on, we need to adjust the whole movie framerate to match the shortest
-  // interval.
-
-  TimeValue lastInteresting = 0;
-  TimeValue nextInteresting;
-	TimeValue nextInterestingDuration;
-  short nextTimeFlags = nextTimeStep;
   QTTimeRange startEndRange = QTMakeTimeRange(startTime, duration);
   
   NSArray *tracks = [movie tracksOfMediaType:QTMediaTypeVideo];
@@ -658,6 +745,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   // FIXME: only descend into track looking for Animation codec if there is 1 video track
   
   QTTrack *firstTrack = [tracks objectAtIndex:0];
+  Track firstTrackQuicktimeTrack = [firstTrack quickTimeTrack];
   QTMedia *firstTrackMedia = [firstTrack media];
   Media firstTrackQuicktimeMedia = [firstTrackMedia quickTimeMedia];
   assert(firstTrackQuicktimeMedia);
@@ -667,8 +755,6 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
 
   //NSDictionary *firstTrackMediaAttributes = [firstTrackMedia mediaAttributes];
   //fprintf(stdout, "firstTrackMediaAttributes : %s\n", [[firstTrackMediaAttributes description] UTF8String]);
-  
-  NSMutableArray *durations = [NSMutableArray array];
   
   if (TRUE) {
     // Drop into QT to determine what kind of samples are inside of the Media object
@@ -737,55 +823,32 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   }
   
   fprintf(stdout, "extracting framerate from QT Movie\n");
-    
-  while (!done) {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-        
-    GetMediaNextInterestingTime(firstTrackQuicktimeMedia,
-                                nextTimeFlags,
-                                (TimeValue)currentTime.timeValue,
-                                1,
-                                &nextInteresting,
-                                &nextInterestingDuration);
-    
-    if (nextInteresting == -1) {      
-      done = TRUE;
-    } else {
-      TimeValue interestingDuration = nextInteresting - lastInteresting;
-      
-      [durations addObject:[NSNumber numberWithInt:(int)interestingDuration]];
-      
-      currentTime = QTMakeTime(nextInteresting, duration.timeScale);
-      
-      worked = QTGetTimeInterval(currentTime, &timeInterval);
-      assert(worked);
-      
-      fprintf(stdout, "found delta at time %f with duration %d\n", (float)timeInterval, (int)interestingDuration);
-    }
-    
-    [pool drain];
-  }
-  if ([durations count] == 0) {
-    // If one single frame is displayed for the entire length of the movie, then the
-    // duration is the actual frame rate. The trouble with that approach is that
-    // an animation is assumed to have at least 2 frames. Work around the assumption
-    // by creating a framerate that is exactly half of the duration in this case.
-    
-    int halfDuration = (int)duration.timeValue / (int)2;
-    NSNumber *halfDurationNum = [NSNumber numberWithInt:halfDuration];
-    
-    [durations addObject:halfDurationNum];
-    [durations addObject:halfDurationNum];
-  }
+
+  // Note a tricky detail with the media is that it could have a different timescale than the movie.
   
-  assert([durations count] > 0);
+  NSArray *mediaDurations = lookupMediaOrTrackFrameDurations(firstTrackQuicktimeMedia, NULL, startTime, duration);
+  
+  long mediaTimeScale = [[firstTrackMedia attributeForKey:QTMediaTimeScaleAttribute] longValue];
+  
+  //fprintf(stdout, "media durations count %d\n", [mediaDurations count]);
+  //fprintf(stdout, "media durations : %s\n", [[mediaDurations description] UTF8String]);
+
+  fprintf(stdout, "movie timeScale : %d\n", (int)duration.timeScale);
+  fprintf(stdout, "media timeScale : %d\n", (int)mediaTimeScale);
+  fprintf(stdout, "track timeScale : %d\n", [[firstTrack attributeForKey:QTTrackTimeScaleAttribute] intValue]);
+  
+  assert([mediaDurations count] > 0);
   
   // First check for the easy case, where all the durations are the exact same number.
-  
-  int firstDuration = [[durations objectAtIndex:0] intValue];
-  BOOL allSame = TRUE;
-  int smallestDuration = firstDuration;
-  for (NSNumber *durationNumber in durations) {
+
+  int firstDuration;
+  BOOL allSame;
+  int smallestDuration;
+
+  firstDuration = [[mediaDurations objectAtIndex:0] intValue];
+  allSame = TRUE;
+  smallestDuration = firstDuration;
+  for (NSNumber *durationNumber in mediaDurations) {
     int currentDuration = [durationNumber intValue];
     if (currentDuration != firstDuration) {
       allSame = FALSE;
@@ -795,11 +858,45 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     }
   }
   
+  /*
+  
+   // This attempted workaround would query interesting track times, but this was
+   // not actually needed afterall since discovering that the media time and the
+   // movie time were not the same.
+   
+  if (allSame && firstDuration == 1) {
+    // Media frame durations do not match real world clock.
+
+    NSArray *trackDurations = lookupMediaOrTrackFrameDurations(NULL, firstTrackQuicktimeTrack, startTime, duration);
+
+    //fprintf(stdout, "track durations count %d\n", [trackDurations count]);
+    //fprintf(stdout, "track durations : %s\n", [[trackDurations description] UTF8String]);
+
+    firstDuration = [[trackDurations objectAtIndex:0] intValue];
+    allSame = TRUE;
+    smallestDuration = firstDuration;
+    for (NSNumber *durationNumber in trackDurations) {
+      int currentDuration = [durationNumber intValue];
+      if (currentDuration != firstDuration) {
+        allSame = FALSE;
+      }
+      if (currentDuration < smallestDuration) {
+        smallestDuration = currentDuration;
+      }
+    }
+  }
+   
+  */
+  
   if (allSame) {
-    frameTime = QTMakeTime(firstDuration, duration.timeScale);
+    frameTime = QTMakeTime(firstDuration, mediaTimeScale);
   } else {
     // In the case where frame durations are different lengths, pick the smallest one.
-    frameTime = QTMakeTime(smallestDuration, duration.timeScale);
+    frameTime = QTMakeTime(smallestDuration, mediaTimeScale);
+  }
+  
+  if (mediaTimeScale != duration.timeScale) {
+    frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
   }
   
   // The frame interval is now known, so recalculate the total number of frames
@@ -830,6 +927,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
 
   fprintf(stdout, "extracting %d frame(s) from QT Movie\n", totalNumFrames);
   fprintf(stdout, "frame duration is %f seconds\n", (float)timeInterval);
+  fprintf(stdout, "approx fps %.4f\n", 1.0/(float)timeInterval);
   fprintf(stdout, "movie pixels at %dBPP\n", mvidBPP);
   
   AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, mvidBPP, timeInterval, totalNumFrames);

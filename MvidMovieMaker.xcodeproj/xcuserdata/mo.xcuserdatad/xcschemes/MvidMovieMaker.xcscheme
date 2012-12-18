@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-joinalpha"
+            argument = "Crawford/Bottom1.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/SplitPreH264Encode/Explosion.mvid"
+            argument = "Crawford/Bottom1.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

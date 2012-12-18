@@ -614,6 +614,21 @@ CGImageRef decodeAnimation_getMovFrameAtTime(QTTime atTime)
   
   assert(mediaRef != NULL);
   
+  // It is possible that the media timescale does not match the track/movie timescale.
+  // We need to map the "clock time" to the media time in this case.
+
+  NSNumber *movieTimeScale = [movieRef attributeForKey:QTMovieTimeScaleAttribute];
+  NSNumber *mediaTimeScale = [mediaRef attributeForKey:QTMediaTimeScaleAttribute];
+
+  if ([movieTimeScale isEqualToNumber:mediaTimeScale] == FALSE) {
+    //NSTimeInterval timeInterval;
+    //BOOL worked = QTGetTimeInterval(atTime, &timeInterval);
+    //assert(worked);
+   
+    QTTime scaledTime = QTMakeTimeScaled(atTime, [mediaTimeScale longValue]);
+    atTime = scaledTime;
+  }
+  
   // Get the encoded buffer info before actually extracing the encoded sample data
   
   ByteCount sampleDataSize = 0;
