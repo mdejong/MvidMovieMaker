@@ -679,6 +679,36 @@ NSArray* lookupMediaOrTrackFrameDurations(
   return [NSArray arrayWithArray:durations];
 }
 
+// Count the number of frames that are able to fit into the specified time range.
+
+int countNumQuicktimeFrames(QTTime startTime,
+                            QTTime frameTime,
+                            QTTimeRange startEndRange)
+{
+  BOOL done;
+  
+  // The frame interval is now known, so recalculate the total number of frames
+  // by counting how many frames of the indicated interval fit into the movie duration.
+  
+  int totalNumFrames = 1;
+  done = FALSE;
+  QTTime currentTime = startTime;
+  
+  while (!done) {
+    currentTime = QTTimeIncrement(currentTime, frameTime);
+    
+    // Done once at the end of the movie
+    
+    if (!QTTimeInTimeRange(currentTime, startEndRange)) {
+      done = TRUE;
+    } else {
+      totalNumFrames++;
+    }
+  }
+
+  return totalNumFrames;
+}
+
 // Entry point for logic that will extract video frames from a Quicktime .mov file
 // and then write the frames as a .mvid file. The options argument is normally not
 // used, but if the user indicated values then these values can overwrite defaults
@@ -829,13 +859,13 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   NSArray *mediaDurations = lookupMediaOrTrackFrameDurations(firstTrackQuicktimeMedia, NULL, startTime, duration);
   
   long mediaTimeScale = [[firstTrackMedia attributeForKey:QTMediaTimeScaleAttribute] longValue];
-  
-  //fprintf(stdout, "media durations count %d\n", [mediaDurations count]);
-  //fprintf(stdout, "media durations : %s\n", [[mediaDurations description] UTF8String]);
 
   fprintf(stdout, "movie timeScale : %d\n", (int)duration.timeScale);
   fprintf(stdout, "media timeScale : %d\n", (int)mediaTimeScale);
   fprintf(stdout, "track timeScale : %d\n", [[firstTrack attributeForKey:QTTrackTimeScaleAttribute] intValue]);
+
+  fprintf(stdout, "media durations count %d\n", [mediaDurations count]);
+  fprintf(stdout, "media durations : %s\n", [[mediaDurations description] UTF8String]);
   
   assert([mediaDurations count] > 0);
   
@@ -857,6 +887,13 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       smallestDuration = currentDuration;
     }
   }
+
+  /*
+  NSArray *trackDurations = lookupMediaOrTrackFrameDurations(NULL, firstTrackQuicktimeTrack, startTime, duration);
+  
+  fprintf(stdout, "track durations count %d\n", [trackDurations count]);
+  fprintf(stdout, "track durations : %s\n", [[trackDurations description] UTF8String]);
+  */
   
   /*
   
@@ -898,25 +935,54 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   if (mediaTimeScale != duration.timeScale) {
     frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
   }
+
+  // Calculate the number of frames that will fit into the start/end
+  // range with the detected framerate.
   
-  // The frame interval is now known, so recalculate the total number of frames
-  // by counting how many frames of the indicated interval fit into the movie duration.
-    
-  int totalNumFrames = 1;
-  done = FALSE;
-  currentTime = startTime;
+  int detectedNumFrames = countNumQuicktimeFrames(startTime, frameTime, startEndRange);
   
-  while (!done) {
-    currentTime = QTTimeIncrement(currentTime, frameTime);
+  // It is possible that the detected framerate is vastly different than the
+  // framerate in the case where an encoder emits the first frame with a very
+  // small time interval and then the other frames are consistently larger.
+  
+  int mediaNumFrames = [mediaDurations count] + 1;
+  //int trackNumFrames = [trackDurations count] + 1;
+  
+  if (
+      //(mediaNumFrames == trackNumFrames) &&
+      (mediaNumFrames >= 10) &&
+      (mediaNumFrames != detectedNumFrames) &&
+      (detectedNumFrames > (int)(mediaNumFrames * 1.5))) {
+    // Detected number of frames is significantly larger than
+    // the number of media samples. This would typically happen
+    // in the case where a very small delta shows up at the front
+    // of the media. This very small delta could be created by odd
+    // mov writing logic, but it does not represent the actual
+    // framerate. Attempt to calculate the real framerate by
+    // tossing out this initial small value and using the next
+    // smallest value in the set of durations.
     
-    // Done once at the end of the movie
-    
-    if (!QTTimeInTimeRange(currentTime, startEndRange)) {
-      done = TRUE;
-    } else {
-      totalNumFrames++;
+    int nextSmallestDuration = INT_MAX;
+
+    for (NSNumber *durationNumber in mediaDurations) {
+      int currentDuration = [durationNumber intValue];
+      
+      if ((currentDuration < nextSmallestDuration) &&
+          (currentDuration > smallestDuration)) {
+        nextSmallestDuration = currentDuration;
+      }
     }
+    
+    frameTime = QTMakeTime(nextSmallestDuration, mediaTimeScale);
+    
+    if (mediaTimeScale != duration.timeScale) {
+      frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
+    }
+    
+    detectedNumFrames = countNumQuicktimeFrames(startTime, frameTime, startEndRange);
   }
+
+  int totalNumFrames = detectedNumFrames;
   
   // Now that we know the framerate, iterate through visual
   // display at the indicated framerate.
