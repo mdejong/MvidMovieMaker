@@ -376,7 +376,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   
   CGImageRelease(imageRef);
     
-  // Copy the pixels from the cgBuffer into a NSImage
+  // Debug dump contents of framebuffer to a file
   
   if (FALSE) {
     NSString *dumpFilename = [NSString stringWithFormat:@"WriteDumpFrame%0.4d.png", frameIndex+1];
@@ -389,8 +389,66 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   }
   
   // The CGFrameBuffer now contains the rendered pixels in the expected output format. Write to MVID frame.
+  
+  BOOL emitKeyframe = isKeyframe;
+  
+  // In the case where we know the frame is a keyframe, then don't bother to run delta calculation
+  // logic. In the case of the first frame, there is nothing to compare to anyway. The tricky case
+  // is when the delta compare logic finds that all of the pixels have changed or the vast majority
+  // of pixels have changed, in this case it is actually less optimal to emit a delta frame as compared
+  // to a keyframe.
+  
+  NSData *encodedDeltaData = nil;
+  
+  if (isKeyframe == FALSE) {
+    // Calculate delta pixels by comparing the previous frame to the current frame.
+    // Once we know specific delta pixels, then only those pixels that actually changed
+    // can be stored in a delta frame.
+    
+    assert(prevFrameBuffer);
+    
+    assert(prevFrameBuffer.width == cgBuffer.width);
+    assert(prevFrameBuffer.height == cgBuffer.height);
+    assert(prevFrameBuffer.bitsPerPixel == cgBuffer.bitsPerPixel);
+    
+    void *prevPixels = (void*)prevFrameBuffer.pixels;
+    void *currentPixels = (void*)cgBuffer.pixels;
+    int numWords;
+    int width = cgBuffer.width;
+    int height = cgBuffer.height;
+    
+    BOOL emitKeyframeAnyway = FALSE;
+    
+    if (prevFrameBuffer.bitsPerPixel == 16) {
+      numWords = cgBuffer.numBytes / sizeof(uint16_t);
+      encodedDeltaData = maxvid_encode_generic_delta_pixels16(prevPixels,
+                                                              currentPixels,
+                                                              numWords,
+                                                              width,
+                                                              height,
+                                                              &emitKeyframeAnyway);
+      
+    } else {
+      numWords = cgBuffer.numBytes / sizeof(uint32_t);
+      encodedDeltaData = maxvid_encode_generic_delta_pixels32(prevPixels,
+                                                              currentPixels,
+                                                              numWords,
+                                                              width,
+                                                              height,
+                                                              &emitKeyframeAnyway);
+    }
+    
+    if (emitKeyframeAnyway) {
+      // The delta calculation indicates that all the pixels in the frame changed or
+      // so many changed that it would be better to emit a whole keyframe as opposed
+      // to a delta frame.
+      
+      emitKeyframe = TRUE;
+    }
+  }
+  
 
-  if (isKeyframe) {
+  if (emitKeyframe) {
     // Emit Keyframe
     
     char *buffer = cgBuffer.pixels;
@@ -403,40 +461,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
       exit(1);
     }    
   } else {
-    // Calculate delta pixels by comparing the previous frame to the current frame.
-    // Once we know specific delta pixels, then only those pixels that actually changed
-    // can be stored in a delta frame.
-    
-    assert(prevFrameBuffer);
-    
-    NSData *encodedDeltaData;
-    
-    assert(prevFrameBuffer.width == cgBuffer.width);
-    assert(prevFrameBuffer.height == cgBuffer.height);
-    assert(prevFrameBuffer.bitsPerPixel == cgBuffer.bitsPerPixel);
-    
-    void *prevPixels = (void*)prevFrameBuffer.pixels;
-    void *currentPixels = (void*)cgBuffer.pixels;
-    int numWords;
-    int width = cgBuffer.width;
-    int height = cgBuffer.height;
-    
-    if (prevFrameBuffer.bitsPerPixel == 16) {
-      numWords = cgBuffer.numBytes / sizeof(uint16_t);
-      encodedDeltaData = maxvid_encode_generic_delta_pixels16(prevPixels,
-                                                              currentPixels,
-                                                              numWords,
-                                                              width,
-                                                              height);
-      
-    } else {
-      numWords = cgBuffer.numBytes / sizeof(uint32_t);
-      encodedDeltaData = maxvid_encode_generic_delta_pixels32(prevPixels,
-                                                              currentPixels,
-                                                              numWords,
-                                                              width,
-                                                              height);
-    }
+    // Emit the delta frame
     
     if (encodedDeltaData == nil) {
       // The two frames are pixel identical, this is a no-op delta frame
@@ -448,7 +473,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
       
       void *pixelsPtr = (void*)cgBuffer.pixels;
       int inputBufferNumBytes = cgBuffer.numBytes;
-      NSUInteger frameBufferNumPixels = width * height;
+      NSUInteger frameBufferNumPixels = cgBuffer.width * cgBuffer.height;
       
       worked = maxvid_write_delta_pixels(mvidWriter,
                                          encodedDeltaData,
@@ -1091,6 +1116,10 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       int bpp = CGImageGetBitsPerPixel(frameImage);
 
       fprintf(stdout, "extracted frame %d at time %.4f, width x height : %d x %d at bpp %d\n", frameIndex+1, (float)timeInterval, width, height, bpp);
+      
+      if (TRUE) {
+        // Dump contents of image extracted from .mov to a file before rendering it and possibly changing the BPP and colorspace.
+      }
       
       // Write frame data to MVID
       

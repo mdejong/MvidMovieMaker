@@ -59,19 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "Bounce_32BPP_15FPS.mov"
+            argument = "2x2BlackBlue/bad_convert_animation_srgb/2x2_black_blue_16BPP.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Bounce_32BPP_15FPS.mvid"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "-bpp"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "32"
+            argument = "2x2BlackBlue/bad_convert_animation_srgb/2x2_black_blue_16BPP.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
