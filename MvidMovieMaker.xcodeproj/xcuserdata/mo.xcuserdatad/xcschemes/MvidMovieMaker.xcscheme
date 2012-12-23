@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "Explosion/Explosion2_ANI.mov"
+            argument = "2x2Nop/2x2_nop.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Explosion/Explosion_Attempt2_Uncropped.mvid"
+            argument = "2x2Nop/2x2_nop.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

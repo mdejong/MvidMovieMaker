@@ -585,6 +585,11 @@ BOOL fileExists(NSString *filePath) {
 // media argument or the track argument to indicate which you want
 // to extract from.
 
+// FIXME: there appears to be a problem with passing in startTime
+// and duration in the movie timescale when the media is defined
+// with antoehr timescale. But, currently the start time is always
+// zero so it seems to be ignored.
+
 NSArray* lookupMediaOrTrackFrameDurations(
                                       Media firstTrackQuicktimeMedia,
                                       Track firstTrackQuicktimeTrack,
@@ -660,13 +665,30 @@ NSArray* lookupMediaOrTrackFrameDurations(
   
   //fprintf(stdout, "durations count %d\n", [durations count]);
   //fprintf(stdout, "durations : %s\n", [[durations description] UTF8String]);
-  
-  if ([durations count] == 0) {
-    // If one single frame is displayed for the entire length of the movie, then the
-    // duration is the actual frame rate. The trouble with that approach is that
-    // an animation is assumed to have at least 2 frames. Work around the assumption
-    // by creating a framerate that is exactly half of the duration in this case.
     
+  // Check for the tricky case of an "implicit" frame after the listed durations. For example, if a movie
+  // at 1 FPS lasts for 2 seconds then there could be 1 duration followed by an implicit duration that
+  // extends until the end of the movie. The tricky part about this is that if the final duration is
+  // actually smaller than the previous ones, then the framerate calculation would be effected.
+  
+  int sumOfDurations = 0; // FIXME: if startTime is non-zero then this logic would need to track that
+  
+  for (NSNumber *duration in durations) {
+    sumOfDurations += [duration intValue];
+  }
+
+  int implicitFinalDuration = (int) (duration.timeValue - sumOfDurations);
+  
+  if (implicitFinalDuration > 0) {
+    [durations addObject:[NSNumber numberWithInt:(int)implicitFinalDuration]];
+  }
+
+  // If one single frame is displayed for the entire length of the movie, then the
+  // duration is the actual frame rate. The trouble with that approach is that
+  // an animation is assumed to have at least 2 frames. Work around the assumption
+  // by creating a framerate that is exactly half of the duration in this case.
+  
+  if ([durations count] <= 1) {
     int halfDuration = (int)duration.timeValue / (int)2;
     NSNumber *halfDurationNum = [NSNumber numberWithInt:halfDuration];
     
@@ -675,7 +697,6 @@ NSArray* lookupMediaOrTrackFrameDurations(
   }
   
   assert([durations count] > 0);
-  
   return [NSArray arrayWithArray:durations];
 }
 
@@ -856,14 +877,25 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
 
   // Note a tricky detail with the media is that it could have a different timescale than the movie.
   
-  NSArray *mediaDurations = lookupMediaOrTrackFrameDurations(firstTrackQuicktimeMedia, NULL, startTime, duration);
-  
   long mediaTimeScale = [[firstTrackMedia attributeForKey:QTMediaTimeScaleAttribute] longValue];
-
+  
+  NSTimeInterval movieDurationInterval;
+  
+  worked = QTGetTimeInterval(duration, &movieDurationInterval);
+  assert(worked);
+  
+  fprintf(stdout, "movie duration  : %d (%.4f)\n", (int)duration.timeValue, (float)movieDurationInterval);
   fprintf(stdout, "movie timeScale : %d\n", (int)duration.timeScale);
   fprintf(stdout, "media timeScale : %d\n", (int)mediaTimeScale);
-  fprintf(stdout, "track timeScale : %d\n", [[firstTrack attributeForKey:QTTrackTimeScaleAttribute] intValue]);
+  //fprintf(stdout, "track timeScale : %d\n", [[firstTrack attributeForKey:QTTrackTimeScaleAttribute] intValue]);
 
+  // Query "interesting" track durations as defined by Quicktime. This is an array of display time durations
+  // for specific frames. Note that there is an implicit frame duration at the end.
+
+  //QTTime startTimeInMediaTime = QTMakeTimeScaled(startTime, mediaTimeScale);
+  
+  NSArray *mediaDurations = lookupMediaOrTrackFrameDurations(firstTrackQuicktimeMedia, NULL, startTime, duration);
+  
   fprintf(stdout, "media durations count %d\n", [mediaDurations count]);
   fprintf(stdout, "media durations : %s\n", [[mediaDurations description] UTF8String]);
   
@@ -888,12 +920,9 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     }
   }
 
-  /*
-  NSArray *trackDurations = lookupMediaOrTrackFrameDurations(NULL, firstTrackQuicktimeTrack, startTime, duration);
-  
-  fprintf(stdout, "track durations count %d\n", [trackDurations count]);
-  fprintf(stdout, "track durations : %s\n", [[trackDurations description] UTF8String]);
-  */
+  //NSArray *trackDurations = lookupMediaOrTrackFrameDurations(NULL, firstTrackQuicktimeTrack, startTime, duration);
+  //fprintf(stdout, "track durations count %d\n", [trackDurations count]);
+  //fprintf(stdout, "track durations : %s\n", [[trackDurations description] UTF8String]);
   
   /*
   
@@ -992,9 +1021,13 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   assert(worked);
 
   fprintf(stdout, "extracting %d frame(s) from QT Movie\n", totalNumFrames);
-  fprintf(stdout, "frame duration is %f seconds\n", (float)timeInterval);
+  fprintf(stdout, "frame duration is %.4f seconds\n", (float)timeInterval);
   fprintf(stdout, "approx fps %.4f\n", 1.0/(float)timeInterval);
+  fprintf(stdout, "movie duration is %.4f second\n", (float)movieDurationInterval);
   fprintf(stdout, "movie pixels at %dBPP\n", mvidBPP);
+  
+  fprintf(stdout, "movie duration  : %d\n", (int)duration.timeValue);
+
   
   AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, mvidBPP, timeInterval, totalNumFrames);
   
