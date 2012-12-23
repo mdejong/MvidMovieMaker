@@ -1027,9 +1027,40 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   fprintf(stdout, "movie pixels at %dBPP\n", mvidBPP);
   
   fprintf(stdout, "movie duration  : %d\n", (int)duration.timeValue);
-
   
-  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, mvidBPP, timeInterval, totalNumFrames);
+  // Determine the BPP that the output movie will be written as, this could differ from the
+  // BPP of the input .mov in the case where as -bpp argument is passed on the command line
+  // to indicate that the render should be done at a different color depth.
+  
+  BOOL checkAlphaChannel = FALSE;
+  
+  int renderAtBpp = mvidBPP;
+  
+  if (optionsPtr->bpp == -1) {
+    // No -bpp option given on the command line, detect based on BPP in .mov file
+    
+    if (mvidBPP != 16) {
+      if (optionsPtr->bpp == 24) {
+        // Explicitly indicated "-bpp 24" so do not check for 32bpp pixels.
+      } else {
+        checkAlphaChannel = TRUE;
+      }
+    }
+  } else {
+    // When -bpp is explicitly set on the command line, checkAlphaChannel is always FALSE
+    
+    if (optionsPtr->bpp == 16) {
+      renderAtBpp = 16;
+    } else if (optionsPtr->bpp == 24) {
+      renderAtBpp = 24;
+    } else {
+      renderAtBpp = 32;
+    }
+  }
+
+  // Create output .mvid file writer
+  
+  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, timeInterval, totalNumFrames);
   
   setupMovFrameAtTime(movie, firstTrackMedia, mvidBPP);
   
@@ -1053,15 +1084,13 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     } else {
       extractedFirstFrame = TRUE;
       
-      fprintf(stdout, "extracted frame %d at time %f\n", frameIndex+1, (float)timeInterval);
-      
       int width = CGImageGetWidth(frameImage);
       int height = CGImageGetHeight(frameImage);
       // Note that this value will always be 32bpp for a rendered movie frame, we need to
       // actually scan the pixels composited here to figure out if the alpha channel is used.
       int bpp = CGImageGetBitsPerPixel(frameImage);
-      
-      fprintf(stdout, "width x height : %d x %d at bpp %d\n", width, height, bpp);
+
+      fprintf(stdout, "extracted frame %d at time %.4f, width x height : %d x %d at bpp %d\n", frameIndex+1, (float)timeInterval, width, height, bpp);
       
       // Write frame data to MVID
       
@@ -1070,15 +1099,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         isKeyframe = TRUE;
       }
       
-      BOOL checkAlphaChannel = FALSE;
-      if (mvidBPP != 16) {
-        if (optionsPtr->bpp == 24) {
-          // Explicitly indicated "-bpp 24" so do not check for 32bpp pixels.
-        } else {
-          checkAlphaChannel = TRUE;          
-        }
-      }
-      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidBPP, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
+      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
       frameIndex++;
     }
     
