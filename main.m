@@ -821,7 +821,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   // FIXME: only descend into track looking for Animation codec if there is 1 video track
   
   QTTrack *firstTrack = [tracks objectAtIndex:0];
-  Track firstTrackQuicktimeTrack = [firstTrack quickTimeTrack];
+  //Track firstTrackQuicktimeTrack = [firstTrack quickTimeTrack];
   QTMedia *firstTrackMedia = [firstTrack media];
   Media firstTrackQuicktimeMedia = [firstTrackMedia quickTimeMedia];
   assert(firstTrackQuicktimeMedia);
@@ -881,6 +881,10 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     if (depth == 16) {
       mvidBPP = 16;
+    } else if (depth == 24) {
+      mvidBPP = 24;
+    } else if (depth == 32) {
+      mvidBPP = 32;
     }
     
     // For 16BPP Animation, we need to get at the data directly?
@@ -1057,22 +1061,30 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   // BPP of the input .mov in the case where as -bpp argument is passed on the command line
   // to indicate that the render should be done at a different color depth.
   
-  BOOL checkAlphaChannel = FALSE;
+  assert(mvidBPP == 16 || mvidBPP == 24 || mvidBPP == 32);
   
-  int renderAtBpp = mvidBPP;
+  BOOL checkAlphaChannel;
+  int renderAtBpp;
   
   if (optionsPtr->bpp == -1) {
     // No -bpp option given on the command line, detect based on BPP in .mov file
-    
-    if (mvidBPP != 16) {
-      if (optionsPtr->bpp == 24) {
-        // Explicitly indicated "-bpp 24" so do not check for 32bpp pixels.
-      } else {
-        checkAlphaChannel = TRUE;
-      }
+
+    if (mvidBPP == 16) {
+      // Input is 16BPP, so render at 16BPP and do not check the alpha channel
+      renderAtBpp = 16;
+      checkAlphaChannel = FALSE;
+    } else if (mvidBPP == 24) {
+      // Input is 24BPP, so render at 24BPP and do not check the alpha channel
+      renderAtBpp = 24;
+      checkAlphaChannel = FALSE;
+    } else {
+      // Input is at 32BPP, render at 24BPP but check alpha channel in case input is really 32BPP
+      renderAtBpp = 24;
+      checkAlphaChannel = TRUE;
     }
   } else {
     // When -bpp is explicitly set on the command line, checkAlphaChannel is always FALSE
+    checkAlphaChannel = FALSE;
     
     if (optionsPtr->bpp == 16) {
       renderAtBpp = 16;
@@ -1317,20 +1329,6 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
     exit(1);
   }
   
-  // BITSPERPIXEL : 16, 24, or 32 BPP.
-  
-  int bppNum = optionsPtr->bpp;
-  BOOL explicit24bpp = FALSE;
-  
-  // In the case where no -bpp is indicated on the command line, assume 24 bpp.
-  // If the input data is actually 32 bpp then we can adjust upward.
-  
-  if (bppNum < 0) {
-    bppNum = 24;
-  } else if (bppNum == 24) {
-    explicit24bpp = TRUE;
-  }
-  
   // KEYFRAME : integer that indicates a keyframe should be emitted every N frames
   
   int keyframeNum = optionsPtr->keyframe;
@@ -1343,7 +1341,36 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
     keyframeNum = 10000;
   }
   
-  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, bppNum, framerateNum, [inFramePaths count]);
+  // BITSPERPIXEL : 16, 24, or 32 BPP.
+  //
+  // Determine the BPP that the output movie will be written as, when reading from image
+  // files 16BPP input data would automatically be converted to 24BPP before the data
+  // could be read, so this logic only needs to determine the setting for the check alpha
+  // logic.
+  
+  BOOL checkAlphaChannel;
+  int renderAtBpp;
+  
+  if (optionsPtr->bpp == -1) {
+    // No -bpp option given on the command line, detect either 24BPP or 32BPP depending
+    // on the pixel data read from the image frames.
+    
+    renderAtBpp = 24;
+    checkAlphaChannel = TRUE;
+  } else {
+    // When -bpp is explicitly set on the command line, checkAlphaChannel is always FALSE
+    checkAlphaChannel = FALSE;
+    
+    if (optionsPtr->bpp == 16) {
+      renderAtBpp = 16;
+    } else if (optionsPtr->bpp == 24) {
+      renderAtBpp = 24;
+    } else {
+      renderAtBpp = 32;
+    }
+  }
+  
+  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, framerateNum, [inFramePaths count]);
   
   // We now know the start and end integer values of the frame filename range.
   
@@ -1365,15 +1392,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
     
-    BOOL checkAlphaChannel = FALSE;
-    if (bppNum != 16) {
-      if (explicit24bpp == FALSE) {
-        // If "-bpp 24" was passed, do not scan for alpha pixels. Instead, explicitly composite
-        // over black to create a 24bpp movie from a 32bpp movie with an alpha channel.
-        checkAlphaChannel = TRUE;
-      }
-    }
-    process_frame_file(mvidWriter, framePath, NULL, frameIndex, bppNum, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
+    process_frame_file(mvidWriter, framePath, NULL, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
     frameIndex++;
   }
   
@@ -2765,8 +2784,6 @@ splitalpha(char *mvidFilenameCstr)
       
       CGImageRef frameImage = [rgbFrameBuffer createCGImageRef];
       
-      BOOL checkAlphaChannel = FALSE;
-      
       BOOL isKeyframe = FALSE;
       if (frameIndex == 0) {
         isKeyframe = TRUE;
@@ -2774,6 +2791,7 @@ splitalpha(char *mvidFilenameCstr)
       
       BOOL isSRGB = TRUE;
       
+      BOOL checkAlphaChannel = FALSE;
       process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe, isSRGB);
       
       if (frameImage) {
@@ -3298,7 +3316,7 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
     worked = (frameImage != nil);
     assert(worked);
     
-    BOOL checkAlphaChannel = FALSE;
+    BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
     
     BOOL isKeyframe = FALSE;
     if (frameIndex == 0) {
