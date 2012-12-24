@@ -765,6 +765,22 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   return;
 }
 
+- (void) rewriteOpaquePixels
+{
+  assert(self.isLockedByDataProvider == FALSE);
+  assert(self.bitsPerPixel == 24);
+  
+  uint32_t *pixelsPtr  = (uint32_t*) self.pixels;
+  
+  for (int i = 0; i < (self.width * self.height); i++) {
+    uint32_t value = pixelsPtr[i];
+    assert((value >> 24) == 0xFF || (value >> 24) == 0x0);
+    // Throw out alpha values
+    value = value & 0xFFFFFF;
+    pixelsPtr[i] = value;
+  }
+}
+
 @end
 
 // C callback invoked by core graphics when done with a buffer, this is tricky

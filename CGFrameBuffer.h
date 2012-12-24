@@ -116,4 +116,9 @@
                   cropX:(NSInteger)cropX
                   cropY:(NSInteger)cropY;
 
+// Optional opaque pixel writing logic to clear the alpha channel values when
+// pixels are known to be 24BPP only.
+
+- (void) rewriteOpaquePixels;
+
 @end

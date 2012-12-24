@@ -375,6 +375,15 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   assert(worked);
   
   CGImageRelease(imageRef);
+  
+  if (bppNum == 24 && (checkAlphaChannel == FALSE)) {
+    // In the case where we know that opaque 24 BPP pixels are going to be emitted,
+    // rewrite the pixels in the output buffer once the image has been rendered.
+    // CoreGraphics will write 0xFF as the alpha value even though we know the
+    // alpha value will be ignored due to the bitmap flags.
+    
+    [cgBuffer rewriteOpaquePixels];
+  }
     
   // Debug dump contents of framebuffer to a file
   
@@ -1370,15 +1379,20 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
     }
   }
   
-  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, framerateNum, [inFramePaths count]);
+  AVMvidFileWriter *mvidWriter;
+  int frameIndex;
+  
+  mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, framerateNum, [inFramePaths count]);
+  
+  fprintf(stdout, "writing %d frames to %s\n", [inFramePaths count], [[mvidFilename lastPathComponent] UTF8String]);
+  fflush(stdout);
   
   // We now know the start and end integer values of the frame filename range.
   
-  int frameIndex = 0;
-  
+  frameIndex = 0;
   for (NSString *framePath in inFramePaths) {
-    fprintf(stdout, "saved %s as frame %d\n", [framePath UTF8String], frameIndex+1);
-    fflush(stdout);
+    //fprintf(stdout, "saved %s as frame %d\n", [framePath UTF8String], frameIndex+1);
+    //fflush(stdout);
     
     BOOL isKeyframe = FALSE;
     if (frameIndex == 0) {
@@ -1401,6 +1415,48 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   [mvidWriter rewriteHeader];
   
   [mvidWriter close];
+  
+  // In the detect case where we wrote 32BPP pixels but found that all the pixel were actually opaque, it is actually
+  // better to rewrite the output file with 24BPP pixels. This reworking of the output is not needed if any
+  // non-opaque pixels were actually discovered while writing the first time.
+  
+  if (checkAlphaChannel && mvidWriter.bpp == 24) {
+    BOOL worked;
+    worked = [[NSFileManager defaultManager] removeItemAtPath:mvidFilename error:nil];
+    assert(worked);
+    
+    renderAtBpp = 24;
+    checkAlphaChannel = FALSE;
+    
+    mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, framerateNum, [inFramePaths count]);
+    
+    frameIndex = 0;
+    for (NSString *framePath in inFramePaths) {
+      //fprintf(stdout, "saved %s as frame %d\n", [framePath UTF8String], frameIndex+1);
+      //fflush(stdout);
+      
+      BOOL isKeyframe = FALSE;
+      if (frameIndex == 0) {
+        isKeyframe = TRUE;
+      }
+      if (keyframeNum == 0) {
+        // All frames are key frames
+        isKeyframe = TRUE;
+      } else if ((keyframeNum > 0) && ((frameIndex % keyframeNum) == 0)) {
+        // Keyframe every N frames
+        isKeyframe = TRUE;
+      }
+      
+      process_frame_file(mvidWriter, framePath, NULL, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
+      frameIndex++;
+    }
+    
+    // Done writing .mvid file
+    
+    [mvidWriter rewriteHeader];
+    
+    [mvidWriter close];
+  }
   
   fprintf(stdout, "done writing %d frames to %s\n", frameIndex, mvidFilenameCstr);
   fflush(stdout);

@@ -59,11 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "tmp/2x2_allcopy_24BPP_SRGB.mov"
+            argument = "2x2BlackBlue/2x2_black_blue_SRGB_F1.png"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "tmp/2x2_allcopy_24BPP_SRGB.mvid"
+            argument = "2x2BlackBlue/2x2_black_blue_24BPP.mvid"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-fps"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "1"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

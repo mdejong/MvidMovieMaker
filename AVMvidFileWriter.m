@@ -90,6 +90,7 @@ uint32_t maxvid_file_padding_after_keyframe(FILE *outFile, uint32_t offset) {
     fclose(maxvidOutFile);
     maxvidOutFile = NULL;
   }
+  isOpen = FALSE;
 }
 
 - (void) dealloc
