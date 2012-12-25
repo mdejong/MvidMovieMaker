@@ -618,18 +618,16 @@ BOOL fileExists(NSString *filePath) {
 // This logic will extract "frame durations" information from either the
 // media samples or the track data. Pass a non-NULL value into the
 // media argument or the track argument to indicate which you want
-// to extract from.
-
-// FIXME: there appears to be a problem with passing in startTime
-// and duration in the movie timescale when the media is defined
-// with antoehr timescale. But, currently the start time is always
-// zero so it seems to be ignored.
+// to extract from. Note that both the startTime and duration
+// values should have been converted to the time scale of the
+// track or media in question before this function is invoked.
 
 NSArray* lookupMediaOrTrackFrameDurations(
                                       Media firstTrackQuicktimeMedia,
                                       Track firstTrackQuicktimeTrack,
+                                      long  movieTimeScale,
                                       QTTime startTime,
-                                      QTTime duration)
+                                      QTTime entireDuration)
 {
   assert(firstTrackQuicktimeMedia || firstTrackQuicktimeTrack);
   if (firstTrackQuicktimeMedia) {
@@ -687,7 +685,7 @@ NSArray* lookupMediaOrTrackFrameDurations(
       
       [durations addObject:[NSNumber numberWithInt:(int)interestingDuration]];
       
-      currentTime = QTMakeTime(nextInteresting, duration.timeScale);
+      currentTime = QTMakeTime(nextInteresting, movieTimeScale);
       
       worked = QTGetTimeInterval(currentTime, &timeInterval);
       assert(worked);
@@ -712,7 +710,9 @@ NSArray* lookupMediaOrTrackFrameDurations(
     sumOfDurations += [duration intValue];
   }
 
-  int implicitFinalDuration = (int) (duration.timeValue - sumOfDurations);
+  // FIXME: movieDuration needs to be converted to media duration here if they do not match!
+  
+  int implicitFinalDuration = (int) (entireDuration.timeValue - sumOfDurations);
   
   if (implicitFinalDuration > 0) {
     [durations addObject:[NSNumber numberWithInt:(int)implicitFinalDuration]];
@@ -724,7 +724,7 @@ NSArray* lookupMediaOrTrackFrameDurations(
   // by creating a framerate that is exactly half of the duration in this case.
   
   if ([durations count] <= 1) {
-    int halfDuration = (int)duration.timeValue / (int)2;
+    int halfDuration = (int)entireDuration.timeValue / (int)2;
     NSNumber *halfDurationNum = [NSNumber numberWithInt:halfDuration];
     
     [durations addObject:halfDurationNum];
@@ -933,9 +933,12 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   // Query "interesting" track durations as defined by Quicktime. This is an array of display time durations
   // for specific frames. Note that there is an implicit frame duration at the end.
 
-  //QTTime startTimeInMediaTime = QTMakeTimeScaled(startTime, mediaTimeScale);
-  
-  NSArray *mediaDurations = lookupMediaOrTrackFrameDurations(firstTrackQuicktimeMedia, NULL, startTime, duration);
+  QTTime startTimeInMediaTime = QTMakeTimeScaled(startTime, mediaTimeScale);
+  QTTime durationInMediaTime = QTMakeTimeScaled(duration, mediaTimeScale);
+  NSArray *mediaDurations = lookupMediaOrTrackFrameDurations(firstTrackQuicktimeMedia, NULL,
+                                                             duration.timeScale,
+                                                             startTimeInMediaTime,
+                                                             durationInMediaTime);
   
   fprintf(stdout, "media durations count %d\n", [mediaDurations count]);
   fprintf(stdout, "media durations : %s\n", [[mediaDurations description] UTF8String]);
