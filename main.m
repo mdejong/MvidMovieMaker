@@ -911,7 +911,9 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     DisposeHandle((Handle)desc);
   }
   
-  fprintf(stdout, "extracting framerate from QT Movie\n");
+  if (optionsPtr->framerate == 0.0f) {
+    fprintf(stdout, "extracting framerate from QT Movie\n");
+  }
 
   // Note a tricky detail with the media is that it could have a different timescale than the movie.
   
@@ -922,7 +924,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   worked = QTGetTimeInterval(duration, &movieDurationInterval);
   assert(worked);
   
-  fprintf(stdout, "movie duration  : %d (%.4f)\n", (int)duration.timeValue, (float)movieDurationInterval);
+  fprintf(stdout, "movie duration  : %d\n", (int)duration.timeValue);
   fprintf(stdout, "movie timeScale : %d\n", (int)duration.timeScale);
   fprintf(stdout, "media timeScale : %d\n", (int)mediaTimeScale);
   //fprintf(stdout, "track timeScale : %d\n", [[firstTrack attributeForKey:QTTrackTimeScaleAttribute] intValue]);
@@ -1057,14 +1059,26 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   
   worked = QTGetTimeInterval(frameTime, &timeInterval);
   assert(worked);
+  
+  if (optionsPtr->framerate > 0.0f) {
+    // Ignore framerate detected from .mov and calculate the number of frames in terms
+    // of the explicit framerate passed in one the command line.
+    
+    timeInterval = optionsPtr->framerate;
+    
+    frameTime = QTMakeTimeWithTimeInterval(timeInterval);
+    
+    frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
+    
+    totalNumFrames = countNumQuicktimeFrames(startTime, frameTime, startEndRange);
+  }
+
 
   fprintf(stdout, "extracting %d frame(s) from QT Movie\n", totalNumFrames);
+  fprintf(stdout, "movie duration is %.4f second\n", (float)movieDurationInterval);
   fprintf(stdout, "frame duration is %.4f seconds\n", (float)timeInterval);
   fprintf(stdout, "approx fps %.4f\n", 1.0/(float)timeInterval);
-  fprintf(stdout, "movie duration is %.4f second\n", (float)movieDurationInterval);
   fprintf(stdout, "movie pixels at %dBPP\n", mvidBPP);
-  
-  fprintf(stdout, "movie duration  : %d\n", (int)duration.timeValue);
   
   // Determine the BPP that the output movie will be written as, this could differ from the
   // BPP of the input .mov in the case where as -bpp argument is passed on the command line
@@ -1130,13 +1144,14 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     } else {
       extractedFirstFrame = TRUE;
       
-      int width = CGImageGetWidth(frameImage);
-      int height = CGImageGetHeight(frameImage);
+      //int width = CGImageGetWidth(frameImage);
+      //int height = CGImageGetHeight(frameImage);
       // Note that this value will always be 32bpp for a rendered movie frame, we need to
       // actually scan the pixels composited here to figure out if the alpha channel is used.
-      int bpp = CGImageGetBitsPerPixel(frameImage);
+      //int bpp = CGImageGetBitsPerPixel(frameImage);
 
-      fprintf(stdout, "extracted frame %d at time %.4f, width x height : %d x %d at bpp %d\n", frameIndex+1, (float)timeInterval, width, height, bpp);
+      fprintf(stdout, "extracted frame %d at time %.4f\n", frameIndex+1, (float)timeInterval);
+      //fprintf(stdout, "extracted frame %d at time %.4f, width x height : %d x %d at bpp %d\n", frameIndex+1, (float)timeInterval, width, height, bpp);
       
       if (TRUE) {
         // Dump contents of image extracted from .mov to a file before rendering it and possibly changing the BPP and colorspace.
