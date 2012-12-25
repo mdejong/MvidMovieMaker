@@ -59,7 +59,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "2x2BlackBlue/2x2_black_blue_24BPP.mov"
+            argument = "-pixels"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument

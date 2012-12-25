@@ -75,6 +75,7 @@ char *usageArray =
 "or   : mvidmoviemaker -upgrade FILE.mvid" "\n"
 "or   : mvidmoviemaker -info movie.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
+"or   : mvidmoviemaker -pixels movie.mvid" "\n"
 "or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
@@ -3632,6 +3633,109 @@ void printMovFrameAdler(NSString *movFilename)
   }  
 }
 
+// This method will iterate over each frame, then each row and print the
+// pixel values as hex and decoded RGB values. This is useful when debugging
+// RGB conversion logic.
+
+void printMvidPixels(NSString *mvidPath)
+{
+	BOOL worked;
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  worked = [frameDecoder openForReading:mvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", [mvidPath UTF8String]);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+    
+    if (frameIndex == 0) {
+      fprintf(stdout, "File %s, %dBPP, %d FRAMES\n", [[mvidPath lastPathComponent] UTF8String], (int)cgFrameBuffer.bitsPerPixel, (int)numFrames);
+    }
+    
+    fprintf(stdout, "FRAME %d\n", frameIndex+1);
+    
+    // FIXME: if frame is a dup frame, print something here to indicate that.
+    
+    // Iterate over the pixel contents of the framebuffer
+    
+    int numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
+    
+    uint16_t *pixel16Ptr = (uint16_t*)cgFrameBuffer.pixels;
+    uint32_t *pixel32Ptr = (uint32_t*)cgFrameBuffer.pixels;
+    
+    int row = 0;
+    int column = 0;
+    for (int pixeli = 0; pixeli < numPixels; pixeli++) {
+      
+      if ((pixeli % cgFrameBuffer.width) == 0) {
+        // At the first pixel in a new row
+        column = 0;
+        
+        fprintf(stdout, "ROW %d\n", row);
+        row += 1;
+      }
+      
+      fprintf(stdout, "COLUMN %d: ", column);
+      column += 1;
+      
+      if (cgFrameBuffer.bitsPerPixel == 16) {
+        uint16_t pixel = *pixel16Ptr++;
+        
+#define CG_MAX_5_BITS 0x1F
+        
+        uint8_t red = (pixel >> 10) & CG_MAX_5_BITS;
+        uint8_t green = (pixel >> 5) & CG_MAX_5_BITS;
+        uint8_t blue = pixel & CG_MAX_5_BITS;
+        
+        fprintf(stdout, "HEX 0x%0.4X, RGB = (%d, %d, %d)\n", pixel, red, green, blue);        
+      } else if (cgFrameBuffer.bitsPerPixel == 24) {
+        uint32_t pixel = *pixel32Ptr++;
+        
+        uint8_t red = (pixel >> 16) & 0xFF;
+        uint8_t green = (pixel >> 8) & 0xFF;
+        uint8_t blue = pixel & 0xFF;
+        
+        fprintf(stdout, "HEX 0x%0.6X, RGB = (%d, %d, %d)\n", pixel, red, green, blue);
+      } else {
+        uint32_t pixel = *pixel32Ptr++;
+
+        uint8_t alpha = (pixel >> 24) & 0xFF;
+        uint8_t red = (pixel >> 16) & 0xFF;
+        uint8_t green = (pixel >> 8) & 0xFF;
+        uint8_t blue = pixel & 0xFF;
+        
+        fprintf(stdout, "HEX 0x%0.8X, RGBA = (%d, %d, %d, %d)\n", pixel, red, green, blue, alpha);
+      }
+    }
+    
+    fflush(stdout);
+    
+    [pool drain];
+  }
+  
+  [frameDecoder close];
+}
+
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
@@ -3686,6 +3790,20 @@ int main (int argc, const char * argv[]) {
       exit(0);
     } else {
       fprintf(stderr, "error: FILENAME must be a .mvid or .mov file : %s\n", firstFilenameCstr);
+      exit(1);
+    }
+	} else if ((argc == 3) && (strcmp(argv[1], "-pixels") == 0)) {
+    // mvidmoviemaker -pixels movie.mvid
+    
+    char *firstFilenameCstr = (char*)argv[2];
+    NSString *firstFilenameStr = [NSString stringWithUTF8String:firstFilenameCstr];
+    
+    if ([firstFilenameStr hasSuffix:@".mvid"])
+    {
+      printMvidPixels(firstFilenameStr);
+      exit(0);
+    } else {
+      fprintf(stderr, "error: FILENAME must be a .mvid file : %s\n", firstFilenameCstr);
       exit(1);
     }
 #if defined(TESTMODE)
