@@ -59,19 +59,15 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "Test/RedOcean/Exp_Frames/RedOcean_F1.jpg"
+            argument = "-upgrade"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Test/RedOcean/Exp_Frames/RedOcean_imp2.mvid"
+            argument = "upgrade_test.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "-fps"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "1"
+            argument = "upgrade_test_out.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -72,7 +72,7 @@ char *usageArray =
 "or   : mvidmoviemaker INFILE.mvid OUTFILE.mov ?OPTIONS?" "\n"
 "or   : mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?" "\n"
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
-"or   : mvidmoviemaker -upgrade FILE.mvid" "\n"
+"or   : mvidmoviemaker -upgrade FILE.mvid ?OUTFILE.mvid?" "\n"
 "or   : mvidmoviemaker -info movie.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
 "or   : mvidmoviemaker -pixels movie.mvid" "\n"
@@ -3425,10 +3425,10 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
 // file is replace by the tmp file once the operation is complete.
 
 void
-upgradeMvidMovie(char *inMvidFilenameCstr)
+upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
 {
 	NSString *inMvidPath = [NSString stringWithUTF8String:inMvidFilenameCstr];
-	NSString *outMvidPath = @"tmp.mvid";
+	NSString *outMvidPath;
   
   BOOL isMvid;
   
@@ -3438,7 +3438,24 @@ upgradeMvidMovie(char *inMvidFilenameCstr)
     fprintf(stderr, "%s", USAGE);
     exit(1);
   }
+  
+  BOOL writingToOptionalFile = FALSE;
+  
+  if (optionalMvidFilenameCstr != NULL) {
+    outMvidPath = [NSString stringWithUTF8String:optionalMvidFilenameCstr];
     
+    isMvid = [outMvidPath hasSuffix:@".mvid"];
+    
+    writingToOptionalFile = TRUE;
+  } else {
+    outMvidPath = @"tmp.mvid";
+  }
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
   // Read in existing file into from the input file and create an output file
   // that has exactly the same options.
   
@@ -3493,8 +3510,6 @@ upgradeMvidMovie(char *inMvidFilenameCstr)
     CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
     assert(cgFrameBuffer);
         
-    // Copy cropped area into the croppedFrameBuffer
-    
     BOOL worked;
     CGImageRef frameImage = nil;
         
@@ -3525,13 +3540,17 @@ upgradeMvidMovie(char *inMvidFilenameCstr)
 
   // tmp file is written now, remove the original (old) .mvid and replace it with the upgraded file.
   
-  worked = [[NSFileManager defaultManager] removeItemAtPath:inMvidPath error:nil];
-  assert(worked);
-
-  worked = [[NSFileManager defaultManager] moveItemAtPath:outMvidPath toPath:inMvidPath error:nil];
-  assert(worked);
-  
-  fprintf(stdout, "Wrote %s\n", [inMvidPath UTF8String]);
+  if (writingToOptionalFile == FALSE) {
+    worked = [[NSFileManager defaultManager] removeItemAtPath:inMvidPath error:nil];
+    assert(worked);
+    
+    worked = [[NSFileManager defaultManager] moveItemAtPath:outMvidPath toPath:inMvidPath error:nil];
+    assert(worked);
+    
+    fprintf(stdout, "Wrote %s\n", [inMvidPath UTF8String]);
+  } else {
+    fprintf(stdout, "Wrote %s\n", [outMvidPath UTF8String]);
+  }
   
   return;
 }
@@ -3767,12 +3786,16 @@ int main (int argc, const char * argv[]) {
     char *outMvidFilename = (char *)argv[4];
     
     cropMvidMovie(cropSpec, inMvidFilename, outMvidFilename);
-	} else if ((argc == 3) && (strcmp(argv[1], "-upgrade") == 0)) {
-    // mvidmoviemaker -upgrade MOVIE.mvid
+	} else if (((argc == 3) || (argc == 4)) && (strcmp(argv[1], "-upgrade") == 0)) {
+    // mvidmoviemaker -upgrade FILE.mvid ?OUTFILE.mvid?
     
     char *inMvidFilename = (char *)argv[2];
+    char *optionalMvidFilename = NULL;
+    if (argc == 4) {
+      optionalMvidFilename = (char *)argv[3];
+    }
     
-    upgradeMvidMovie(inMvidFilename);
+    upgradeMvidMovie(inMvidFilename, optionalMvidFilename);
 	} else if ((argc == 3) && (strcmp(argv[1], "-info") == 0)) {
     // mvidmoviemaker -info movie.mvid
     

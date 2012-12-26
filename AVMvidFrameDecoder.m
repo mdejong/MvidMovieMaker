@@ -148,8 +148,10 @@
 #if TARGET_OS_IPHONE
   // No-op
 #else
-  // MacOSX
-  if ([self isSRGB]) {
+  // Under iOS, device is always sRGB. Under MacOSX we must always explicitly treat input pixels as
+  // being defined in the sRGB colorspace.
+  
+  if (1) {
     CGColorSpaceRef colorSpace = NULL;
     colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     NSAssert(colorSpace, @"colorSpace");
