@@ -59,11 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "4x4_black_blue_24BPP_SRGB.mov"
+            argument = "Test/RedOcean/Exp_Frames/RedOcean_F1.jpg"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "4x4_black_blue_24BPP_SRGB_exp.mvid"
+            argument = "Test/RedOcean/Exp_Frames/RedOcean_imp2.mvid"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-fps"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "1"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

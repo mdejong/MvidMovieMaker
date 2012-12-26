@@ -3675,59 +3675,61 @@ void printMvidPixels(NSString *mvidPath)
       fprintf(stdout, "File %s, %dBPP, %d FRAMES\n", [[mvidPath lastPathComponent] UTF8String], (int)cgFrameBuffer.bitsPerPixel, (int)numFrames);
     }
     
-    fprintf(stdout, "FRAME %d\n", frameIndex+1);
-    
-    // FIXME: if frame is a dup frame, print something here to indicate that.
-    
-    // Iterate over the pixel contents of the framebuffer
-    
-    int numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
-    
-    uint16_t *pixel16Ptr = (uint16_t*)cgFrameBuffer.pixels;
-    uint32_t *pixel32Ptr = (uint32_t*)cgFrameBuffer.pixels;
-    
-    int row = 0;
-    int column = 0;
-    for (int pixeli = 0; pixeli < numPixels; pixeli++) {
+    if (frame.isDuplicate) {
+      fprintf(stdout, "FRAME %d (duplicate)\n", frameIndex+1);
+    } else {
+      fprintf(stdout, "FRAME %d\n", frameIndex+1);
       
-      if ((pixeli % cgFrameBuffer.width) == 0) {
-        // At the first pixel in a new row
-        column = 0;
+      // Iterate over the pixel contents of the framebuffer
+      
+      int numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
+      
+      uint16_t *pixel16Ptr = (uint16_t*)cgFrameBuffer.pixels;
+      uint32_t *pixel32Ptr = (uint32_t*)cgFrameBuffer.pixels;
+      
+      int row = 0;
+      int column = 0;
+      for (int pixeli = 0; pixeli < numPixels; pixeli++) {
         
-        fprintf(stdout, "ROW %d\n", row);
-        row += 1;
-      }
-      
-      fprintf(stdout, "COLUMN %d: ", column);
-      column += 1;
-      
-      if (cgFrameBuffer.bitsPerPixel == 16) {
-        uint16_t pixel = *pixel16Ptr++;
+        if ((pixeli % cgFrameBuffer.width) == 0) {
+          // At the first pixel in a new row
+          column = 0;
+          
+          fprintf(stdout, "ROW %d\n", row);
+          row += 1;
+        }
         
+        fprintf(stdout, "COLUMN %d: ", column);
+        column += 1;
+        
+        if (cgFrameBuffer.bitsPerPixel == 16) {
+          uint16_t pixel = *pixel16Ptr++;
+          
 #define CG_MAX_5_BITS 0x1F
-        
-        uint8_t red = (pixel >> 10) & CG_MAX_5_BITS;
-        uint8_t green = (pixel >> 5) & CG_MAX_5_BITS;
-        uint8_t blue = pixel & CG_MAX_5_BITS;
-        
-        fprintf(stdout, "HEX 0x%0.4X, RGB = (%d, %d, %d)\n", pixel, red, green, blue);        
-      } else if (cgFrameBuffer.bitsPerPixel == 24) {
-        uint32_t pixel = *pixel32Ptr++;
-        
-        uint8_t red = (pixel >> 16) & 0xFF;
-        uint8_t green = (pixel >> 8) & 0xFF;
-        uint8_t blue = pixel & 0xFF;
-        
-        fprintf(stdout, "HEX 0x%0.6X, RGB = (%d, %d, %d)\n", pixel, red, green, blue);
-      } else {
-        uint32_t pixel = *pixel32Ptr++;
-
-        uint8_t alpha = (pixel >> 24) & 0xFF;
-        uint8_t red = (pixel >> 16) & 0xFF;
-        uint8_t green = (pixel >> 8) & 0xFF;
-        uint8_t blue = pixel & 0xFF;
-        
-        fprintf(stdout, "HEX 0x%0.8X, RGBA = (%d, %d, %d, %d)\n", pixel, red, green, blue, alpha);
+          
+          uint8_t red = (pixel >> 10) & CG_MAX_5_BITS;
+          uint8_t green = (pixel >> 5) & CG_MAX_5_BITS;
+          uint8_t blue = pixel & CG_MAX_5_BITS;
+          
+          fprintf(stdout, "HEX 0x%0.4X, RGB = (%d, %d, %d)\n", pixel, red, green, blue);
+        } else if (cgFrameBuffer.bitsPerPixel == 24) {
+          uint32_t pixel = *pixel32Ptr++;
+          
+          uint8_t red = (pixel >> 16) & 0xFF;
+          uint8_t green = (pixel >> 8) & 0xFF;
+          uint8_t blue = pixel & 0xFF;
+          
+          fprintf(stdout, "HEX 0x%0.6X, RGB = (%d, %d, %d)\n", pixel, red, green, blue);
+        } else {
+          uint32_t pixel = *pixel32Ptr++;
+          
+          uint8_t alpha = (pixel >> 24) & 0xFF;
+          uint8_t red = (pixel >> 16) & 0xFF;
+          uint8_t green = (pixel >> 8) & 0xFF;
+          uint8_t blue = pixel & 0xFF;
+          
+          fprintf(stdout, "HEX 0x%0.8X, RGBA = (%d, %d, %d, %d)\n", pixel, red, green, blue, alpha);
+        }
       }
     }
     

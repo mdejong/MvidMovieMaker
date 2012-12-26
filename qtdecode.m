@@ -570,7 +570,17 @@ void decodeAnimation_setupMovFrameAtTime(QTMovie *movie, QTMedia *trackMedia, in
   // err will be kQTPropertyNotSupportedErr if the .mov does not contain an ICC profile.
   
   if (err == kQTPropertyNotSupportedErr) {
-    // No ICC profile, so just leave the render buffer colorspace as undefined
+    // No ICC profile in the .mov, default mov input to sRGB since that is the only common sense "default".
+    // Note that defaulting to "generic RGB" is not an option since that would involve a lossy generic -> sRGB
+    // conversion and the generic profile is defined as 1.8 gamma which would cause an unwanted shift.
+    
+    fprintf(stdout, "treating input pixels as sRGB since .mov does not define an ICC color profile\n");
+    
+    CGColorSpaceRef colorSpace = NULL;
+    colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    assert(colorSpace);
+    renderBuffer.colorspace = colorSpace;
+    CGColorSpaceRelease(colorSpace);
   } else if (err == noErr) {
     // Could be SRGB color profile, or might be another profile. We want to just grab
     // the profile and assign it to the framebuffer so that the next stage will detect
