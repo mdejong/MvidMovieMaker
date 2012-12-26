@@ -36,6 +36,7 @@
 
   BOOL  isOpen;
   BOOL  m_genAdler;
+  BOOL  m_isAllKeyframes;
 }
 
 @property (nonatomic, copy)   NSString      *mvidPath;
@@ -45,6 +46,11 @@
 @property (nonatomic, assign) BOOL          genAdler;
 @property (nonatomic, assign) uint32_t      bpp;
 @property (nonatomic, assign) CGSize        movieSize;
+
+// TRUE by default, if writeDeltaframe is invoked then this
+// property is set to FALSE.
+
+@property (nonatomic, assign) BOOL          isAllKeyframes;
 
 + (AVMvidFileWriter*) aVMvidFileWriter;
 
@@ -62,7 +68,9 @@
 
 - (void) skipToNextPageBound;
 
-// Write a self contained key frame
+// Write a self contained key frame. Note that the bufferSize argument
+// here should contain all the pixels and any zero pading in the case
+// of an odd number of pixels.
 
 - (BOOL) writeKeyframe:(char*)ptr bufferSize:(int)bufferSize;
 

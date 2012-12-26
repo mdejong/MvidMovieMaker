@@ -1564,7 +1564,7 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   } else {
     fprintf(stdout, "%s\n", "RGB");    
   }
-
+  
   fprintStdoutFixedWidth("Duration:");
   fprintf(stdout, "%.4fs\n", movieDuration);
 
@@ -1576,6 +1576,11 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
 
   fprintStdoutFixedWidth("Frames:");
   fprintf(stdout, "%d\n", numFrames);
+  
+  // If the "all keyframes" bit is set then print print TRUE for this element
+  
+  fprintStdoutFixedWidth("AllKeyFrames:");
+  fprintf(stdout, "%s\n", [frameDecoder isAllKeyframes] ? "TRUE" : "FALSE");
   
   [frameDecoder close];
 }
