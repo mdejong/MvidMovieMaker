@@ -1778,7 +1778,7 @@ maxvid_encode_generic_delta_pixels16(const uint16_t * restrict prevInputBuffer16
   
   if ([deltaPixels count] == 0) {
     return nil;
-  } else if ([deltaPixels count] == (width * height)) {
+  } else if ((emitKeyframeAnyway != NULL) && ([deltaPixels count] == (width * height))) {
     *emitKeyframeAnyway = TRUE;
     return nil;
   } else {
@@ -1817,7 +1817,7 @@ maxvid_encode_generic_delta_pixels32(const uint32_t * restrict prevInputBuffer32
   
   if ([deltaPixels count] == 0) {
     return nil;
-  } else if ([deltaPixels count] == (width * height)) {
+  } else if ((emitKeyframeAnyway != NULL) && ([deltaPixels count] == (width * height))) {
     *emitKeyframeAnyway = TRUE;
     return nil;
   } else {
