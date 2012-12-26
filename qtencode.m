@@ -564,14 +564,6 @@ void convertMvidToMov(
     fprintf(stderr, "%s\n", "converting MVID to MOV is not supported for an old MVID file version 0.");
     exit(1);
   }
-
-  // FIXME: it could be useful to allow RGB colorspace, would need to not mark output .mov with the
-  // SRGB colorspace.
-  
-  if ([frameDecoder isSRGB] == FALSE) {
-    fprintf(stderr, "%s\n", "converting MVID to MOV is only supported for MVID in sRGB colorspace");
-    exit(1);
-  }
   
   // Open up the .mov
   

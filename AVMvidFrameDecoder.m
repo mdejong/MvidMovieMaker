@@ -865,15 +865,4 @@
   }
 }
 
-// Return TRUE if RGB values are calibrated in the SRGB colorspace.
-
-- (BOOL) isSRGB
-{
-  if (maxvid_file_colorspace_is_srgb([self header])) {
-    return TRUE;
-  } else {
-    return FALSE;
-  }
-}
-
 @end

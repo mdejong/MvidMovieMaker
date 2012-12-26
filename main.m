@@ -368,8 +368,6 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     cgBuffer.colorspace = colorspace;
     CGColorSpaceRelease(colorspace);
-    
-    mvidWriter.isSRGB = TRUE;
   }
   
   BOOL worked = [cgBuffer renderCGImage:imageRef];
@@ -573,15 +571,11 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
     CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
     assert(cgFrameBuffer);
     
-    if (frameDecoder.isSRGB) {
-      // The frame decoder should have created the frame buffers using the sRGB colorspace.
-      
-      CGColorSpaceRef sRGBColorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-      assert(sRGBColorspace == cgFrameBuffer.colorspace);
-      CGColorSpaceRelease(sRGBColorspace);
-    } else {
-      assert(cgFrameBuffer.colorspace == NULL);      
-    }
+    // The frame decoder should have created the frame buffers using the sRGB colorspace.
+    
+    CGColorSpaceRef sRGBColorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    assert(sRGBColorspace == cgFrameBuffer.colorspace);
+    CGColorSpaceRelease(sRGBColorspace);
     
     NSData *pngData = [cgFrameBuffer formatAsPNG];
     assert(pngData);
@@ -1536,8 +1530,12 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   fprintStdoutFixedWidth("BitsPerPixel:");
   fprintf(stdout, "%d\n", bpp);
 
+  // Note that pixels stored in .mvid file are always in the sRGB colorspace.
+  // If any conversions are needed to convert from some other colorspace, they
+  // would need to have been executed when writing the .mvid file.
+  
   fprintStdoutFixedWidth("ColorSpace:");
-  if (frameDecoder.isSRGB) {
+  if (TRUE) {
     fprintf(stdout, "%s\n", "sRGB");
   } else {
     fprintf(stdout, "%s\n", "RGB");    
@@ -2811,12 +2809,7 @@ splitalpha(char *mvidFilenameCstr)
     fprintf(stderr, "%s\n", "-splitalpha on MVID is not supported for an old MVID file version 0.");
     exit(1);
   }
-  
-  if ([frameDecoder isSRGB] == FALSE) {
-    fprintf(stderr, "%s\n", "-splitalpha can only be used on MVID movie in the sRGB colorspace");
-    exit(1);
-  }
-  
+    
   fprintf(stdout, "Split %s RGB+A as %s and %s\n", [mvidFilename UTF8String], [rgbFilename UTF8String], [alphaFilename UTF8String]);
   
   // Writer that will write the RGB values
@@ -3057,11 +3050,6 @@ joinalpha(char *mvidFilenameCstr)
     exit(1);
   }
   
-  if ([frameDecoderRGB isSRGB] == FALSE) {
-    fprintf(stderr, "%s\n", "-joinalpha can only be used with a SRGB input MVID movie");
-    exit(1);
-  }
-
   worked = [frameDecoderAlpha openForReading:alphaPath];
   
   if (worked == FALSE) {
@@ -3069,11 +3057,6 @@ joinalpha(char *mvidFilenameCstr)
     exit(1);
   }
   
-  if ([frameDecoderAlpha isSRGB] == FALSE) {
-    fprintf(stderr, "%s\n", "-joinalpha can only be used with a SRGB input MVID movie");
-    exit(1);
-  }
-    
   [frameDecoderRGB allocateDecodeResources];
   [frameDecoderAlpha allocateDecodeResources];
   
@@ -3106,7 +3089,6 @@ joinalpha(char *mvidFilenameCstr)
   AVMvidFileWriter *fileWriter = makeMVidWriter(mvidPath, 32, frameRate, numFrames);
 
   fileWriter.movieSize = size;
-  fileWriter.isSRGB = TRUE;
   
   CGFrameBuffer *combinedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:32 width:width height:height];
   
@@ -3398,7 +3380,7 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
       isKeyframe = TRUE;
     }
     
-    BOOL isSRGB = [frameDecoder isSRGB];
+    BOOL isSRGB = TRUE;
     
     process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe, isSRGB);
     
