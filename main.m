@@ -703,12 +703,31 @@ NSArray* lookupMediaOrTrackFrameDurations(
   for (NSNumber *duration in durations) {
     sumOfDurations += [duration intValue];
   }
-
-  // FIXME: movieDuration needs to be converted to media duration here if they do not match!
+  
+  float averageDuration = 0.0f;
+  if (sumOfDurations > 0) {
+    averageDuration = ((float)sumOfDurations) / [durations count];
+  }
   
   int implicitFinalDuration = (int) (entireDuration.timeValue - sumOfDurations);
+
+  // Check for the special case where the implicit duration is smaller or larger
+  // than the average calculated from the durations, but that the difference is
+  // less than 25% of the average frame length. In the case where the length
+  // of the movie is not an exact multiple of the previously defined framerate,
+  // it is likely that the implicit frame duration could be a little smaller
+  // or a little larger than the actual framerate.
   
-  if (implicitFinalDuration > 0) {
+  BOOL finalDurationNearAverageFramerate = FALSE;
+  
+  float minNearDuration = (averageDuration * 0.75);
+  float maxNearDuration = (averageDuration * 1.25);
+  
+  if (((float)implicitFinalDuration >= minNearDuration) && ((float)implicitFinalDuration <= maxNearDuration)) {
+    finalDurationNearAverageFramerate = TRUE;
+  }
+  
+  if ((implicitFinalDuration > 0) && (finalDurationNearAverageFramerate == FALSE)) {
     [durations addObject:[NSNumber numberWithInt:(int)implicitFinalDuration]];
   }
 
@@ -958,9 +977,14 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     }
   }
 
-  //NSArray *trackDurations = lookupMediaOrTrackFrameDurations(NULL, firstTrackQuicktimeTrack, startTime, duration);
-  //fprintf(stdout, "track durations count %d\n", [trackDurations count]);
-  //fprintf(stdout, "track durations : %s\n", [[trackDurations description] UTF8String]);
+  /*
+  long trackTimeScale = [[firstTrack attributeForKey:QTTrackTimeScaleAttribute] intValue];
+  QTTime startTimeInTrackTime = QTMakeTimeScaled(startTime, trackTimeScale);
+  QTTime durationInTrackTime = QTMakeTimeScaled(duration, trackTimeScale);
+  NSArray *trackDurations = lookupMediaOrTrackFrameDurations(NULL, firstTrackQuicktimeTrack, duration.timeScale, startTimeInTrackTime, durationInTrackTime);
+  fprintf(stdout, "track durations count %d\n", [trackDurations count]);
+  fprintf(stdout, "track durations : %s\n", [[trackDurations description] UTF8String]);
+  */
   
   /*
   
@@ -3972,7 +3996,7 @@ int main (int argc, const char * argv[]) {
       
       encodeMvidFromMovMain(firstFilenameCstr, mvidFilenameCstr, &options);
       
-      if (TRUE) {
+      if (FALSE) {
         // Extract frames we just encoded into the .mvid file for debug purposes
         
         extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
@@ -3999,7 +4023,7 @@ int main (int argc, const char * argv[]) {
                                firstFilenameCstr,
                                &options);
       
-      if (TRUE) {
+      if (FALSE) {
         // Extract frames we just encoded into the .mvid file for debug purposes
         
         extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");

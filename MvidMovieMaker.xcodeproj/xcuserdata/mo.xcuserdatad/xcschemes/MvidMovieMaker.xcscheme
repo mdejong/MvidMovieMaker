@@ -59,15 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-upgrade"
+            argument = "Sweep15FPS_ANI.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "upgrade_test.mvid"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "upgrade_test_out.mvid"
+            argument = "Sweep15FPS.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
