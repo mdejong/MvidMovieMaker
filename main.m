@@ -3075,12 +3075,26 @@ joinalpha(char *mvidFilenameCstr)
   worked = [frameDecoderAlpha openForReading:alphaPath];
   
   if (worked == FALSE) {
-    fprintf(stderr, "error: cannot open RGB mvid filename \"%s\"\n", [alphaPath UTF8String]);
+    fprintf(stderr, "error: cannot open ALPHA mvid filename \"%s\"\n", [alphaPath UTF8String]);
     exit(1);
   }
   
   [frameDecoderRGB allocateDecodeResources];
   [frameDecoderAlpha allocateDecodeResources];
+  
+  int foundBPP;
+  
+  foundBPP = [frameDecoderRGB header]->bpp;
+  if (foundBPP != 24) {
+    fprintf(stderr, "error: RGB mvid file must be 24BPP, found %dBPP\n", foundBPP);
+    exit(1);
+  }
+
+  foundBPP = [frameDecoderAlpha header]->bpp;
+  if (foundBPP != 24) {
+    fprintf(stderr, "error: ALPHA mvid file must be 24BPP, found %dBPP\n", foundBPP);
+    exit(1);
+  }
   
   // Create output file writer object
   
@@ -3116,8 +3130,6 @@ joinalpha(char *mvidFilenameCstr)
   
   for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    
-    // FIXME: Each input frame should be 24 BPP
     
     AVFrame *frameRGB = [frameDecoderRGB advanceToFrame:frameIndex];
     assert(frameRGB);
