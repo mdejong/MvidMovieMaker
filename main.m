@@ -838,8 +838,6 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     exit(2);
   }
   
-  // FIXME: only descend into track looking for Animation codec if there is 1 video track
-  
   QTTrack *firstTrack = [tracks objectAtIndex:0];
   //Track firstTrackQuicktimeTrack = [firstTrack quickTimeTrack];
   QTMedia *firstTrackMedia = [firstTrack media];
@@ -879,7 +877,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       char c3 = (cType >> 8) & 0xFF;
       char c4 = (cType >> 0) & 0xFF;
       
-      fprintf(stderr, "The .mov must contain Animation codec video data, not '%c%c%c%c'\n", c1, c2, c3, c4);
+      fprintf(stderr, "The .mov must contain Animation codec video data, found '%c%c%c%c'\n", c1, c2, c3, c4);
       exit(2);
     }
     
