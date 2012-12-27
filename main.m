@@ -35,7 +35,6 @@ typedef struct
   float framerate;
   int   bpp;
   int   keyframe;
-  BOOL  sRGB;
 } MovieOptions;
 
 // ------------------------------------------------------------------------
@@ -86,7 +85,6 @@ char *usageArray =
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n"
 "-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n"
 "-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n"
-"-colorspace srgb|rgb : defaults to srgb, rgb indicates no colorspace mapping\n"
 ;
 
 #define USAGE (char*)usageArray
@@ -193,7 +191,11 @@ AVMvidFileWriter* makeMVidWriter(
 
 // This method is invoked with a path that contains the frame
 // data and the offset into the frame array that this specific
-// frame data is found at.
+// frame data is found at. This method will always write sRGB
+// pixels data. If the input image is in another colorspace,
+// then it will be converted to sRGB. If the RGB data is not
+// tagged with a specific colorspace (aka GenericRGB) then
+// it is assumed to be sRGB data.
 //
 // mvidWriter  : Output destination for MVID frame data.
 // filenameStr : Name of .png file that contains the frame data
@@ -202,7 +204,6 @@ AVMvidFileWriter* makeMVidWriter(
 // bppNum      : 16, 24, or 32 BPP
 // checkAlphaChannel : If bpp is 24 and this argument is TRUE, scan output pixels for non-opaque image.
 // isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
-// isSRGBColorspace : TRUE when writing pixels in the sRGB colorspace (the default), FALSE for device rgb.
 
 int process_frame_file(AVMvidFileWriter *mvidWriter,
                        NSString *filenameStr,
@@ -210,8 +211,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
                        int frameIndex,
                        int bppNum,
                        BOOL checkAlphaChannel,
-                       BOOL isKeyframe,
-                       BOOL isSRGBColorspace)
+                       BOOL isKeyframe)
 {
   // Push pool after creating global resources
 
@@ -227,20 +227,17 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   assert(imageRef);
   
   // General logic is to assume sRGB colorspace since that is what the iOS device assumes.
-  // If the user explicitly indicates -colorspace rgb then do no color convert the pixels.
-  // But in general, we want to convert all the pixels to sRGB for all bpp values.
   //
   // SRGB
   // https://gist.github.com/1130831
   // http://www.mailinglistarchive.com/html/quartz-dev@lists.apple.com/2010-04/msg00076.html
   // http://www.w3.org/Graphics/Color/sRGB.html (see alpha masking topic)
   //
-  // Render from input (RGB or whatever) into sRGB, this could involve conversions
+  // Render from input (if it has an ICC profile) into sRGB, this could involve conversions
   // but it makes the results portable and it basically better because it is still as
-  // lossless as possible given the constraints. Only output sRGB and only work with
-  // sRGB formatted data, perhaps a flag would be needed to reject images created by
-  // earlier versions that don't use sRGB directly.
-    
+  // lossless as possible given the constraints. We only deal with sRGB tagged data
+  // once this conversion is complete.
+  
   CGSize imageSize = CGSizeMake(CGImageGetWidth(imageRef), CGImageGetHeight(imageRef));
   int imageWidth = imageSize.width;
   int imageHeight = imageSize.height;
@@ -272,33 +269,16 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   
   CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:imageWidth height:imageHeight];
   
-  // Query the colorspace identified in the input PNG image
+  // Query the colorspace used in the input image. Note that if no ICC tag was used then we assume sRGB.
   
-  BOOL useSRGBColorspace = FALSE;
-    
   CGColorSpaceRef inputColorspace;
   inputColorspace = CGImageGetColorSpace(imageRef);
   // Should default to RGB if nothing is specified
   assert(inputColorspace);
   
   BOOL inputIsRGBColorspace = FALSE;
+  BOOL inputIsSRGBColorspace = FALSE;
   
-  /*
-  {
-    // CGColorSpaceCreateDeviceRGB();
-    
-    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
-    
-    NSString *colorspaceDescription = (NSString*) CGColorSpaceCopyName(colorspace);
-    NSString *inputColorspaceDescription = (NSString*) CGColorSpaceCopyName(inputColorspace);
-    
-    if ([colorspaceDescription isEqualToString:inputColorspaceDescription]) {
-      isRGBColorspace = TRUE;
-    }
-    
-    CGColorSpaceRelease(colorspace);
-  }
-  */
   {
     CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
     
@@ -314,7 +294,6 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     [inputColorspaceDescription release];
   }
 
-  BOOL inputIsSRGBColorspace = FALSE;
   {
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     
@@ -337,43 +316,60 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     assert(inputIsRGBColorspace == FALSE);
   }
   
-  // Output is either "device RGB" or "srgb"
+  // Output is always going to be "sRGB", so we have a couple of cases.
   //
-  // If input is in device RGB, and rgb is indicated, then keep device RGB.
-  // If input is in device RGB, default, SRGB
-  // If input is in sRGB, then use sRGB to avoid conversion
-
-  //cgBuffer.colorspace = inputColorspace;
+  // 1. Input is already in sRGB and output is in sRGB, easy
+  // 2. Input is in "GenericRGB" colorspace, so assign this same colorspace to the output
+  //    buffer so that no colorspace conversion is done in the render step.
+  // 3. If we do not detect sRGB or GenericRGB, then some other ICC profile is defined
+  //    and we can convert from that colorspace to sRGB.
   
-  // Always emit to sRGB colorspace unless the comamnd line options "-colorspace rgb" were passed.
-  // The only reason to use this option is to binary compare the results, since the iOS device will
-  // assume all input has already been mapped into the sRGB colorspace when reading pixel data.
+  BOOL outputSRGBColorspace = FALSE;
+  BOOL outputRGBColorspace = FALSE;
   
-//  if (bppNum == 24 || bppNum == 32) {
-//    useSRGBColorspace = TRUE;
-//  }
-//  if (inputIsSRGBColorspace) {
-//    useSRGBColorspace = TRUE;    
-//  }
-  
-  if (isSRGBColorspace) {
-    useSRGBColorspace = TRUE;
+  if (inputIsSRGBColorspace) {
+    outputSRGBColorspace = TRUE;
+  } else if (inputIsRGBColorspace) {
+    outputRGBColorspace = TRUE;
+  } else {
+    // input is not sRGB and it is not GenericRGB, so convert from this colorspace
+    // to the sRGB colorspace during the render operation.
+    outputSRGBColorspace = TRUE;
   }
   
   // Use sRGB colorspace when reading input pixels into format that will be written to
   // the .mvid file. This is needed when using a custom color space to avoid problems
   // related to storing the exact original input pixels.
   
-  if (useSRGBColorspace) {
+  if (outputSRGBColorspace) {
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     cgBuffer.colorspace = colorspace;
     CGColorSpaceRelease(colorspace);
+  } else if (outputRGBColorspace) {
+    // Weird case where input RGB image was automatically assigned the GenericRGB colorspace,
+    // use the same colorspace when rendering so that no colorspace conversion is done.
+    cgBuffer.colorspace = inputColorspace;
+    
+    if (frameIndex == 0 && filenameStr != nil) {
+      fprintf(stdout, "treating input pixels as sRGB since image does not define an ICC color profile\n");
+    }
+  } else {
+    assert(0);
   }
   
   BOOL worked = [cgBuffer renderCGImage:imageRef];
   assert(worked);
   
   CGImageRelease(imageRef);
+  
+  if (outputRGBColorspace) {
+    // Assign the sRGB colorspace to the framebuffer so that if we write an image
+    // file or use the framebuffer in the next loop, we know it is really sRGB.
+    
+    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    cgBuffer.colorspace = colorspace;
+    CGColorSpaceRelease(colorspace);
+  }
   
   if (bppNum == 24 && (checkAlphaChannel == FALSE)) {
     // In the case where we know that opaque 24 BPP pixels are going to be emitted,
@@ -503,10 +499,11 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     uint32_t *currentPixels = (uint32_t*)cgBuffer.pixels;
     int width = cgBuffer.width;
     int height = cgBuffer.height;
+    int numPixels = (width * height);
     
     BOOL allOpaque = TRUE;
     
-    for (int i=0; i < (width * height); i++) {
+    for (int i=0; i < numPixels; i++) {
       uint32_t currentPixel = currentPixels[i];
       // ABGR
       uint8_t alpha = (currentPixel >> 24) & 0xFF;
@@ -1186,7 +1183,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         isKeyframe = TRUE;
       }
       
-      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
+      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe);
       frameIndex++;
     }
     
@@ -1443,7 +1440,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(mvidWriter, framePath, NULL, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
+    process_frame_file(mvidWriter, framePath, NULL, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe);
     frameIndex++;
   }
   
@@ -1484,7 +1481,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
         isKeyframe = TRUE;
       }
       
-      process_frame_file(mvidWriter, framePath, NULL, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe, optionsPtr->sRGB);
+      process_frame_file(mvidWriter, framePath, NULL, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe);
       frameIndex++;
     }
     
@@ -2886,10 +2883,8 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      BOOL isSRGB = TRUE;
-      
       BOOL checkAlphaChannel = FALSE;
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe, isSRGB);
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -2979,9 +2974,7 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      BOOL isSRGB = TRUE;
-      
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe, isSRGB);
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -3233,9 +3226,7 @@ joinalpha(char *mvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    BOOL isSRGB = TRUE;
-    
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, 32, checkAlphaChannel, isKeyframe, isSRGB);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, 32, checkAlphaChannel, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3364,7 +3355,7 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
   }
   
   // Writer that will write the RGB values. Note that invoking process_frame_file()
-  // will define the SRGB and width/height on the output.
+  // will define the output width/height based on the size of the image passed in.
   
   AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
   
@@ -3409,9 +3400,7 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
       isKeyframe = TRUE;
     }
     
-    BOOL isSRGB = TRUE;
-    
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe, isSRGB);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3505,7 +3494,7 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
   //int height = [frameDecoder height];
   
   // Writer that will write the RGB values. Note that invoking process_frame_file()
-  // will define the SRGB property and width/height on the output.
+  // will define the width/height on the output.
   
   AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
   
@@ -3535,9 +3524,7 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    BOOL isSRGB = TRUE;
-    
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe, isSRGB);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3648,7 +3635,6 @@ void printMovFrameAdler(NSString *movFilename)
   //options.bpp = 32;
   options.bpp = -1;
   options.keyframe = 10000;
-  options.sRGB = TRUE;
   
   NSString *tmpFilename = @"_tmp.mvid";
   
@@ -3914,7 +3900,6 @@ int main (int argc, const char * argv[]) {
     options.framerate = 0.0f;
     options.bpp = -1;
     options.keyframe = 10000;
-    options.sRGB = TRUE;
     
     if ((argc > 3) && (((argc - 3) % 2) != 0)) {
       // Uneven number of options
@@ -3973,15 +3958,6 @@ int main (int argc, const char * argv[]) {
           }
           
           options.keyframe = keyframe;
-        } else if ([optionStr isEqualToString:@"-colorspace"]) {
-          if ([valueStr isEqualToString:@"rgb"]) {
-            options.sRGB = FALSE;
-          } else if ([valueStr isEqualToString:@"srgb"]) {
-            options.sRGB = TRUE;
-          } else {
-            fprintf(stderr, "error: -colorspace is invalid \"%s\"\n", valueCstr);
-            exit(1);
-          }
         } else {
           // Unmatched option
           
