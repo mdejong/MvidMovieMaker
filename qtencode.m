@@ -906,6 +906,7 @@ void convertMvidToMov(
    conversionFramebuffer.colorspace = colorSpace;
    CGColorSpaceRelease(colorSpace);
    
+   [conversionFramebuffer clear];
    [conversionFramebuffer renderCGImage:cgImage];
    CGImageRelease(cgImage);
    
@@ -1048,6 +1049,7 @@ void oldExport()
    conversionFramebuffer.colorspace = colorSpace;
    CGColorSpaceRelease(colorSpace);
    
+   [conversionFramebuffer clear];
    [conversionFramebuffer renderCGImage:cgImage];
    CGImageRelease(cgImage);
    

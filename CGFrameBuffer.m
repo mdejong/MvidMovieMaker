@@ -715,6 +715,13 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   self->m_colorspace = colorspace;
 }
 
+// Set all pixels to 0x0
+
+- (void) clear
+{
+  bzero(self.pixels, self.numBytes);
+}
+
 // Crop copy a rectangle out of a second framebuffer object.
 
 - (void) cropCopyPixels:(CGFrameBuffer*)anotherFrameBuffer
@@ -730,7 +737,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   // Critically important to zero out memory before doing a paint of
   // the other image data so that existing framebuffer is data is removed.
   
-  bzero(self.pixels, self.numBytes);
+  [self clear];
   
   // Create a CGImage from anotherFrameBuffer that contains just the pixels
   // indicated in the crop region. Then, render this image into the current

@@ -74,6 +74,7 @@ char *usageArray =
 "or   : mvidmoviemaker -upgrade FILE.mvid ?OUTFILE.mvid?" "\n"
 "or   : mvidmoviemaker -info movie.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
+"or   : mvidmoviemaker -alphamap FILE.mvid OUTFILE.mvid MAPSPEC" "\n"
 "or   : mvidmoviemaker -pixels movie.mvid" "\n"
 "or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
 #if defined(SPLITALPHA)
@@ -3767,6 +3768,245 @@ void printMvidPixels(NSString *mvidPath)
   [frameDecoder close];
 }
 
+// This method will "map" certain alpha values to a new value based on the input
+// specification. This operation is not so easy to implement with 3rd party
+// software though it is conceptually simple. This method would typically be used
+// to "clamp" alpha values near the opaque value to the actual opaque value.
+// For example, if a green screen video was processed in a non-optimal way, pixels
+// that really should have an alpha value of 255 (opaque) might have the values
+// 254, 253, or even 252. This method makes it easy to map these values below
+// the opaque value to the opaque value by passing "252,253,254=255" as
+// the map spec.
+
+void alphaMapMvid(NSString *inMvidPath,
+                  NSString *outMvidPath,
+                  NSString *mapSpecStr)
+{
+  BOOL isMvid;
+  
+  isMvid = [inMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  isMvid = [outMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  // Check the "MAPSPEC". The format is like so:
+  //
+  // 252=255
+  //
+  // NUM=VALUE
+  //
+  // 1 to N
+  //
+  // Could include multiple mappings
+  //
+  // 1=0,2=0,253=255,254=255
+  
+  NSMutableDictionary *mappings = [NSMutableDictionary dictionary];
+  
+  NSArray *elements = [mapSpecStr componentsSeparatedByString:@","];
+  
+  for (NSString *element in elements) {
+    NSArray *singleSpecElements = [element componentsSeparatedByString:@"="];
+    int count = [singleSpecElements count];
+    if (count != 2) {
+      fprintf(stderr, "MAPSPEC must contain 1 to N integer elements of the form IN=OUT, got \"%s\"\n", [element UTF8String]);
+      exit(1);
+    }
+    // Store the input mapping number and the output number it maps to
+    NSString *inNumStr = [singleSpecElements objectAtIndex:0];
+    NSString *outNumStr = [singleSpecElements objectAtIndex:1];
+    
+    NSInteger inInt;
+    NSInteger outInt;
+    
+    if ([inNumStr isEqualToString:@"0"]) {
+      inInt = 0;
+    } else {
+      inInt = [inNumStr integerValue];
+      if (inInt == 0) {
+        inInt = -1;
+      }
+    }
+    
+    if ([outNumStr isEqualToString:@"0"]) {
+      outInt = 0;
+    } else {
+      outInt = [outNumStr integerValue];
+      if (outInt == 0) {
+        outInt = -1;
+      }
+    }
+    
+    if (outInt < 0 || inInt < 0) {
+      fprintf(stderr, "MAPSPEC must contain 1 to N integer elements of the form IN=OUT, got \"%s\"\n", [element UTF8String]);
+      exit(1);
+    }
+
+    if (outInt > 255 || inInt > 255) {
+      fprintf(stderr, "MAPSPEC IN=OUT values must be in range 0->255, got \"%s\"\n", [element UTF8String]);
+      exit(1);
+    }
+    
+    NSNumber *inNum = [NSNumber numberWithInteger:inInt];
+    NSNumber *outNum = [NSNumber numberWithInteger:outInt];
+    
+    [mappings setObject:outNum forKey:inNum];
+  }
+
+  if ([mappings count] == 0) {
+    fprintf(stderr, "No MAPSPEC elements parsed\n");
+    exit(1);
+  }
+  
+  fprintf(stdout, "processing input file, will apply %d alpha channel mapping(s)\n", (int)[mappings count]);
+  
+  // Read in existing file into from the input file and create an output file
+  // that has exactly the same options.
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:inMvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open input mvid filename \"%s\"\n", [inMvidPath UTF8String]);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  if (bpp != 32) {
+    fprintf(stderr, "-alphamap can only be used on a 32BPP mvid file since an alpha channel is required\n");
+    exit(1);
+  }
+  
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
+    
+  // Writer that will write the RGB values. Note that invoking process_frame_file()
+  // will define the output width/height based on the size of the image passed in.
+  
+  AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
+  
+  CGFrameBuffer *mappedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
+  
+  uint32_t numPixelsModified = 0;
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+    
+    // sRGB support
+    
+    if (frameIndex == 0) {
+      mappedFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+    }
+    
+    // Copy image area into mappedFrameBuffer
+    
+    BOOL worked;
+    CGImageRef frameImage = nil;
+    
+    frameImage = [cgFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    [mappedFrameBuffer clear];
+    worked = [mappedFrameBuffer renderCGImage:frameImage];
+    assert(worked);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    // Do mapping logic by iterating over all the pixels in mappedFrameBuffer
+    // and then editing the pixels in place if needed.
+    
+    int numPixels = mappedFrameBuffer.width * mappedFrameBuffer.height;
+    
+    uint32_t *pixel32Ptr = (uint32_t*)mappedFrameBuffer.pixels;
+    
+    for (int pixeli = 0; pixeli < numPixels; pixeli++) {
+      uint32_t pixel = pixel32Ptr[pixeli];
+      
+      uint32_t alpha = (pixel >> 24) & 0xFF;
+      uint32_t red = (pixel >> 16) & 0xFF;
+      uint32_t green = (pixel >> 8) & 0xFF;
+      uint32_t blue = pixel & 0xFF;
+      
+      // Check to see if the alpha value appears in the map
+      
+      NSNumber *keyNum = [NSNumber numberWithInteger:(NSInteger)alpha];
+      NSNumber *valueNum = [mappings objectForKey:keyNum];
+      
+      if (valueNum != nil) {
+        // This value appears in the mapping, get the new alpha value, combine
+        // it with the existing RGB values and write the pixel back into the framebuffer.
+        
+        NSInteger mappedAlpha = [valueNum integerValue];
+        uint32_t mappedUnsigned = (uint32_t)mappedAlpha;
+        
+        pixel = (mappedUnsigned << 24) | (red << 16) | (green << 8) | blue;
+        
+        pixel32Ptr[pixeli] = pixel;
+        numPixelsModified += 1;
+      }
+    }
+    
+    // Now create a UIImage so that the result of this operation can be encoded into the output mvid
+    
+    frameImage = [mappedFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    [pool drain];
+  }
+  
+  [fileWriter rewriteHeader];
+  [fileWriter close];
+
+  fprintf(stdout, "Mapped %d pixels to new values\n", numPixelsModified);
+  fprintf(stdout, "Wrote %s\n", [fileWriter.mvidPath UTF8String]);
+  return;
+}
+
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
@@ -3827,6 +4067,18 @@ int main (int argc, const char * argv[]) {
       fprintf(stderr, "error: FILENAME must be a .mvid or .mov file : %s\n", firstFilenameCstr);
       exit(1);
     }
+	} else if ((argc == 5) && (strcmp(argv[1], "-alphamap") == 0)) {
+    // mvidmoviemaker -alphamap INPUT.mvid OUTPUT.mvid MAPSPEC
+    
+    char *firstFilenameCstr = (char*)argv[2];
+    NSString *firstFilenameStr = [NSString stringWithUTF8String:firstFilenameCstr];
+    
+    char *secondFilenameCstr = (char*)argv[3];
+    NSString *secondFilenameStr = [NSString stringWithUTF8String:secondFilenameCstr];
+
+    char *mapSpecCstr = (char*)argv[4];
+    NSString *mapSpecStr = [NSString stringWithUTF8String:mapSpecCstr];
+    alphaMapMvid(firstFilenameStr, secondFilenameStr, mapSpecStr);
 	} else if ((argc == 3) && (strcmp(argv[1], "-pixels") == 0)) {
     // mvidmoviemaker -pixels movie.mvid
     

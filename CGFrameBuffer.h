@@ -96,6 +96,10 @@
 
 - (NSData*) formatAsPNG;
 
+// Set all pixels to 0x0
+
+- (void) clear;
+
 // Copy data from another framebuffer into this one
 
 - (void) copyPixels:(CGFrameBuffer *)anotherFrameBuffer;

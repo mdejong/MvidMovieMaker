@@ -59,11 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "Sweep15FPS_ANI.mov"
+            argument = "-alphamap"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Sweep15FPS.mvid"
+            argument = "Explosion/ExplosionCroppedSplit/AlphaAdjustedMvid/ExplosionOrig.mvid"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "Explosion/ExplosionCroppedSplit/AlphaAdjustedMvid/ExplosionAdjusted.mvid"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "254=255,253=255,252=255"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

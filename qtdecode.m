@@ -207,7 +207,7 @@ static void TrackingDecodeCallback(
   assert(result == noErr);
   
   // Create an image provider using the data in the CVPixelBufferRef and then
-  // use that data to render into a pixel buffer with a know good format.
+  // use that data to render into a pixel buffer with a known good format.
   // This method operates assuming 32BPP.
   
   // FIXME: should we print "CVImageBufferGammaLevel" as 1.8 or 2.2 ? Might help user when debugging?
@@ -219,6 +219,7 @@ static void TrackingDecodeCallback(
   imageRef = createCGImageRefFromPixelBuffer(pixelBuffer);
   
   BOOL worked;
+  [renderBuffer clear];
   worked = [renderBuffer renderCGImage:imageRef];
   assert(worked);
 
@@ -687,6 +688,7 @@ CGImageRef decodeAnimation_getMovFrameAtTime(QTTime atTime)
     void *sampleBuffer = sampleData;
     uint32_t sampleBufferSize = sampleDataSize;
     
+    [renderBuffer clear];
     void *decodedFrameBuffer = renderBuffer.pixels;
     int bpp = renderBuffer.bitsPerPixel;
     int width = renderBuffer.width;
