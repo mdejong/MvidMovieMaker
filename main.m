@@ -1171,8 +1171,36 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       fprintf(stdout, "extracted frame %d at time %.4f\n", frameIndex+1, (float)timeInterval);
       //fprintf(stdout, "extracted frame %d at time %.4f, width x height : %d x %d at bpp %d\n", frameIndex+1, (float)timeInterval, width, height, bpp);
       
-      if (TRUE) {
+      if (FALSE) {
         // Dump contents of image extracted from .mov to a file before rendering it and possibly changing the BPP and colorspace.
+        
+        NSString *dumpFilename = [NSString stringWithFormat:@"DumpQTFrame%0.4d.png", frameIndex+1];
+        
+        // Render buffer as a PNG image
+        
+        NSMutableData *mData = [NSMutableData data];
+        
+        CFStringRef type = kUTTypePNG;
+        size_t count = 1;
+        CGImageDestinationRef dataDest;
+        dataDest = CGImageDestinationCreateWithData((CFMutableDataRef)mData,
+                                                    type,
+                                                    count,
+                                                    NULL);
+        assert(dataDest);
+        
+        CGImageRef imgRef = frameImage;
+        CGImageRetain(imgRef);
+        
+        CGImageDestinationAddImage(dataDest, imgRef, NULL);
+        CGImageDestinationFinalize(dataDest);
+        
+        CGImageRelease(imgRef);
+        CFRelease(dataDest);
+        
+        [mData writeToFile:dumpFilename atomically:NO];
+        
+        NSLog(@"wrote %@", dumpFilename);
       }
       
       // Write frame data to MVID
@@ -2906,7 +2934,7 @@ splitalpha(char *mvidFilenameCstr)
   // If alphaAsGrayscale is FASLE, then emit componenet RGB values that are able to make use of
   // threshold RGB values to further correct Alpha values when decoding.
   
-  const BOOL alphaAsGrayscale = FALSE;
+  const BOOL alphaAsGrayscale = TRUE;
   
   {
     CGFrameBuffer *alphaFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
@@ -3119,7 +3147,7 @@ joinalpha(char *mvidFilenameCstr)
   // If alphaAsGrayscale is FASLE, then emit componenet RGB values that are able to make use of
   // threshold RGB values to further correct Alpha values when decoding.
   
-  const BOOL alphaAsGrayscale = FALSE;
+  const BOOL alphaAsGrayscale = TRUE;
   
   AVMvidFileWriter *fileWriter = makeMVidWriter(mvidPath, 32, frameRate, numFrames);
 
@@ -3220,6 +3248,10 @@ joinalpha(char *mvidFilenameCstr)
       pixelRGB = pixelRGB & 0xFFFFFF;
       
       uint32_t combinedPixel = (pixelAlpha << 24) | pixelRGB;
+      
+      if (pixelAlpha == 0) {
+        combinedPixel = 0x0;
+      }
       
       combinedPixels[pixeli] = combinedPixel;
     }

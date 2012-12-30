@@ -682,13 +682,14 @@ CGImageRef decodeAnimation_getMovFrameAtTime(QTTime atTime)
   assert(err == noErr);
   
   // Decode Animation codec data using movdata module. Note that the colorspace could have been
-  // defined on the renderBuffer already as either SRGB or some other colorspace.
+  // defined on the renderBuffer already as either SRGB or some other colorspace. Also, we must
+  // not ever clear the render buffer since the input framebuffer to the rle decode methods
+  // must always contain the previous state of the framebuffer so that a delta can be applied.
   
   {
     void *sampleBuffer = sampleData;
     uint32_t sampleBufferSize = sampleDataSize;
     
-    [renderBuffer clear];
     void *decodedFrameBuffer = renderBuffer.pixels;
     int bpp = renderBuffer.bitsPerPixel;
     int width = renderBuffer.width;

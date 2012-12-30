@@ -401,6 +401,8 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
       }
       
       void *decodedFrameBuffer = malloc(decodedNumBytes);
+      uint16_t *decodedFrameBuffer16 = (uint16_t*)decodedFrameBuffer;
+      uint32_t *decodedFrameBuffer32 = (uint32_t*)decodedFrameBuffer;
       assert(decodedFrameBuffer);
       memset(decodedFrameBuffer, 0, decodedNumBytes);
       
@@ -432,6 +434,8 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
           uint16_t pixel = *inputBEFramebuffer16++;
           pixel = ntohs(pixel);
           convertedFrameBuffer16[i] = pixel;
+          
+          assert(convertedFrameBuffer16[i] == decodedFrameBuffer16[i]);
         }
       } else if (imageDescriptionBPP == 24) {
         for (int i = 0; i < numPixels; i++) {
@@ -450,6 +454,8 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
           
           uint32_t pixel = (alpha << 24) | (red << 16) | (green << 8) | blue;
           convertedFrameBuffer32[i] = pixel;
+          
+          assert(convertedFrameBuffer32[i] == decodedFrameBuffer32[i]);
         }
       } else if (imageDescriptionBPP == 32) {
         for (int i = 0; i < numPixels; i++) {
@@ -461,6 +467,8 @@ writeEncodedFrameToMovie(void *encodedFrameOutputRefCon,
           
           uint32_t pixel = (alpha << 24) | (red << 16) | (green << 8) | blue;
           convertedFrameBuffer32[i] = pixel;
+          
+          assert(convertedFrameBuffer32[i] == decodedFrameBuffer32[i]);
         }
       } else {
         assert(0);

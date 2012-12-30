@@ -59,19 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-alphamap"
+            argument = "Explosion/ExplosionCroppedSplit/ColorEncodingCompare/Recombine_30/ExplosionAdjusted.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/AlphaAdjustedMvid/ExplosionOrig.mvid"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/AlphaAdjustedMvid/ExplosionAdjusted.mvid"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "254=255,253=255,252=255"
+            argument = "Explosion/ExplosionCroppedSplit/ColorEncodingCompare/Recombine_30/ExplosionAdjusted.mov"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
