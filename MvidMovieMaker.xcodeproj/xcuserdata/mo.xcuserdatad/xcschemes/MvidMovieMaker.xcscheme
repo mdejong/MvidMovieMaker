@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/ColorEncodingCompare/Recombine_30/ExplosionAdjusted.mvid"
+            argument = "-joinalpha"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/ColorEncodingCompare/Recombine_30/ExplosionAdjusted.mov"
+            argument = "Unpremult/UnpremultRed.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

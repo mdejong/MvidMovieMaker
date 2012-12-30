@@ -2897,7 +2897,16 @@ splitalpha(char *mvidFilenameCstr)
       
       for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
         uint32_t pixel = pixels[pixeli];
-        uint32_t rgbPixel = pixel & 0xFFFFFF;
+        
+        // First reverse the premultiply logic so that the color of the pixel is disconnected from
+        // the specific alpha value it will be displayed with.
+        
+        uint32_t rgbPixel = unpremultiply_bgra(pixel);
+        
+        // Now toss out the alpha value entirely and emit the pixel by itself in 24BPP mode
+        
+        rgbPixel = rgbPixel & 0xFFFFFF;
+        
         rgbPixels[pixeli] = rgbPixel;
       }
       
@@ -3240,18 +3249,21 @@ joinalpha(char *mvidFilenameCstr)
           assert(pixelAlpha != 0xFF);
         }
       }
-    
-      // RGB componenets are 24 BPP premultiplied
+      
+      // RGB componenets are 24 BPP non pre multiplied values
       
       uint32_t pixelRGB = rgbPixels[pixeli];
       
       pixelRGB = pixelRGB & 0xFFFFFF;
       
+      // Create BGRA pixel that is not premultiplied
+      
       uint32_t combinedPixel = (pixelAlpha << 24) | pixelRGB;
       
-      if (pixelAlpha == 0) {
-        combinedPixel = 0x0;
-      }
+      // Now pre multiple the pixel values to ensure that alpha values
+      // are defined by the values in the alpha channel movie.
+      
+      combinedPixel = premultiply_bgra(combinedPixel);
       
       combinedPixels[pixeli] = combinedPixel;
     }
