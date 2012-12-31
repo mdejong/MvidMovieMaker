@@ -59,19 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-resize"
+            argument = "-rdelta"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "HALF"
+            argument = "Explosion/ExplosionCroppedSplit/rdiff/ExplosionAdjusted.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "ResizeRed/ResizedRed_2x.mvid"
+            argument = "Explosion/ExplosionCroppedSplit/rdiff/ExplosionAdjusted_compressed.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "ResizeRed/ResizedRed_DOUBLE_HALF.mvid"
+            argument = "Explosion/ExplosionCroppedSplit/rdiff/ExplosionAdjusted_rdelta.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

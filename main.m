@@ -37,6 +37,15 @@ typedef struct
   int   keyframe;
 } MovieOptions;
 
+// BGRA is iOS native pixel format, it is the most optimal format since
+// pixels need not be swapped when reading from a file format.
+
+static inline
+uint32_t rgba_to_bgra(uint32_t red, uint32_t green, uint32_t blue, uint32_t alpha)
+{
+  return (alpha << 24) | (red << 16) | (green << 8) | blue;
+}
+
 // ------------------------------------------------------------------------
 //
 // mvidmoviemaker
@@ -78,6 +87,7 @@ char *usageArray =
 "or   : mvidmoviemaker -pixels movie.mvid" "\n"
 "or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
 "or   : mvidmoviemaker -resize OPTIONS_RESIZE INFILE.mvid OUTFILE.mvid" "\n"
+"or   : mvidmoviemaker -rdelta INORIG.mvid INMOD.mvid OUTFILE.mvid" "\n"
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
@@ -1618,12 +1628,6 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
 // and then checking the results of a graphics render operation.
 
 #if defined(TESTMODE)
-
-static inline
-uint32_t rgba_to_bgra(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
-{
-  return (alpha << 24) | (red << 16) | (green << 8) | blue;
-}
 
 static inline
 NSString* bgra_to_string(uint32_t pixel) {
@@ -4268,6 +4272,238 @@ void alphaMapMvid(NSString *inMvidPath,
   return;
 }
 
+// Execute rdelta, this is basically a diff of an original (uncompressed) as compared
+// to a compressed representation. The compressed implementation uses much less space
+// than the original, but how much compression is too much? This logic attempts to
+// visually show which pixels have been changed by the compression. The pixels written
+// to the output mvid are the same ones in the inModifiedMvidPath argument, except that
+// diffs as compared to inOriginalMvidPath will be displayed with a 50% red overlay.
+
+void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
+                     char *inModifiedMvidPathCstr,
+                     char *outMvidPathCstr)
+{
+  BOOL isMvid;
+  
+  NSString *inOriginalMvidPath = [NSString stringWithUTF8String:inOriginalMvidPathCstr];
+  NSString *inModifiedMvidPath = [NSString stringWithUTF8String:inModifiedMvidPathCstr];
+  NSString *outMvidPath = [NSString stringWithUTF8String:outMvidPathCstr];
+  
+  isMvid = [inOriginalMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  isMvid = [inModifiedMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+
+  isMvid = [outMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+    
+  // Read in existing original and compressed files
+  
+  AVMvidFrameDecoder *frameDecoderOriginal = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  AVMvidFrameDecoder *frameDecoderCompressed = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked;
+  worked = [frameDecoderOriginal openForReading:inOriginalMvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open input mvid filename \"%s\"\n", inOriginalMvidPathCstr);
+    exit(1);
+  }
+  
+  worked = [frameDecoderCompressed openForReading:inModifiedMvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open input mvid filename \"%s\"\n", inModifiedMvidPathCstr);
+    exit(1);
+  }
+  
+  worked = [frameDecoderOriginal allocateDecodeResources];
+  assert(worked);
+
+  worked = [frameDecoderCompressed allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoderOriginal numFrames];
+  assert(numFrames > 0);
+  
+  NSUInteger compressedNumFrames = [frameDecoderCompressed numFrames];
+  if (numFrames != compressedNumFrames) {
+    fprintf(stderr, "rdelta failed: original mvid contains %d frames while compressed mvid contains %d frames\n", numFrames, compressedNumFrames);
+    exit(1);    
+  }
+  
+  float frameDuration = [frameDecoderOriginal frameDuration];
+  float compressedFrameDuration = [frameDecoderCompressed frameDuration];
+  
+  if (frameDuration != compressedFrameDuration) {
+    fprintf(stderr, "rdelta failed: original mvid framerate %.4f while compressed framerate is %.4f\n", frameDuration, compressedFrameDuration);
+    exit(1);
+  }
+  
+  int bpp = [frameDecoderOriginal header]->bpp;
+  int compressedBpp = [frameDecoderCompressed header]->bpp;
+  
+  if (bpp != compressedBpp) {
+    fprintf(stderr, "rdelta failed: original mvid bpp %d while compressed bpp is %d\n", bpp, compressedBpp);
+    exit(1);
+  }
+  
+  int width = [frameDecoderOriginal width];
+  int height = [frameDecoderOriginal height];
+  
+  int compressedWidth = [frameDecoderCompressed width];
+  int compressedHeight = [frameDecoderCompressed height];
+  
+  if ((compressedWidth != width) || (compressedHeight != height)) {
+    fprintf(stderr, "rdelta failed: original mvid width x height %d x %d while compressed mvid width x height %d x %d\n", width, height, compressedWidth, compressedHeight);
+    exit(1);
+  }
+  
+  // Writer that will write the RGB values. Note that invoking process_frame_file()
+  // will define the output width/height based on the size of the image passed in.
+  
+  AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
+  
+  CGFrameBuffer *outFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
+  CGFrameBuffer *redFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:32 width:width height:height];
+  
+  uint32_t numPixelsModified = 0;
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *originalFrame = [frameDecoderOriginal advanceToFrame:frameIndex];
+    assert(originalFrame);
+
+    AVFrame *compressedFrame = [frameDecoderCompressed advanceToFrame:frameIndex];
+    assert(compressedFrame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    originalFrame.image = nil;
+    compressedFrame.image = nil;
+    
+    CGFrameBuffer *originalCgFrameBuffer = originalFrame.cgFrameBuffer;
+    assert(originalCgFrameBuffer);
+
+    CGFrameBuffer *compressedCgFrameBuffer = compressedFrame.cgFrameBuffer;
+    assert(originalCgFrameBuffer);
+    
+    // sRGB support
+    
+    if (frameIndex == 0) {
+      outFrameBuffer.colorspace = compressedCgFrameBuffer.colorspace;
+      redFrameBuffer.colorspace = compressedCgFrameBuffer.colorspace;
+    }
+    
+    // Copy compressed image data into the output framebuffer
+    
+    BOOL worked;
+    CGImageRef frameImage = nil;
+    
+    frameImage = [compressedCgFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    [outFrameBuffer clear];
+    worked = [outFrameBuffer renderCGImage:frameImage];
+    assert(worked);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    // Now iterate over the original and diff pixels and write any diffs to the redFrameBuffer
+    
+    [redFrameBuffer clear];
+    
+    int numPixels = width * height;
+    
+    // FIXME: impl for 16 bpp
+    assert(originalCgFrameBuffer.bitsPerPixel != 16);
+    
+    uint32_t *originalCgFrameBuffer32Ptr = (uint32_t*)originalCgFrameBuffer.pixels;
+    uint32_t *compressedCgFrameBuffer32Ptr = (uint32_t*)compressedCgFrameBuffer.pixels;
+    uint32_t *redCgFrameBuffer32Ptr = (uint32_t*)redFrameBuffer.pixels;
+    
+    for (int pixeli = 0; pixeli < numPixels; pixeli++) {
+      uint32_t originalPixel = originalCgFrameBuffer32Ptr[pixeli];
+      uint32_t compressedPixel = compressedCgFrameBuffer32Ptr[pixeli];
+      
+      /*
+      uint32_t original_alpha = (originalPixel >> 24) & 0xFF;
+      uint32_t original_red = (originalPixel >> 16) & 0xFF;
+      uint32_t original_green = (originalPixel >> 8) & 0xFF;
+      uint32_t original_blue = originalPixel & 0xFF;
+      
+      uint32_t compressed_alpha = (compressedPixel >> 24) & 0xFF;
+      uint32_t compressed_red = (compressedPixel >> 16) & 0xFF;
+      uint32_t compressed_green = (compressedPixel >> 8) & 0xFF;
+      uint32_t compressed_blue = compressedPixel & 0xFF;
+       */
+      
+      if (originalPixel != compressedPixel) {
+        uint32_t redPixel = rgba_to_bgra(0xFF/2, 0, 0, 0xFF/2);
+        redCgFrameBuffer32Ptr[pixeli] = redPixel;
+        numPixelsModified++;
+      }
+    }
+    
+    // Render red pixels over compressed pixels in outFrameBuffer (matte)
+    
+    frameImage = [redFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    worked = [outFrameBuffer renderCGImage:frameImage];
+    assert(worked);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    // Now create a UIImage so that the result of this operation can be encoded into the output mvid
+    
+    frameImage = [outFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    [pool drain];
+  }
+  
+  [fileWriter rewriteHeader];
+  [fileWriter close];
+  
+  fprintf(stdout, "Found %d modified pixels\n", numPixelsModified);
+  fprintf(stdout, "Wrote %s\n", [fileWriter.mvidPath UTF8String]);
+  return;
+}
+
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
@@ -4302,6 +4538,14 @@ int main (int argc, const char * argv[]) {
     char *outMvidFilename = (char *)argv[4];
     
     resizeMvidMovie(resizeSpec, inMvidFilename, outMvidFilename);
+	} else if ((argc == 5) && (strcmp(argv[1], "-rdelta") == 0)) {
+    // mvidmoviemaker -rdelta INORIG.mvid INMOD.mvid OUTFILE.mvid
+    
+    char *inOriginalMvidFilename = (char *)argv[2];
+    char *inModifiedMvidFilename = (char *)argv[3];
+    char *outMvidFilename = (char *)argv[4];
+    
+    rdeltaMvidMovie(inOriginalMvidFilename, inModifiedMvidFilename, outMvidFilename);
 	} else if (((argc == 3) || (argc == 4)) && (strcmp(argv[1], "-upgrade") == 0)) {
     // mvidmoviemaker -upgrade FILE.mvid ?OUTFILE.mvid?
     
