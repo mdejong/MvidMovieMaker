@@ -59,19 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-rdelta"
+            argument = "30_media_1000_movie/Small_30FPS_1000Movie.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/rdiff/ExplosionAdjusted.mvid"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/rdiff/ExplosionAdjusted_compressed.mvid"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "Explosion/ExplosionCroppedSplit/rdiff/ExplosionAdjusted_rdelta.mvid"
+            argument = "30_media_1000_movie/Small_30FPS_1000Movie.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

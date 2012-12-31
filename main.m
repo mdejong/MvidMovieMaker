@@ -828,7 +828,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   QTTime duration;
   QTTime startTime;
   QTTime currentTime;
-  QTTime frameTime;
+  QTTime frameTimeInMediaTime;
   CGImageRef frameImage;
   //int frameNum = 1;
   NSTimeInterval timeInterval;
@@ -846,8 +846,6 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   duration = [[movie attributeForKey:QTMovieDurationAttribute] QTTimeValue];
   startTime = QTMakeTime(0, duration.timeScale);
   
-  QTTimeRange startEndRange = QTMakeTimeRange(startTime, duration);
-  
   NSArray *tracks = [movie tracksOfMediaType:QTMediaTypeVideo];
   if ([tracks count] == 0) {
     fprintf(stderr, "Could not find any video tracks in movie file %s\n", movFilenameCstr);
@@ -855,7 +853,6 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   }
   
   QTTrack *firstTrack = [tracks objectAtIndex:0];
-  //Track firstTrackQuicktimeTrack = [firstTrack quickTimeTrack];
   QTMedia *firstTrackMedia = [firstTrack media];
   Media firstTrackQuicktimeMedia = [firstTrackMedia quickTimeMedia];
   assert(firstTrackQuicktimeMedia);
@@ -949,6 +946,9 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   worked = QTGetTimeInterval(duration, &movieDurationInterval);
   assert(worked);
   
+  // Note that frame duration calculations are done in terms of media time, since converting to movie
+  // time will result in rounding errors in certain cases like movies emitted by ffmpeg.
+  
   fprintf(stdout, "movie duration  : %d\n", (int)duration.timeValue);
   fprintf(stdout, "movie timeScale : %d\n", (int)duration.timeScale);
   fprintf(stdout, "media timeScale : %d\n", (int)mediaTimeScale);
@@ -959,6 +959,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
 
   QTTime startTimeInMediaTime = QTMakeTimeScaled(startTime, mediaTimeScale);
   QTTime durationInMediaTime = QTMakeTimeScaled(duration, mediaTimeScale);
+  QTTimeRange startEndRangeInMediaTime = QTMakeTimeRange(startTimeInMediaTime, durationInMediaTime);
+  
   NSArray *mediaDurations = lookupMediaOrTrackFrameDurations(firstTrackQuicktimeMedia, NULL,
                                                              duration.timeScale,
                                                              startTimeInMediaTime,
@@ -987,61 +989,25 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       smallestDuration = currentDuration;
     }
   }
-
-  /*
-  long trackTimeScale = [[firstTrack attributeForKey:QTTrackTimeScaleAttribute] intValue];
-  QTTime startTimeInTrackTime = QTMakeTimeScaled(startTime, trackTimeScale);
-  QTTime durationInTrackTime = QTMakeTimeScaled(duration, trackTimeScale);
-  NSArray *trackDurations = lookupMediaOrTrackFrameDurations(NULL, firstTrackQuicktimeTrack, duration.timeScale, startTimeInTrackTime, durationInTrackTime);
-  fprintf(stdout, "track durations count %d\n", [trackDurations count]);
-  fprintf(stdout, "track durations : %s\n", [[trackDurations description] UTF8String]);
-  */
-  
-  /*
-  
-   // This attempted workaround would query interesting track times, but this was
-   // not actually needed afterall since discovering that the media time and the
-   // movie time were not the same.
-   
-  if (allSame && firstDuration == 1) {
-    // Media frame durations do not match real world clock.
-
-    NSArray *trackDurations = lookupMediaOrTrackFrameDurations(NULL, firstTrackQuicktimeTrack, startTime, duration);
-
-    //fprintf(stdout, "track durations count %d\n", [trackDurations count]);
-    //fprintf(stdout, "track durations : %s\n", [[trackDurations description] UTF8String]);
-
-    firstDuration = [[trackDurations objectAtIndex:0] intValue];
-    allSame = TRUE;
-    smallestDuration = firstDuration;
-    for (NSNumber *durationNumber in trackDurations) {
-      int currentDuration = [durationNumber intValue];
-      if (currentDuration != firstDuration) {
-        allSame = FALSE;
-      }
-      if (currentDuration < smallestDuration) {
-        smallestDuration = currentDuration;
-      }
-    }
-  }
-   
-  */
   
   if (allSame) {
-    frameTime = QTMakeTime(firstDuration, mediaTimeScale);
+    frameTimeInMediaTime = QTMakeTime(firstDuration, mediaTimeScale);
   } else {
     // In the case where frame durations are different lengths, pick the smallest one.
-    frameTime = QTMakeTime(smallestDuration, mediaTimeScale);
+    frameTimeInMediaTime = QTMakeTime(smallestDuration, mediaTimeScale);
   }
   
-  if (mediaTimeScale != duration.timeScale) {
-    frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
-  }
+  // Calculations of start/end time are always handled in terms of "media" time. Any
+  // movie times are converted to nearest media time.
+  
+  //if (mediaTimeScale != duration.timeScale) {
+  //  frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
+  //}
 
   // Calculate the number of frames that will fit into the start/end
   // range with the detected framerate.
   
-  int detectedNumFrames = countNumQuicktimeFrames(startTime, frameTime, startEndRange);
+  int detectedNumFrames = countNumQuicktimeFrames(startTimeInMediaTime, frameTimeInMediaTime, startEndRangeInMediaTime);
   
   // It is possible that the detected framerate is vastly different than the
   // framerate in the case where an encoder emits the first frame with a very
@@ -1075,13 +1041,13 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       }
     }
     
-    frameTime = QTMakeTime(nextSmallestDuration, mediaTimeScale);
+    frameTimeInMediaTime = QTMakeTime(nextSmallestDuration, mediaTimeScale);
     
-    if (mediaTimeScale != duration.timeScale) {
-      frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
-    }
+    //if (mediaTimeScale != duration.timeScale) {
+    //  frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
+    //}
     
-    detectedNumFrames = countNumQuicktimeFrames(startTime, frameTime, startEndRange);
+    detectedNumFrames = countNumQuicktimeFrames(startTimeInMediaTime, frameTimeInMediaTime, startEndRangeInMediaTime);
   }
 
   int totalNumFrames = detectedNumFrames;
@@ -1090,7 +1056,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   // display at the indicated framerate.
   // Calculate framerate in terms of clock time
   
-  worked = QTGetTimeInterval(frameTime, &timeInterval);
+  worked = QTGetTimeInterval(frameTimeInMediaTime, &timeInterval);
   assert(worked);
   
   if (optionsPtr->framerate > 0.0f) {
@@ -1099,13 +1065,13 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     timeInterval = optionsPtr->framerate;
     
-    frameTime = QTMakeTimeWithTimeInterval(timeInterval);
+    frameTimeInMediaTime = QTMakeTimeWithTimeInterval(timeInterval);
     
-    frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
+    //frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
+    frameTimeInMediaTime = QTMakeTimeScaled(frameTimeInMediaTime, mediaTimeScale);
     
-    totalNumFrames = countNumQuicktimeFrames(startTime, frameTime, startEndRange);
+    totalNumFrames = countNumQuicktimeFrames(startTimeInMediaTime, frameTimeInMediaTime, startEndRangeInMediaTime);
   }
-
 
   fprintf(stdout, "extracting %d frame(s) from QT Movie\n", totalNumFrames);
   fprintf(stdout, "movie duration is %.4f second\n", (float)movieDurationInterval);
@@ -1235,11 +1201,11 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     // actually lead to round off error when converted to wall clock? Would the
     // emitted file get out of sync if the file was long enough?
     
-    currentTime = QTTimeIncrement(currentTime, frameTime);
+    currentTime = QTTimeIncrement(currentTime, frameTimeInMediaTime);
     
     // Done once at the end of the movie
     
-    if (!QTTimeInTimeRange(currentTime, startEndRange)) {
+    if (!QTTimeInTimeRange(currentTime, startEndRangeInMediaTime)) {
       done = TRUE;
     }
     
