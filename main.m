@@ -77,6 +77,7 @@ char *usageArray =
 "or   : mvidmoviemaker -alphamap FILE.mvid OUTFILE.mvid MAPSPEC" "\n"
 "or   : mvidmoviemaker -pixels movie.mvid" "\n"
 "or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
+"or   : mvidmoviemaker -resize \"WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
@@ -3467,7 +3468,149 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
   [fileWriter rewriteHeader];
   [fileWriter close];
   
-  NSLog(@"Wrote %@", fileWriter.mvidPath);
+  fprintf(stdout, "Wrote: %s\n", [fileWriter.mvidPath UTF8String]);
+  return;
+}
+
+// This -resize option provides a very handy command line operation that is able to resize
+// a movie and write the result to a new file. Any width and height could be set as the
+// output dimensions.
+
+void
+resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenameCstr)
+{
+  NSString *inMvidPath = [NSString stringWithUTF8String:inMvidFilenameCstr];
+  NSString *outMvidPath = [NSString stringWithUTF8String:outMvidFilenameCstr];
+  
+  BOOL isMvid;
+  
+  isMvid = [inMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  isMvid = [outMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  // Check the RESIZE spec, it should be 2 integer values that indicate the W H
+  // for the output movie.
+  
+	NSString *resizeSpec = [NSString stringWithUTF8String:resizeSpecCstr];
+  NSArray *elements  = [resizeSpec componentsSeparatedByString:@" "];
+  
+  if ([elements count] != 2) {
+    fprintf(stderr, "RESIZE specification must be WIDTH HEIGHT : not %s\n", resizeSpecCstr);
+    exit(1);
+  }
+  
+  NSInteger resizeW = [((NSString*)[elements objectAtIndex:0]) intValue];
+  NSInteger resizeH = [((NSString*)[elements objectAtIndex:1]) intValue];
+
+  if (resizeW <= 0 || resizeH <= 0) {
+    fprintf(stderr, "RESIZE specification must be WIDTH HEIGHT : not %s\n", resizeSpecCstr);
+    exit(1);
+  }
+  
+  // Read in existing file into from the input file and create an output file
+  // that has exactly the same options.
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:inMvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open input mvid filename \"%s\"\n", [inMvidPath UTF8String]);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
+  assert(width > 0);
+  assert(height > 0);
+    
+  // Writer that will write the RGB values. Note that invoking process_frame_file()
+  // will define the output width/height based on the size of the image passed in.
+  
+  AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
+  
+  CGFrameBuffer *resizedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:resizeW height:resizeH];
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+    
+    // sRGB support
+    
+    if (frameIndex == 0) {
+      resizedFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+    }
+    
+    // Copy cropped area into the croppedFrameBuffer
+    
+    BOOL worked;
+    CGImageRef frameImage = nil;
+    
+    // Clear existing framebuffer before doing new paste
+    
+    frameImage = [cgFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    [resizedFrameBuffer clear];
+    [resizedFrameBuffer renderCGImage:frameImage];
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    frameImage = [resizedFrameBuffer createCGImageRef];
+    worked = (frameImage != nil);
+    assert(worked);
+    
+    BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    [pool drain];
+  }
+  
+  [fileWriter rewriteHeader];
+  [fileWriter close];
+  
+  fprintf(stdout, "Wrote: %s\n", [fileWriter.mvidPath UTF8String]);
   return;
 }
 
@@ -4077,6 +4220,14 @@ int main (int argc, const char * argv[]) {
     char *outMvidFilename = (char *)argv[4];
     
     cropMvidMovie(cropSpec, inMvidFilename, outMvidFilename);
+	} else if ((argc == 5) && (strcmp(argv[1], "-resize") == 0)) {
+    // mvidmoviemaker -resize "WIDTH HEIGHT" INMOVIE.mvid OUTMOVIE.mvid
+    
+    char *resizeSpec = (char *)argv[2];
+    char *inMvidFilename = (char *)argv[3];
+    char *outMvidFilename = (char *)argv[4];
+    
+    resizeMvidMovie(resizeSpec, inMvidFilename, outMvidFilename);
 	} else if (((argc == 3) || (argc == 4)) && (strcmp(argv[1], "-upgrade") == 0)) {
     // mvidmoviemaker -upgrade FILE.mvid ?OUTFILE.mvid?
     

@@ -59,11 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-joinalpha"
+            argument = "-resize"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "&quot;4 4&quot;"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "Unpremult/UnpremultRed.mvid"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "Unpremult/UnpremultRed_2x.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
