@@ -63,15 +63,15 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "&quot;4 4&quot;"
+            argument = "HALF"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Unpremult/UnpremultRed.mvid"
+            argument = "ResizeRed/ResizedRed_2x.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Unpremult/UnpremultRed_2x.mvid"
+            argument = "ResizeRed/ResizedRed_DOUBLE_HALF.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -77,7 +77,7 @@ char *usageArray =
 "or   : mvidmoviemaker -alphamap FILE.mvid OUTFILE.mvid MAPSPEC" "\n"
 "or   : mvidmoviemaker -pixels movie.mvid" "\n"
 "or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
-"or   : mvidmoviemaker -resize \"WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
+"or   : mvidmoviemaker -resize OPTIONS_RESIZE INFILE.mvid OUTFILE.mvid" "\n"
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
@@ -87,6 +87,10 @@ char *usageArray =
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n"
 "-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n"
 "-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n"
+"OPTIONS_RESIZE:\n"
+"\"WIDTH HEIGHT\" : pass integer width and height to scale to specific dimensions\n"
+"DOUBLE : resize to 2x input width and height with special 4up pixel copy logic\n"
+"HALF : resize to 1/2 input width and height\n"
 ;
 
 #define USAGE (char*)usageArray
@@ -3499,22 +3503,45 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
   }
   
   // Check the RESIZE spec, it should be 2 integer values that indicate the W H
-  // for the output movie.
+  // for the output movie. This parameter could also be DOUBLE or HALF to indicate
+  // a "double size" operation or a "half size" operation. Note that there is a
+  // special case when using "DOUBLE" in that it writes pixels directly to the double
+  // size, while indicating the size explicitly will use the core graphics scale op.
   
 	NSString *resizeSpec = [NSString stringWithUTF8String:resizeSpecCstr];
-  NSArray *elements  = [resizeSpec componentsSeparatedByString:@" "];
   
-  if ([elements count] != 2) {
-    fprintf(stderr, "RESIZE specification must be WIDTH HEIGHT : not %s\n", resizeSpecCstr);
-    exit(1);
+  NSInteger resizeW = -1;
+  NSInteger resizeH = -1;
+  
+  BOOL doubleSizeFlag = FALSE;
+  BOOL halfSizeFlag = FALSE;
+  
+  if ([resizeSpec isEqualToString:@"DOUBLE"]) {
+    // Enable 1 -> 4 pixel logic for DOUBLE resize, the CG render will resample and produce some very strange
+    // results that do not produce the identical pixel values when resized back to half the size.
+    
+    doubleSizeFlag = TRUE;
+  } else if ([resizeSpec isEqualToString:@"HALF"]) {
+    // Shortcut so that half size operation need not pass the exact sizes, they can be calculated from input movie
+    
+    halfSizeFlag = TRUE;
   }
   
-  NSInteger resizeW = [((NSString*)[elements objectAtIndex:0]) intValue];
-  NSInteger resizeH = [((NSString*)[elements objectAtIndex:1]) intValue];
-
-  if (resizeW <= 0 || resizeH <= 0) {
-    fprintf(stderr, "RESIZE specification must be WIDTH HEIGHT : not %s\n", resizeSpecCstr);
-    exit(1);
+  if ((doubleSizeFlag == FALSE) && (halfSizeFlag == FALSE)) {
+    NSArray *elements  = [resizeSpec componentsSeparatedByString:@" "];
+    
+    if ([elements count] != 2) {
+      fprintf(stderr, "RESIZE specification must be WIDTH HEIGHT : not %s\n", resizeSpecCstr);
+      exit(1);
+    }
+    
+    NSInteger resizeW = [((NSString*)[elements objectAtIndex:0]) intValue];
+    NSInteger resizeH = [((NSString*)[elements objectAtIndex:1]) intValue];
+    
+    if (resizeW <= 0 || resizeH <= 0) {
+      fprintf(stderr, "RESIZE specification must be WIDTH HEIGHT : not %s\n", resizeSpecCstr);
+      exit(1);
+    }    
   }
   
   // Read in existing file into from the input file and create an output file
@@ -3543,7 +3570,17 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
   int height = [frameDecoder height];
   assert(width > 0);
   assert(height > 0);
-    
+  
+  if (doubleSizeFlag) {
+    resizeW = width * 2;
+    resizeH = height * 2;
+  }
+  
+  if (halfSizeFlag) {
+    resizeW = width / 2;
+    resizeH = height / 2;
+  }
+  
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
@@ -3574,23 +3611,60 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
     BOOL worked;
     CGImageRef frameImage = nil;
     
-    // Clear existing framebuffer before doing new paste
-    
-    frameImage = [cgFrameBuffer createCGImageRef];
-    worked = (frameImage != nil);
-    assert(worked);
-    
-    [resizedFrameBuffer clear];
-    [resizedFrameBuffer renderCGImage:frameImage];
-    
-    if (frameImage) {
-      CGImageRelease(frameImage);
+    if (doubleSizeFlag == TRUE) {
+      // Use special case "DOUBLE" logic that will simply duplicate the exact RGB value from the indicated
+      // pixel into the 2x sized output buffer.
+      
+      assert(cgFrameBuffer.bitsPerPixel == resizedFrameBuffer.bitsPerPixel);
+      assert(cgFrameBuffer.bitsPerPixel > 16); // FIXME later, add 16 BPP support
+      
+      int numOutputPixels = resizedFrameBuffer.width * resizedFrameBuffer.height;
+      
+      uint32_t *inPixels32 = (uint32_t*)cgFrameBuffer.pixels;
+      uint32_t *outPixels32 = (uint32_t*)resizedFrameBuffer.pixels;
+      
+      int outRow = 0;
+      int outColumn = 0;
+      
+      for (int i=0; i < numOutputPixels; i++) {
+        if ((i > 0) && ((i % resizedFrameBuffer.width) == 0)) {
+          outRow += 1;
+          outColumn = 0;
+        }
+        
+        // Divide by 2 to get the column/row in the input framebuffer
+        int inColumn = outColumn / 2;
+        int inRow = outRow / 2;
+        
+        // Get the pixel for the row and column this output pixel corresponds to
+        int inOffset = (inRow * cgFrameBuffer.width) + inColumn;
+        uint32_t pixel = inPixels32[inOffset];
+        
+        outPixels32[i] = pixel;
+        
+        //fprintf(stdout, "Wrote 0x%.10X for 2x row/col %d %d (%d), read from row/col %d %d (%d)\n", pixel, outRow, outColumn, i, inRow, inColumn, inOffset);
+        
+        outColumn += 1;
+      }
+    } else {
+      // USe CG layer to double size and scale the pixels in the original image
+      
+      frameImage = [cgFrameBuffer createCGImageRef];
+      worked = (frameImage != nil);
+      assert(worked);
+      
+      [resizedFrameBuffer clear];
+      [resizedFrameBuffer renderCGImage:frameImage];
+      
+      if (frameImage) {
+        CGImageRelease(frameImage);
+      }
     }
-    
+  
     frameImage = [resizedFrameBuffer createCGImageRef];
     worked = (frameImage != nil);
     assert(worked);
-    
+  
     BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
     
     BOOL isKeyframe = FALSE;
@@ -4221,7 +4295,7 @@ int main (int argc, const char * argv[]) {
     
     cropMvidMovie(cropSpec, inMvidFilename, outMvidFilename);
 	} else if ((argc == 5) && (strcmp(argv[1], "-resize") == 0)) {
-    // mvidmoviemaker -resize "WIDTH HEIGHT" INMOVIE.mvid OUTMOVIE.mvid
+    // mvidmoviemaker -resize OPTIONS_RESIZE INMOVIE.mvid OUTMOVIE.mvid
     
     char *resizeSpec = (char *)argv[2];
     char *inMvidFilename = (char *)argv[3];
