@@ -1076,7 +1076,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   fprintf(stdout, "extracting %d frame(s) from QT Movie\n", totalNumFrames);
   fprintf(stdout, "movie duration is %.4f second\n", (float)movieDurationInterval);
   fprintf(stdout, "frame duration is %.4f seconds\n", (float)timeInterval);
-  fprintf(stdout, "approx fps %.4f\n", 1.0/(float)timeInterval);
+  fprintf(stdout, "approx fps %.4f\n", 1.0f/(float)timeInterval);
   fprintf(stdout, "movie pixels at %dBPP\n", mvidBPP);
   
   // Determine the BPP that the output movie will be written as, this could differ from the
@@ -1577,7 +1577,7 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   fprintf(stdout, "%.4fs\n", frameDuration);
 
   fprintStdoutFixedWidth("FPS:");
-  fprintf(stdout, "%.4f\n", (1.0 / frameDuration));
+  fprintf(stdout, "%.4f\n", (1.0f / frameDuration));
 
   fprintStdoutFixedWidth("Frames:");
   fprintf(stdout, "%d\n", numFrames);
@@ -3107,10 +3107,22 @@ joinalpha(char *mvidFilenameCstr)
     exit(1);
   }
   
-  // Create output file writer object
-  
   NSTimeInterval frameRate = frameDecoderRGB.frameDuration;
+  NSTimeInterval frameRateAlpha = frameDecoderAlpha.frameDuration;
+  if (frameRate != frameRateAlpha) {
+    fprintf(stderr, "RGB movie fps %.4f does not match alpha movie fps %.4f\n",
+            1.0f/(float)frameRate, 1.0f/(float)frameRateAlpha);
+    exit(1);
+  }
+  
   NSUInteger numFrames = [frameDecoderRGB numFrames];
+  NSUInteger numFramesAlpha = [frameDecoderAlpha numFrames];
+  if (numFrames != numFramesAlpha) {
+    fprintf(stderr, "RGB movie numFrames %d does not match alpha movie numFrames %d\n",
+            numFrames, numFramesAlpha);
+    exit(1);
+  }
+  
   int width = [frameDecoderRGB width];
   int height = [frameDecoderRGB height];
   CGSize size = CGSizeMake(width, height);
@@ -3133,6 +3145,8 @@ joinalpha(char *mvidFilenameCstr)
   
   const BOOL alphaAsGrayscale = TRUE;
   
+  // Create output file writer object
+  
   AVMvidFileWriter *fileWriter = makeMVidWriter(mvidPath, 32, frameRate, numFrames);
 
   fileWriter.movieSize = size;
@@ -3148,7 +3162,7 @@ joinalpha(char *mvidFilenameCstr)
     AVFrame *frameAlpha = [frameDecoderAlpha advanceToFrame:frameIndex];
     assert(frameAlpha);
     
-    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    // Release the NSImage ref inside the frame since we will operate on the image data directly.
     frameRGB.image = nil;
     frameAlpha.image = nil;
     
@@ -3157,20 +3171,6 @@ joinalpha(char *mvidFilenameCstr)
     
     CGFrameBuffer *cgFrameBufferAlpha = frameAlpha.cgFrameBuffer;
     assert(cgFrameBufferAlpha);
-
-    int bpp;
-    
-    bpp = cgFrameBufferRGB.bitsPerPixel;
-    if (bpp != 24) {
-      fprintf(stderr, "-joinalpha can only be used with a 24BPP MVID input movie (not %d bpp)\n", bpp);
-      exit(1);
-    }
-    
-    bpp = cgFrameBufferAlpha.bitsPerPixel;
-    if (bpp != 24) {
-      fprintf(stderr, "-joinalpha can only be used with a 24BPP MVID input movie (not %d bpp)\n", bpp);
-      exit(1);
-    }
     
     // sRGB
     
@@ -4669,7 +4669,7 @@ int main (int argc, const char * argv[]) {
             exit(1);
           }
           
-          options.framerate = 1.0 / fps;
+          options.framerate = 1.0f / fps;
         } else if ([optionStr isEqualToString:@"-framerate"]) {
           float framerate = [valueStr floatValue];
                     
