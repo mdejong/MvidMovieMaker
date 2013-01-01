@@ -22,4 +22,6 @@ uint32_t unpremultiply_bgra(uint32_t premultPixelBGRA);
 
 // Defined in movdata.c since alpha table is in that module
 
+void premultiply_init();
+
 uint32_t premultiply_bgra(uint32_t unpremultPixelBGRA);

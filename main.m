@@ -3015,6 +3015,8 @@ joinalpha(char *mvidFilenameCstr)
     fprintf(stderr, "%s", USAGE);
     exit(1);
   }
+  
+  premultiply_init();
 
   // The join alpha logic needs to be able to find FILE_rgb.mvid and FILE_alpha.mvid
   // in the same directory as FILE.mvid
