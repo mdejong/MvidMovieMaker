@@ -67,24 +67,15 @@ ext_ffmpeg_encode_crf.sh $ALPHA_MOV $ALPHA_M4V $CRF
 RGB_ENCODED_MOV=`echo "$RGB_M4V" | sed -e s/.m4v/.mov/g`
 ALPHA_ENCODED_MOV=`echo "$ALPHA_M4V" | sed -e s/.m4v/.mov/g`
 
-# Replace _alpha.mvid and _rgb.mvid files
-# Note that we explicitly pass a -framerate option because the
-# x264 encoder cannot be trusted to maintain the same consistent
-# framerate as was used in the input .mov file. So, we simply
-# use the original input framerate and ignore the framerate
-# values. The -bpp flag just avoid autodetection of 32BPP vs
-# 24BPP when we know the data is in 24BPP format.
+# Replace _alpha.mvid and _rgb.mvid files with versions
+# created from the compressed H264 data. The -bpp flag
+# is passed just to optimize the conversion, it is not required.
 
-# FIXME: the encoding process can make the input movie longer.
-# Need to be able to pass a "-maxtime 5.006" type option so
-# that even if the movie is made longer, it will be clipped
-# when importing back from .mov.
+#DURATION=`mvidmoviemaker -info $MVID | grep FrameDuration`
+#DURATION=`echo $DURATION | sed s/FrameDuration://g | sed s/s//g`
 
-DURATION=`mvidmoviemaker -info $MVID | grep FrameDuration`
-DURATION=`echo $DURATION | sed s/FrameDuration://g | sed s/s//g`
-
-mvidmoviemaker $RGB_ENCODED_MOV $RGB -bpp 24 -framerate $DURATION
-mvidmoviemaker $ALPHA_ENCODED_MOV $ALPHA -bpp 24 -framerate $DURATION
+mvidmoviemaker $RGB_ENCODED_MOV $RGB -bpp 24
+mvidmoviemaker $ALPHA_ENCODED_MOV $ALPHA -bpp 24
 
 # Now join the alpha and rgb components back together into a 32BPP movie
 mvidmoviemaker -joinalpha $MVID
