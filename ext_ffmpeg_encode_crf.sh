@@ -26,7 +26,12 @@ if test "$OUTPUT" = ""; then
   exit 1
 fi
 
-PRESET="-preset:v veryslow"
+# DO NOT use the "veryslow" preset, it generates .mov or .m4v files that will not actually
+# play on iOS hardware.
+
+#PRESET="-preset:v veryslow"
+PRESET="-preset:v slow"
+
 PIXFMT=yuv420p
 PROFILE="-profile:v baseline"
 #TUNE="-tune:v animation"
