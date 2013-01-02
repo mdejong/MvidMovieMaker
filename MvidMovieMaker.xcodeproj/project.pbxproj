@@ -53,6 +53,8 @@
 		CD96F738160604AD00316089 /* QTKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QTKit.framework; path = System/Library/Frameworks/QTKit.framework; sourceTree = SDKROOT; };
 		CD97B356165066340058EE82 /* qtdecode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = qtdecode.h; sourceTree = SOURCE_ROOT; };
 		CD97B357165066340058EE82 /* qtdecode.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = qtdecode.m; sourceTree = SOURCE_ROOT; };
+		CDA165051694A37F008D271C /* ext_ffmpeg_encode_crf.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = ext_ffmpeg_encode_crf.sh; sourceTree = SOURCE_ROOT; };
+		CDA165061694A37F008D271C /* ext_ffmpeg_splitalpha_encode_crf.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = ext_ffmpeg_splitalpha_encode_crf.sh; sourceTree = SOURCE_ROOT; };
 		CDAEB65215EDB6FB005A148B /* CGFrameBuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CGFrameBuffer.h; sourceTree = SOURCE_ROOT; };
 		CDAEB65315EDB6FB005A148B /* CGFrameBuffer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CGFrameBuffer.m; sourceTree = SOURCE_ROOT; };
 		CDAEB65915EDB6FB005A148B /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = SOURCE_ROOT; };
@@ -141,6 +143,8 @@
 				CD7E243415F341A000027DA6 /* AVFrameDecoder.m */,
 				CD7E243515F341A000027DA6 /* AVMvidFrameDecoder.h */,
 				CD7E243615F341A000027DA6 /* AVMvidFrameDecoder.m */,
+				CDA165051694A37F008D271C /* ext_ffmpeg_encode_crf.sh */,
+				CDA165061694A37F008D271C /* ext_ffmpeg_splitalpha_encode_crf.sh */,
 			);
 			path = MvidMovieMaker;
 			sourceTree = "<group>";

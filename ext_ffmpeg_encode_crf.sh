@@ -26,9 +26,10 @@ if test "$OUTPUT" = ""; then
   exit 1
 fi
 
-PRESET=veryslow
+PRESET="-preset:v veryslow"
 PIXFMT=yuv420p
 PROFILE="-profile:v baseline"
+#TUNE="-tune:v animation"
 
 # 1 Pass encoding with a "Constant Rate Factor"
 # CFR range: 0 -> 51 (0 = lossless, 23 default, 51 lowest quality)
@@ -37,7 +38,7 @@ if test "$CRF" = ""; then
   CRF=23
 fi
 
-ffmpeg -y -i $INPUT -c:v libx264 -pix_fmt $PIXFMT -preset $PRESET $PROFILE -crf $CRF \
+ffmpeg -y -i $INPUT -c:v libx264 -pix_fmt $PIXFMT $PRESET $PROFILE $TUNE -crf $CRF \
 $OUTPUT
 
 # Once conversion to .m4v is completed, do another conversion of the H264
