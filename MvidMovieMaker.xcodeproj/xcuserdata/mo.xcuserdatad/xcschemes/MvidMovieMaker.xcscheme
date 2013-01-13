@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "30_media_1000_movie/Small_30FPS_1000Movie.mov"
+            argument = "2x2_nop_3frames/64x64_nop_3frames.mov"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "30_media_1000_movie/Small_30FPS_1000Movie.mvid"
+            argument = "2x2_nop_3frames/64x64_nop_3frames.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
