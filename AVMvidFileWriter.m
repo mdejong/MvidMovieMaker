@@ -214,13 +214,25 @@ uint32_t maxvid_file_padding_after_keyframe(FILE *outFile, uint32_t offset) {
   frameNum++;
 }
 
-- (void) writeTrailingNopFrames:(float)currentFrameDuration
++ (int) countTrailingNopFrames:(float)currentFrameDuration
+                 frameDuration:(float)frameDuration
 {
-  int numFramesDelay = round(currentFrameDuration / self.frameDuration);
+  int numFramesDelay = round(currentFrameDuration / frameDuration);
   
   if (numFramesDelay > 1) {
-    for (int count = numFramesDelay; count > 1; count--) {
-      [self writeNopFrame];      
+    return numFramesDelay - 1;
+  } else {
+    return 0;
+  }
+}
+
+- (void) writeTrailingNopFrames:(float)currentFrameDuration
+{
+  int count = [self.class countTrailingNopFrames:currentFrameDuration frameDuration:self.frameDuration];
+  
+  if (count > 0) {
+    for (; count; count--) {
+      [self writeNopFrame];
     }
   }
 }
@@ -308,6 +320,9 @@ uint32_t maxvid_file_padding_after_keyframe(FILE *outFile, uint32_t offset) {
   mvHeader->frameDuration = self.frameDuration;
   assert(mvHeader->frameDuration > 0.0);
   
+  // The number of frames must always be at least 2 frames.
+  
+  NSAssert(self.totalNumFrames > 1, @"animation must have at least 2 frames, not %d", self.totalNumFrames);  
   mvHeader->numFrames = self.totalNumFrames;
   
   // This file writer always emits a file with version set to 1, since
