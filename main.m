@@ -604,7 +604,7 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
       dupString = @" (duplicate)";
     }
     
-    NSLog(@"wrote %@%@", pngFilename, dupString);
+    fprintf(stdout, "wrote %s%s\n", [pngFilename UTF8String], [dupString UTF8String]);
     
     [pool drain];
   }
@@ -968,8 +968,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
                                                              startTimeInMediaTime,
                                                              durationInMediaTime);
   
-  fprintf(stdout, "media durations count %d\n", [mediaDurations count]);
-  fprintf(stdout, "media durations : %s\n", [[mediaDurations description] UTF8String]);
+  //fprintf(stdout, "media durations count %d\n", [mediaDurations count]);
+  //fprintf(stdout, "media durations : %s\n", [[mediaDurations description] UTF8String]);
   
   assert([mediaDurations count] > 0);
   
