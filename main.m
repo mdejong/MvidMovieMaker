@@ -3505,8 +3505,8 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
       exit(1);
     }
     
-    NSInteger resizeW = [((NSString*)[elements objectAtIndex:0]) intValue];
-    NSInteger resizeH = [((NSString*)[elements objectAtIndex:1]) intValue];
+    resizeW = [((NSString*)[elements objectAtIndex:0]) intValue];
+    resizeH = [((NSString*)[elements objectAtIndex:1]) intValue];
     
     if (resizeW <= 0 || resizeH <= 0) {
       fprintf(stderr, "RESIZE specification must be WIDTH HEIGHT : not %s\n", resizeSpecCstr);
@@ -3551,6 +3551,9 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
     resizeH = height / 2;
   }
   
+  assert(resizeW != -1);
+  assert(resizeH != -1);
+  
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
@@ -3576,7 +3579,7 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
       resizedFrameBuffer.colorspace = cgFrameBuffer.colorspace;
     }
     
-    // Copy cropped area into the croppedFrameBuffer
+    // Copy/Scale input image into resizedFrameBuffer
     
     BOOL worked;
     CGImageRef frameImage = nil;
@@ -3628,6 +3631,7 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
       
       if (frameImage) {
         CGImageRelease(frameImage);
+        assert(cgFrameBuffer.isLockedByDataProvider == FALSE);
       }
     }
   
