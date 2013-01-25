@@ -1,4 +1,4 @@
-# ext_ffmpeg_mvidmoviemaker_encode_crf.sh
+#!/bin/sh
 #
 # Encode a video file at a certain CRF setting.
 # This script will create a subdirectory in the
@@ -10,9 +10,9 @@
 # to create a new "compressed" mvid which contains
 # just the compressed pixels.
 
-# ext_ffmpeg_mvidmoviemaker_encode_crf.sh MVID CRF
+# ext_ffmpeg_splitalpha_encode_crf.sh MVID CRF
 
-# FIXME: MVID cannot be a qualified patch, it must just be a filename
+# FIXME: MVID cannot be a qualified path, it must just be a filename
 
 MVID=$1
 if test "$MVID" = ""; then

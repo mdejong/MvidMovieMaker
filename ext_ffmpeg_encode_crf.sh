@@ -1,11 +1,11 @@
-# vi ext_ffmpeg_encode_crf.sh
+#!/bin/sh
 #
 # This shell script will encode a specific video file using
 # ffmpeg and the x264 library to generate a .m4v video file
 # that contains compressed H264 encoded video output. The
 # .m4v video file format can be read natively in iOS.
 #
-# ext_ffmpeg_mvidmoviemaker_crf_encode.sh IN.mov OUT.m4v CRF
+# ext_ffmpeg_encode_crf.sh IN.mov OUT.m4v CRF
 #
 # IN.mov : name of Quicktime Animation codec .mov file
 # OUT.m4v : name of output H264 file
