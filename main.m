@@ -479,7 +479,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     worked = [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];
     
     if (worked == FALSE) {
-      fprintf(stderr, "can't write keyframe data to mvid file \"%s\"\n", [filenameStr UTF8String]);
+      fprintf(stderr, "cannot write keyframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
       exit(1);
     }    
   } else {
@@ -505,7 +505,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     }
     
     if (worked == FALSE) {
-      fprintf(stderr, "can't write deltaframe data to mvid file \"%s\"\n", [filenameStr UTF8String]);
+      fprintf(stderr, "cannot write deltaframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
       exit(1);
     }
   }

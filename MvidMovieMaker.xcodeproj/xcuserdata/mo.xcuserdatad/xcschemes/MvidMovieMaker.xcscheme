@@ -43,7 +43,7 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "0"
       useCustomWorkingDirectory = "YES"
-      customWorkingDirectory = "/Users/mo/Development/QTAnimationiPhone/MvidMovieMaker/Test"
+      customWorkingDirectory = "/Users/mo/Development/QTAnimationiPhone/GeniusCircuit/MEDIA"
       buildConfiguration = "Release"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
@@ -59,19 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-resize"
+            argument = "Tristan_FRAMES/Tristan_0000.png"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "&quot;43 57&quot;"
+            argument = "Tristan.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Superwalk/Superwalk.mvid"
+            argument = "-fps"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Superwalk/HalfSuperwalk.mvid"
+            argument = "10"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

@@ -210,14 +210,13 @@ maxvid_encode_sample16_generic_decode_skipcodes(
       EXTRA_RETURN(MV_ERROR_CODE_INVALID_INPUT);
     }
     
-    // If the skip count is larger than MAX_27_BITS, then
-    // the input data must have been corrupted somehow.
-    // There is no way a set of skip operations could be
-    // this large.
+    // The total skip count can be as large as an unsigned 32 bit
+    // value can hold, since a very large skip code will be emitted
+    // as multiple skip codes by the specific encoder.
     
-    uint32_t canAdd = MV_MAX_27_BITS - skipNumPixels;
+    uint32_t canAdd = MV_MAX_32_BITS - skipNumPixels;
     
-    if ((skipNumPixels + num) > canAdd) {
+    if (num > canAdd) {
       EXTRA_RETURN(MV_ERROR_CODE_INVALID_INPUT);
     }
     
@@ -269,14 +268,13 @@ maxvid_encode_sample32_generic_decode_skipcodes(
       EXTRA_RETURN(MV_ERROR_CODE_INVALID_INPUT);
     }
     
-    // If the skip count is larger than MAX_22_BITS, then
-    // the input data must have been corrupted somehow.
-    // There is no way a set of skip operations could be
-    // this large.
+    // The total skip count can be as large as an unsigned 32 bit
+    // value can hold, since a very large skip code will be emitted
+    // as multiple skip codes by the specific encoder.
     
-    uint32_t canAdd = MV_MAX_22_BITS - skipNumPixels;
+    uint32_t canAdd = MV_MAX_32_BITS - skipNumPixels;
     
-    if ((skipNumPixels + num) > canAdd) {
+    if (num > canAdd) {
       EXTRA_RETURN(MV_ERROR_CODE_INVALID_INPUT);
     }
     
@@ -451,7 +449,7 @@ maxvid_encode_sample32_generic_decode_dupcodes(
     // Can combine a full 32 bit integer worth of DUP codes. The only thing to protect
     // against is overflow of the 32 bit number. This should never happen.
     
-    uint32_t canAdd = ~((uint32_t)0) - dupNumPixels;
+    uint32_t canAdd = MV_MAX_32_BITS - dupNumPixels;
 
     if (num > canAdd) {
       // Adding num DUP pixels would overflow the 32 bit integer, ignore this DUP
@@ -521,7 +519,7 @@ maxvid_encode_sample16_generic_decode_copycodes(
     // much input, but protect against invalid
     // input data in any case.
     
-    uint32_t canAdd = ~((uint32_t)0) - copyNumPixels;
+    uint32_t canAdd = MV_MAX_32_BITS - copyNumPixels;
 
     if (num > canAdd) {
       // FIXME: stop condesing COPY operations, don't fail in this case
@@ -590,7 +588,7 @@ maxvid_encode_sample32_generic_decode_copycodes(
     // much input, but protect against invalid
     // input data in any case.
     
-    uint32_t canAdd = ~((uint32_t)0) - copyNumPixels;
+    uint32_t canAdd = MV_MAX_32_BITS - copyNumPixels;
     
     if (num > canAdd) {
       // Combining this COPY would overflow the 32 bit integer, ignore this COPY
@@ -831,30 +829,42 @@ maxvid_encode_sample16_c4_encode_skipcodes(FILE *fp, uint32_t encodeFlags,
 #if defined(EXTRA_CHECKS)
   uint32_t originalPixelsWritten = pixelsWritten;
 #endif
-  
-  // code is 2 bits, skip num is 30 bits.
-  
-  uint32_t wholeNum = (skipNumPixels & MV_MAX_30_BITS);
-  if (wholeNum != skipNumPixels) {
-    EXTRA_RETURN(MV_ERROR_CODE_INVALID_INPUT);
-  }
-  MV_GENERIC_CODE opCode = SKIP;
-  uint16_t numPart = ((wholeNum >> 16) & 0xFFFF);
-  uint16_t pixelPart = (wholeNum & 0xFFFF);
-  uint32_t skipCode = maxvid16_c4_code(opCode, numPart, pixelPart);    
 
+  // code is 2 bits, skip num is 30 bits. Note that in the case
+  // where the number of pixels to be skipped is larger than
+  // the 30 bit limit, multiple skip codes would be needed.
+  
+  const uint32_t maxSkipNumPixels = MV_MAX_30_BITS;
+  
+  uint32_t skipCountLeft = skipNumPixels;
+  while (skipCountLeft > 0) {
+    uint32_t skipCountThisLoop;
+    
+    if (skipCountLeft > maxSkipNumPixels) {
+      skipCountThisLoop = maxSkipNumPixels;
+    } else {
+      skipCountThisLoop = skipCountLeft;
+    }
+    
+    MV_GENERIC_CODE opCode = SKIP;
+    uint16_t numPart = ((skipCountThisLoop >> 16) & 0xFFFF);
+    uint16_t pixelPart = (skipCountThisLoop & 0xFFFF);
+    uint32_t skipCode = maxvid16_c4_code(opCode, numPart, pixelPart);
+    
 #ifdef EXTRA_CHECKS
-  uint32_t opCodeDecoded = (skipCode >> (16 + 14));
-  assert(opCodeDecoded == opCode);
-  assert(skipCode == wholeNum);
+    uint32_t opCodeDecoded = (skipCode >> (16 + 14));
+    assert(opCodeDecoded == opCode);
+    assert(skipCode == skipCountThisLoop);
 #endif
-
-  int status = fwrite_word(fp, skipCode);
-  if (status) {
-    return status;
+    
+    int status = fwrite_word(fp, skipCode);
+    if (status) {
+      return status;
+    }
+    
+    skipCountLeft -= skipCountThisLoop;
+    pixelsWritten += skipCountThisLoop;
   }
-  
-  pixelsWritten += skipNumPixels;
   
 #if defined(EXTRA_CHECKS)
   assert((pixelsWritten - originalPixelsWritten) == skipNumPixels);
@@ -1222,20 +1232,32 @@ maxvid_encode_sample32_c4_encode_skipcodes(FILE *fp, uint32_t encodeFlags,
   uint32_t originalPixelsWritten = pixelsWritten;
 #endif
   
-  // code is 2 bits, skip num is 22 bits
+  // code is 2 bits, skip num is 22 bits. Note that in the case
+  // where the number of pixels to be skipped is larger than
+  // the 22 bit limit, multiple skip codes would be needed.
   
-  uint32_t wholeNum = (skipNumPixels & MV_MAX_22_BITS);
-  if (wholeNum != skipNumPixels) {
-    EXTRA_RETURN(MV_ERROR_CODE_INVALID_INPUT);
-  }  
-  uint32_t skipCode = maxvid32_code(SKIP, skipNumPixels);
+  const uint32_t maxSkipNumPixels = MV_MAX_22_BITS;
   
-  int status = fwrite_word(fp, skipCode);
-  if (status) {
-    return status;
+  uint32_t skipCountLeft = skipNumPixels;
+  while (skipCountLeft > 0) {
+    uint32_t skipCountThisLoop;
+    
+    if (skipCountLeft > maxSkipNumPixels) {
+      skipCountThisLoop = maxSkipNumPixels;
+    } else {
+      skipCountThisLoop = skipCountLeft;
+    }
+    
+    uint32_t skipCode = maxvid32_code(SKIP, skipCountThisLoop);
+    
+    int status = fwrite_word(fp, skipCode);
+    if (status) {
+      return status;
+    }
+  
+    skipCountLeft -= skipCountThisLoop;
+    pixelsWritten += skipCountThisLoop;
   }
-  
-  pixelsWritten += skipNumPixels;
   
 #if defined(EXTRA_CHECKS)
   assert((pixelsWritten - originalPixelsWritten) == skipNumPixels);
