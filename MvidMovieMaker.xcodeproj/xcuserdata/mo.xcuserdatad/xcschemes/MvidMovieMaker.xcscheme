@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "Tristan_FRAMES/Tristan_0000.png"
+            argument = "Skeever_FRAMES/Skeever_0000.png"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Tristan.mvid"
+            argument = "Skeever.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument

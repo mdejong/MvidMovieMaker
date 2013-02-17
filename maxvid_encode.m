@@ -1481,7 +1481,9 @@ maxvid_encode_sample32_c4_encode_donecode(FILE *fp, uint32_t encodeFlags)
 // appear in even the largest framebuffer. Likely using
 // more that 18 or 19 pixels is a waste if the bits could
 // be used for something. Even a huge 2000x2000 is about
-// 20 bits worth of pixels max.
+// 20 bits worth of pixels max. After some testing with
+// excessively large files, it looks at 2^26 is a large
+// as we could possibly need.
 
 int
 maxvid_encode_c4_sample32(

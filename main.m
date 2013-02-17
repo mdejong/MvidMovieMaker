@@ -285,6 +285,13 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     bppNum = 32;
   }
   
+  int isSizeOkay = maxvid_frame_check_max_size(imageWidth, imageHeight, bppNum);
+  if (isSizeOkay != 0) {
+    fprintf(stderr, "error: frame size is so large that it cannot be stored in MVID file : %d x %d at %d BPP\n",
+            (int)imageWidth, (int)imageHeight, bppNum);
+    exit(2);
+  }
+  
   CGFrameBuffer *cgBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:imageWidth height:imageHeight];
   
   // Query the colorspace used in the input image. Note that if no ICC tag was used then we assume sRGB.
