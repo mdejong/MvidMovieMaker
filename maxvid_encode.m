@@ -350,20 +350,22 @@ maxvid_encode_sample16_generic_decode_dupcodes(
         // DUP follows a previous DUP, but the pixel value is not the same.
         // rewind input buffer to the point before this DUP code.
         
-        // FIXME: This seems wrong, why rewind 2 words when a DUP contains the pixel in 1 word?
-        
         inputBuffer32 -= 2;
         break;
       }
     }
     
-    // FIXME: use DUP max count logic from 32 bit version below.
+    // Can combine a full 32 bit integer worth of DUP codes. The only thing to protect
+    // against is overflow of the 32 bit number. This should never happen.
     
-    if (dupNumPixels == ~0) {
-      // Already at the max number of pixels that can be represented in a 32 bit
-      // integer, the input data must be invalid.
-      EXTRA_RETURN(MV_ERROR_CODE_INVALID_INPUT);
+    uint32_t canAdd = MV_MAX_32_BITS - dupNumPixels;
+    
+    if (num > canAdd) {
+      // Adding num DUP pixels would overflow the 32 bit integer, ignore this DUP
+      inputBuffer32 -= 2;
+      break;
     }
+     
     dupNumPixels += num;
     
     inword = *inputBuffer32++;
@@ -908,6 +910,7 @@ maxvid_encode_sample16_c4_encode_dupcodes(FILE *fp, uint32_t encodeFlags,
     uint32_t opCodeDecoded = (dupCode >> (16 + 14));
     assert(opCodeDecoded == opCode);
     uint32_t numPartDecoded = ((dupCode << 2) >> 2+16);
+    
     assert(numPartDecoded == dupCountThisLoop);
     uint16_t pixelPartDecoded = (uint16_t)dupPixel;
     assert(pixelPartDecoded == dupPixel);
