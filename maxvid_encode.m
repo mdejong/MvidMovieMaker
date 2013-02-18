@@ -524,8 +524,11 @@ maxvid_encode_sample16_generic_decode_copycodes(
     uint32_t canAdd = MV_MAX_32_BITS - copyNumPixels;
 
     if (num > canAdd) {
-      // FIXME: stop condesing COPY operations, don't fail in this case
-      EXTRA_RETURN(MV_ERROR_CODE_INVALID_INPUT);
+      // Combining this COPY would overflow the 32 bit integer, ignore this COPY
+      // Note that no rewind of inputBuffer32 is needed since it has not been incremented.
+      
+      inputBuffer32--;
+      break;
     }
     
     copyNumPixels += num;
@@ -1026,8 +1029,38 @@ maxvid_encode_sample16_c4_encode_copycodes(FILE *fp, uint32_t encodeFlags,
     
     while (mvPicPtr->numPixelsLeft > 0)
     {
+      int numPixelsLeftToBeCopied = (copyCountThisLoop - numPixelsWrittenThisLoop);
+    
+      if (numPixelsWrittenThisLoop > copyCountThisLoop) {
+        // This should never happen, it would be caused by the case where two words
+        // were read by the logic below but the limit of the number of pixels to
+        // be read was odd so that one pixel too many got written.
+        assert(0);
+      }
+      
+      if (numPixelsWrittenThisLoop == copyCountThisLoop) {
+        // The number to be copied from this specific segment is larger than the
+        // number to be copied in this loop.
+        break;
+      }
+      
       uint32_t numPixelWritten = 0;
       uint32_t nextWord = maxvid16_pixelincode_next_word(mvPicPtr, &numPixelWritten);
+      
+      if (numPixelsLeftToBeCopied == 1) {
+        // When only 1 pixel should be copied, it is possible that we just read 2
+        // and now we need to push 1 back into the stream.
+        
+        uint16_t nextPixel1 = (uint16_t) nextWord;
+        uint16_t nextPixel2 = (uint16_t) (nextWord >> 16);
+        
+        nextWord = nextPixel1;
+        
+        if (numPixelWritten == 2) {
+          maxvid16_pixelincode_pushback_pixel(mvPicPtr, nextPixel2);
+          numPixelWritten -= 1;
+        }
+      }
       
       int status;
       if ((status = fwrite_word(fp, nextWord))) {
@@ -1043,13 +1076,16 @@ maxvid_encode_sample16_c4_encode_copycodes(FILE *fp, uint32_t encodeFlags,
     assert(numPixelsWrittenThisLoop == copyCountThisLoop);
 #endif
     pixelsWritten += numPixelsWrittenThisLoop;
-
-#if defined(EXTRA_CHECKS)
-    assert(mvPicPtr->numPixelsLeft == 0);
-    assert(mvPicPtr->pixelBufferLen == 0);
-#endif
   }
 
+  // All the pixels to be read from the stream should have been consumed
+  // after all the codes has been emitted.
+  
+#if defined(EXTRA_CHECKS)
+  assert(mvPicPtr->numPixelsLeft == 0);
+  assert(mvPicPtr->pixelBufferLen == 0);
+#endif
+  
 #ifdef EXTRA_CHECKS
   uint32_t numPixelsWritten = (pixelsWritten - originalPixelsWritten);
   MAXVID_ASSERT(numPixelsWritten == copyNumPixels, "copyNumPixels");

@@ -59,11 +59,11 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "BigDup1.png"
+            argument = "BigCopy1.png"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "BigDup.mvid"
+            argument = "BigCopy.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
@@ -72,6 +72,14 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "10"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-bpp"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "16"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
