@@ -39,6 +39,7 @@
 	CGImageRef m_lockedByImageRef;
 	CGColorSpaceRef m_colorspace;
   BOOL m_usesBigEndianData;
+  BOOL m_useHighQualityInterpolation;
 }
 
 @property (readonly) char *pixels;
@@ -67,6 +68,19 @@
 // While this property is marked as assign, it will retain a ref to the indicate colorspace.
 
 @property (nonatomic, assign) CGColorSpaceRef colorspace;
+
+// If this property is set to TRUE, then CoreGraphics will use the "high quality"
+// image interpolation setting when rendering an image into a framebuffer.
+// The default is FALSE. This high quality setting is most useful when rendering
+// an image that will resize or scale an image in a way that changes the aspect
+// ratio or changes the size. Note that this mode is not useful for a resize
+// where the aspect ratio stays the same and the size changes in an interval
+// multiple, for example a 2x down to 1x size change since the "high quality"
+// rendering can change the pixel values in these cases. This flag should be
+// enabled when resizing to a very small image where anti-aliasing is needed
+// to smooth edges in the small size image.
+
+@property (nonatomic, assign) BOOL useHighQualityInterpolation;
 
 + (CGFrameBuffer*) cGFrameBufferWithBppDimensions:(NSInteger)bitsPerPixel width:(NSInteger)width height:(NSInteger)height;
 

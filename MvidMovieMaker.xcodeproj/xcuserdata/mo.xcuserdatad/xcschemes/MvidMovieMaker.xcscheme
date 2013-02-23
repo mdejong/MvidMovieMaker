@@ -43,7 +43,7 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "0"
       useCustomWorkingDirectory = "YES"
-      customWorkingDirectory = "/Users/mo/Development/QTAnimationiPhone/GeniusCircuit/MEDIA"
+      customWorkingDirectory = "/Users/mo/Development/QTAnimationiPhone/geniuscircuit/MEDIA/HalfAllKeyframes"
       buildConfiguration = "Release"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
@@ -59,27 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "BigCopy1.png"
+            argument = "-resize"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "BigCopy.mvid"
+            argument = "HALF"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "-fps"
+            argument = "Tristan.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "10"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "-bpp"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "16"
+            argument = "TristanHalf_high.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

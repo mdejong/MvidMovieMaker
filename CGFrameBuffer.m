@@ -84,7 +84,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 //@synthesize isLockedByDataProvider = m_isLockedByDataProvider;
 @synthesize lockedByImageRef = m_lockedByImageRef;
 @synthesize colorspace = m_colorspace;
-
+@synthesize useHighQualityInterpolation = m_useHighQualityInterpolation;
 @synthesize usesBigEndianData = m_usesBigEndianData;
 
 + (CGFrameBuffer*) cGFrameBufferWithBppDimensions:(NSInteger)bitsPerPixel
@@ -309,6 +309,10 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
 	CGRect bounds = CGRectMake( 0.0f, 0.0f, self.width, self.height );
   
+	if (self.useHighQualityInterpolation) {
+	  CGContextSetInterpolationQuality(bitmapContext, kCGInterpolationHigh);
+	}
+    
 	CGContextDrawImage(bitmapContext, bounds, cgImageRef);
 	
 	CGContextRelease(bitmapContext);

@@ -3568,6 +3568,15 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
   
   CGFrameBuffer *resizedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:resizeW height:resizeH];
   
+  // Resize input image to some other size. Ignore the case where the input is exactly
+  // the same size as the output. If the HALF size resize is indicated, use the default
+  // interpolation which results in exact half size pixel rendering. Otherwise, use
+  // the high quality interpolation.
+  
+  if (halfSizeFlag == FALSE) {
+    resizedFrameBuffer.useHighQualityInterpolation = TRUE;
+  }
+  
   for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     
