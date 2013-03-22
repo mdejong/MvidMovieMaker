@@ -778,6 +778,8 @@ int countNumQuicktimeFrames(QTTime startTime,
 {
   BOOL done;
   
+  assert(frameTime.timeValue > 0);
+  
   // The frame interval is now known, so recalculate the total number of frames
   // by counting how many frames of the indicated interval fit into the movie duration.
   
@@ -1070,14 +1072,20 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   
   if (optionsPtr->framerate > 0.0f) {
     // Ignore framerate detected from .mov and calculate the number of frames in terms
-    // of the explicit framerate passed in one the command line.
+    // of the explicit framerate passed in on the command line.
     
     timeInterval = optionsPtr->framerate;
     
-    frameTimeInMediaTime = QTMakeTimeWithTimeInterval(timeInterval);
+    // Determine the closest number of "media time" intervals to the indicated
+    // time interval.
     
-    //frameTime = QTMakeTimeScaled(frameTime, duration.timeScale);
-    frameTimeInMediaTime = QTMakeTimeScaled(frameTimeInMediaTime, mediaTimeScale);
+    float mediaTimeInterval = 1.0f / mediaTimeScale;
+    float mediaTimeValue =  timeInterval / mediaTimeInterval;
+    mediaTimeValue = round(mediaTimeValue);
+    if (mediaTimeValue < 1.0) {
+      mediaTimeValue = 1.0;
+    }
+    frameTimeInMediaTime = QTMakeTime((long long) mediaTimeValue, mediaTimeScale);
     
     totalNumFrames = countNumQuicktimeFrames(startTimeInMediaTime, frameTimeInMediaTime, startEndRangeInMediaTime);
   }
