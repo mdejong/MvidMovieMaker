@@ -21,6 +21,8 @@
 {
   NSUInteger m_bpp;
   BOOL m_checkAlphaChannel;
+  BOOL m_recordFramePixelValues;
+  NSMutableDictionary *m_allPixelOccurances;
 }
 
 // The BPP value the caller assumes. Can be 16, 24, or 32 BPP. In the
@@ -35,6 +37,30 @@
 
 @property (nonatomic, assign) BOOL checkAlphaChannel;
 
+// Set to TRUE to enable logic that will examine each pixel that
+// appears in the input and store the instance counts on a per-frame
+// basis.
+
+@property (nonatomic, assign) BOOL recordFramePixelValues;
+
+// This table tracks instances of specific pixel values in all the
+// frames of a movie.
+
+@property (nonatomic, retain) NSMutableDictionary *allPixelOccurances;
+
+// constructor
+
 + (MvidFileMetaData*) mvidFileMetaData;
+
+// After all input frames have been examined with the recordFramePixelValues
+// property set, this method should be invoked.
+
+- (void) doneRecordingFramePixelValues;
+
+// This method should be invoked for each 32 bit pixel seen in the input
+
+- (void) foundPixel32:(uint32_t)pixel;
+
+- (void) foundPixel16:(uint16_t)pixel;
 
 @end

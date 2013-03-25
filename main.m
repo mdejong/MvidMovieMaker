@@ -288,6 +288,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   
   int bppNum = mvidFileMetaData.bpp;
   int checkAlphaChannel = mvidFileMetaData.checkAlphaChannel;
+  int recordFramePixelValues = mvidFileMetaData.recordFramePixelValues;
 
   if (bppNum == 24 && checkAlphaChannel) {
     bppNum = 32;
@@ -428,7 +429,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   // Scan the alpha values in the framebuffer to determine if any of the pixels have a non-0xFF alpha channel
   // value. If any pixels are non-opaque then the data needs to be treated as 32BPP.
   
-  if (checkAlphaChannel) {
+  if ((checkAlphaChannel || recordFramePixelValues) && (prevFrameBuffer.bitsPerPixel != 16)) {
     uint32_t *currentPixels = (uint32_t*)cgBuffer.pixels;
     int width = cgBuffer.width;
     int height = cgBuffer.height;
@@ -438,17 +439,43 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     
     for (int i=0; i < numPixels; i++) {
       uint32_t currentPixel = currentPixels[i];
-      // ABGR
+      
+      // ABGR non-opaque pixel detection
       uint8_t alpha = (currentPixel >> 24) & 0xFF;
       if (alpha != 0xFF) {
         allOpaque = FALSE;
-        break;
+        
+        if (!recordFramePixelValues) {
+          break;
+        }
+      }
+      
+      // Store pixel value in the next available slot
+      // in a global hashtable of pixel values mapped
+      // to a usage 32 bit integer.
+      
+      if (recordFramePixelValues) {
+        if (prevFrameBuffer.bitsPerPixel == 16) {
+          assert(0);
+        } else {
+          [mvidFileMetaData foundPixel32:currentPixel];
+        }
       }
     }
     
-    if (allOpaque == FALSE) {
+    if (allOpaque == FALSE && checkAlphaChannel) {
       mvidFileMetaData.bpp = 32;
       mvidFileMetaData.checkAlphaChannel = FALSE;
+    }
+  } else if (recordFramePixelValues && (prevFrameBuffer.bitsPerPixel == 16)) {
+    uint16_t *currentPixels = (uint16_t*)cgBuffer.pixels;
+    int width = cgBuffer.width;
+    int height = cgBuffer.height;
+    int numPixels = (width * height);
+    
+    for (int i=0; i < numPixels; i++) {
+      uint16_t currentPixel = currentPixels[i];
+      [mvidFileMetaData foundPixel16:currentPixel];
     }
   }
   
@@ -1157,6 +1184,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = renderAtBpp;
   mvidFileMetaData.checkAlphaChannel = checkAlphaChannel;
+  //mvidFileMetaData.recordFramePixelValues = TRUE;
   
   setupMovFrameAtTime(movie, firstTrackMedia, mvidBPP);
   
@@ -1257,6 +1285,10 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   // again but this time we actually write the output at the correct BPP. The scan step takes
   // extra time, but it means that we do not need to write twice in the common case where
   // input is all 24 BPP pixels, so this logic is a win.
+  
+  if (mvidFileMetaData.recordFramePixelValues) {
+    [mvidFileMetaData doneRecordingFramePixelValues];
+  }
   
   renderAtBpp = mvidFileMetaData.bpp;
   mvidFileMetaData.checkAlphaChannel = FALSE;
@@ -1536,6 +1568,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = renderAtBpp;
   mvidFileMetaData.checkAlphaChannel = checkAlphaChannel;
+  //mvidFileMetaData.recordFramePixelValues = TRUE;
   
   int frameIndex;
   
@@ -1564,6 +1597,10 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   // again but this time we actually write the output at the correct BPP. The scan step takes
   // extra time, but it means that we do not need to write twice in the common case where
   // input is all 24 BPP pixels, so this logic is a win.
+  
+  if (mvidFileMetaData.recordFramePixelValues) {
+    [mvidFileMetaData doneRecordingFramePixelValues];
+  }
 
   renderAtBpp = mvidFileMetaData.bpp;
   mvidFileMetaData.checkAlphaChannel = FALSE;

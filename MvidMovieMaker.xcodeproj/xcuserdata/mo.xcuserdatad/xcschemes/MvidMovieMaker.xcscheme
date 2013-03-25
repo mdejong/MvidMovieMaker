@@ -43,8 +43,8 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "0"
       useCustomWorkingDirectory = "YES"
-      customWorkingDirectory = "/Users/mo/Development/QTAnimationiPhone/geniuscircuit/MEDIA/HalfAllKeyframes"
-      buildConfiguration = "Release"
+      customWorkingDirectory = "/Users/mo/Development/QTAnimationiPhone/MvidMovieMaker/Test"
+      buildConfiguration = "Debug"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       allowLocationSimulation = "YES">
@@ -59,19 +59,19 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-resize"
+            argument = "Tristan/Frame0001.png"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "HALF"
+            argument = "Tristan/Tristan.mvid"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "Tristan.mvid"
+            argument = "-fps"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "TristanHalf_high.mvid"
+            argument = "10"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
