@@ -17,6 +17,8 @@
 
 #import <QuickTime/Movies.h>
 
+#import "MvidFileMetaData.h"
+
 CGSize _movieDimensions;
 
 NSString *movie_prefix;
@@ -38,27 +40,6 @@ typedef struct
   int   bpp;
   int   keyframe;
 } MovieOptions;
-
-// In the case of input with unknown BPP values (like a .mov or series of images)
-// it is impossible to know key information about a file until all pixels have
-// been scanned. This record holds data that is discovered during a scan so that
-// it can be inspected by the caller after scanning is complete.
-
-typedef struct
-{
-  // The BPP value the caller assumes. Can be 16, 24, or 32 BPP. In the
-  // case where the BPP is assumed to be 24 BPP but scanning shows that
-  // 24 BPP pixels are used, the assumed value is 24 and the actual
-  // value will be set to 32.
-  
-  int bpp;
-  
-  // Set to TRUE if the bpp value is 24 (assumed) but we want to scan to
-  // determine if any non-opaque pixels appear in the input.
-  
-  int checkAlphaChannel;
-  
-} MvidFileMetaData;
 
 // BGRA is iOS native pixel format, it is the most optimal format since
 // pixels need not be swapped when reading from a file format.
@@ -305,8 +286,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   // Render input image into a CGFrameBuffer at a specific BPP. If the input buffer actually contains
   // 16bpp pixels expanded to 24bpp, then this render logic will resample down to 16bpp.
   
-  int bppNum = mvidFileMetaData->bpp;
-  int checkAlphaChannel = mvidFileMetaData->checkAlphaChannel;
+  int bppNum = mvidFileMetaData.bpp;
+  int checkAlphaChannel = mvidFileMetaData.checkAlphaChannel;
 
   if (bppNum == 24 && checkAlphaChannel) {
     bppNum = 32;
@@ -466,15 +447,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     }
     
     if (allOpaque == FALSE) {
-      /*
-      // FIXME: need to record somewhere that we have detected 32BPP
-      if (mvidWriter) {
-        mvidWriter.bpp = 32;
-      }
-      */
-      
-      mvidFileMetaData->bpp = 32;
-      mvidFileMetaData->checkAlphaChannel = FALSE;
+      mvidFileMetaData.bpp = 32;
+      mvidFileMetaData.checkAlphaChannel = FALSE;
     }
   }
   
@@ -1180,7 +1154,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   // of output pixels. We cannot know certain key info about the input data until it
   // has all been scanned.
   
-  MvidFileMetaData mvidFileMetaData;
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = renderAtBpp;
   mvidFileMetaData.checkAlphaChannel = checkAlphaChannel;
   
@@ -1254,7 +1228,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         isKeyframe = TRUE;
       }
       
-      process_frame_file(NULL, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+      process_frame_file(NULL, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
       frameIndex++;
     }
     
@@ -1325,7 +1299,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         isKeyframe = TRUE;
       }
       
-      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
       frameIndex++;
     }
     
@@ -1559,7 +1533,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   // of output pixels. We cannot know certain key info about the input data until it
   // has all been scanned.
   
-  MvidFileMetaData mvidFileMetaData;
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = renderAtBpp;
   mvidFileMetaData.checkAlphaChannel = checkAlphaChannel;
   
@@ -1582,7 +1556,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
         
-    process_frame_file(NULL, framePath, NULL, frameIndex, &mvidFileMetaData, isKeyframe);
+    process_frame_file(NULL, framePath, NULL, frameIndex, mvidFileMetaData, isKeyframe);
     frameIndex++;
   }
   
@@ -1619,7 +1593,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(mvidWriter, framePath, NULL, frameIndex, &mvidFileMetaData, isKeyframe);
+    process_frame_file(mvidWriter, framePath, NULL, frameIndex, mvidFileMetaData, isKeyframe);
     frameIndex++;
   }
   
@@ -2971,7 +2945,7 @@ splitalpha(char *mvidFilenameCstr)
   
   // Writer that will write the RGB values
   
-  MvidFileMetaData mvidFileMetaDataRGB;
+  MvidFileMetaData *mvidFileMetaDataRGB = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaDataRGB.bpp = 24;
   mvidFileMetaDataRGB.checkAlphaChannel = FALSE;
   
@@ -3027,7 +3001,7 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaDataRGB, isKeyframe);
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaDataRGB, isKeyframe);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -3052,7 +3026,7 @@ splitalpha(char *mvidFilenameCstr)
   
   const BOOL alphaAsGrayscale = TRUE;
   
-  MvidFileMetaData mvidFileMetaDataAlpha;
+  MvidFileMetaData *mvidFileMetaDataAlpha = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaDataAlpha.bpp = 24;
   mvidFileMetaDataAlpha.checkAlphaChannel = FALSE;
   
@@ -3119,7 +3093,7 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaDataAlpha, isKeyframe);
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaDataAlpha, isKeyframe);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -3281,7 +3255,7 @@ joinalpha(char *mvidFilenameCstr)
   
   const BOOL alphaAsGrayscale = TRUE;
   
-  MvidFileMetaData mvidFileMetaData;
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = 32;
   mvidFileMetaData.checkAlphaChannel = FALSE;
   
@@ -3390,7 +3364,7 @@ joinalpha(char *mvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3521,7 +3495,7 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
-  MvidFileMetaData mvidFileMetaData;
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = bpp;
   mvidFileMetaData.checkAlphaChannel = FALSE;
   
@@ -3566,7 +3540,7 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3693,7 +3667,7 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
-  MvidFileMetaData mvidFileMetaData;
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = bpp;
   mvidFileMetaData.checkAlphaChannel = FALSE;
   
@@ -3793,7 +3767,7 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3889,7 +3863,7 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the width/height on the output.
   
-  MvidFileMetaData mvidFileMetaData;
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = bpp;
   mvidFileMetaData.checkAlphaChannel = FALSE;
   
@@ -3919,7 +3893,7 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4286,7 +4260,7 @@ void alphaMapMvid(NSString *inMvidPath,
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
-  MvidFileMetaData mvidFileMetaData;
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = bpp;
   mvidFileMetaData.checkAlphaChannel = FALSE;
   
@@ -4376,7 +4350,7 @@ void alphaMapMvid(NSString *inMvidPath,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4496,7 +4470,7 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
-  MvidFileMetaData mvidFileMetaData;
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
   mvidFileMetaData.bpp = bpp;
   mvidFileMetaData.checkAlphaChannel = FALSE;
   
@@ -4610,7 +4584,7 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);

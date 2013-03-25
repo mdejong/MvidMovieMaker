@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		CD04C2BA1646608D002DD253 /* movdata.c in Sources */ = {isa = PBXBuildFile; fileRef = CD04C2B81646608D002DD253 /* movdata.c */; };
 		CD1E74F615F3432B001D5C64 /* AVFrame.m in Sources */ = {isa = PBXBuildFile; fileRef = CD1E74F515F3432B001D5C64 /* AVFrame.m */; };
+		CD3D17BB17006447009D01AD /* MvidFileMetaData.m in Sources */ = {isa = PBXBuildFile; fileRef = CD3D17BA17006447009D01AD /* MvidFileMetaData.m */; };
 		CD7E243815F341A000027DA6 /* AVFrameDecoder.m in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243415F341A000027DA6 /* AVFrameDecoder.m */; };
 		CD7E243915F341A000027DA6 /* AVMvidFrameDecoder.m in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243615F341A000027DA6 /* AVMvidFrameDecoder.m */; };
 		CD7E243A15F341A000027DA6 /* maxvid_decode.c in Sources */ = {isa = PBXBuildFile; fileRef = CD7E243715F341A000027DA6 /* maxvid_decode.c */; };
@@ -43,6 +44,8 @@
 		CD04C2B91646608D002DD253 /* movdata.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = movdata.h; sourceTree = SOURCE_ROOT; };
 		CD1E74F415F3432B001D5C64 /* AVFrame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AVFrame.h; sourceTree = SOURCE_ROOT; };
 		CD1E74F515F3432B001D5C64 /* AVFrame.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AVFrame.m; sourceTree = SOURCE_ROOT; };
+		CD3D17B917006447009D01AD /* MvidFileMetaData.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MvidFileMetaData.h; sourceTree = SOURCE_ROOT; };
+		CD3D17BA17006447009D01AD /* MvidFileMetaData.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MvidFileMetaData.m; sourceTree = SOURCE_ROOT; };
 		CD7E243315F341A000027DA6 /* AVFrameDecoder.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AVFrameDecoder.h; sourceTree = SOURCE_ROOT; };
 		CD7E243415F341A000027DA6 /* AVFrameDecoder.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AVFrameDecoder.m; sourceTree = SOURCE_ROOT; };
 		CD7E243515F341A000027DA6 /* AVMvidFrameDecoder.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AVMvidFrameDecoder.h; sourceTree = SOURCE_ROOT; };
@@ -143,6 +146,8 @@
 				CD7E243415F341A000027DA6 /* AVFrameDecoder.m */,
 				CD7E243515F341A000027DA6 /* AVMvidFrameDecoder.h */,
 				CD7E243615F341A000027DA6 /* AVMvidFrameDecoder.m */,
+				CD3D17B917006447009D01AD /* MvidFileMetaData.h */,
+				CD3D17BA17006447009D01AD /* MvidFileMetaData.m */,
 				CDA165051694A37F008D271C /* ext_ffmpeg_encode_crf.sh */,
 				CDA165061694A37F008D271C /* ext_ffmpeg_splitalpha_encode_crf.sh */,
 			);
@@ -211,6 +216,7 @@
 				CD9070D816462E8F00EEF4DF /* qtencode.m in Sources */,
 				CD04C2BA1646608D002DD253 /* movdata.c in Sources */,
 				CD97B358165066340058EE82 /* qtdecode.m in Sources */,
+				CD3D17BB17006447009D01AD /* MvidFileMetaData.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
