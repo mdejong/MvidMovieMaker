@@ -39,6 +39,27 @@ typedef struct
   int   keyframe;
 } MovieOptions;
 
+// In the case of input with unknown BPP values (like a .mov or series of images)
+// it is impossible to know key information about a file until all pixels have
+// been scanned. This record holds data that is discovered during a scan so that
+// it can be inspected by the caller after scanning is complete.
+
+typedef struct
+{
+  // The BPP value the caller assumes. Can be 16, 24, or 32 BPP. In the
+  // case where the BPP is assumed to be 24 BPP but scanning shows that
+  // 24 BPP pixels are used, the assumed value is 24 and the actual
+  // value will be set to 32.
+  
+  int bpp;
+  
+  // Set to TRUE if the bpp value is 24 (assumed) but we want to scan to
+  // determine if any non-opaque pixels appear in the input.
+  
+  int checkAlphaChannel;
+  
+} MvidFileMetaData;
+
 // BGRA is iOS native pixel format, it is the most optimal format since
 // pixels need not be swapped when reading from a file format.
 
@@ -209,26 +230,27 @@ AVMvidFileWriter* makeMVidWriter(
 
 // This method is invoked with a path that contains the frame
 // data and the offset into the frame array that this specific
-// frame data is found at. This method will always write sRGB
-// pixels data. If the input image is in another colorspace,
+// frame data is found at. A writer is passed to this method
+// to indicate where to write to, unless an initial scan in
+// needed and then no write is done.
+//
+// If the input image is in another colorspace,
 // then it will be converted to sRGB. If the RGB data is not
 // tagged with a specific colorspace (aka GenericRGB) then
 // it is assumed to be sRGB data.
 //
-// mvidWriter  : Output destination for MVID frame data.
+// mvidWriter  : Output destination for MVID frame data. If NULL, no output will be written.
 // filenameStr : Name of .png file that contains the frame data
 // existingImageRef : If NULL, image is loaded from filenameStr instead
 // frameIndex  : Frame index (starts at zero)
-// bppNum      : 16, 24, or 32 BPP
-// checkAlphaChannel : If bpp is 24 and this argument is TRUE, scan output pixels for non-opaque image.
+// mvidFileMetaData : container for info found while scanning/writing
 // isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
 
 int process_frame_file(AVMvidFileWriter *mvidWriter,
                        NSString *filenameStr,
                        CGImageRef existingImageRef,
                        int frameIndex,
-                       int bppNum,
-                       BOOL checkAlphaChannel,
+                       MvidFileMetaData *mvidFileMetaData,
                        BOOL isKeyframe)
 {
   // Push pool after creating global resources
@@ -266,7 +288,9 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   // If this is the first frame, set the movie size based on the size of the first frame
   
   if (frameIndex == 0) {
-    mvidWriter.movieSize = imageSize;
+    if (mvidWriter) {
+      mvidWriter.movieSize = imageSize;
+    }
     _movieDimensions = imageSize;
   } else if (CGSizeEqualToSize(imageSize, _movieDimensions) == FALSE) {
     // Size of next frame must exactly match the size of the previous one
@@ -280,6 +304,9 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     
   // Render input image into a CGFrameBuffer at a specific BPP. If the input buffer actually contains
   // 16bpp pixels expanded to 24bpp, then this render logic will resample down to 16bpp.
+  
+  int bppNum = mvidFileMetaData->bpp;
+  int checkAlphaChannel = mvidFileMetaData->checkAlphaChannel;
 
   if (bppNum == 24 && checkAlphaChannel) {
     bppNum = 32;
@@ -417,108 +444,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     NSLog(@"wrote %@", dumpFilename);
   }
   
-  // The CGFrameBuffer now contains the rendered pixels in the expected output format. Write to MVID frame.
-  
-  BOOL emitKeyframe = isKeyframe;
-  
-  // In the case where we know the frame is a keyframe, then don't bother to run delta calculation
-  // logic. In the case of the first frame, there is nothing to compare to anyway. The tricky case
-  // is when the delta compare logic finds that all of the pixels have changed or the vast majority
-  // of pixels have changed, in this case it is actually less optimal to emit a delta frame as compared
-  // to a keyframe.
-  
-  NSData *encodedDeltaData = nil;
-  
-  if (isKeyframe == FALSE) {
-    // Calculate delta pixels by comparing the previous frame to the current frame.
-    // Once we know specific delta pixels, then only those pixels that actually changed
-    // can be stored in a delta frame.
-    
-    assert(prevFrameBuffer);
-    
-    assert(prevFrameBuffer.width == cgBuffer.width);
-    assert(prevFrameBuffer.height == cgBuffer.height);
-    assert(prevFrameBuffer.bitsPerPixel == cgBuffer.bitsPerPixel);
-    
-    void *prevPixels = (void*)prevFrameBuffer.pixels;
-    void *currentPixels = (void*)cgBuffer.pixels;
-    int numWords;
-    int width = cgBuffer.width;
-    int height = cgBuffer.height;
-    
-    BOOL emitKeyframeAnyway = FALSE;
-    
-    if (prevFrameBuffer.bitsPerPixel == 16) {
-      numWords = cgBuffer.numBytes / sizeof(uint16_t);
-      encodedDeltaData = maxvid_encode_generic_delta_pixels16(prevPixels,
-                                                              currentPixels,
-                                                              numWords,
-                                                              width,
-                                                              height,
-                                                              &emitKeyframeAnyway);
-      
-    } else {
-      numWords = cgBuffer.numBytes / sizeof(uint32_t);
-      encodedDeltaData = maxvid_encode_generic_delta_pixels32(prevPixels,
-                                                              currentPixels,
-                                                              numWords,
-                                                              width,
-                                                              height,
-                                                              &emitKeyframeAnyway);
-    }
-    
-    if (emitKeyframeAnyway) {
-      // The delta calculation indicates that all the pixels in the frame changed or
-      // so many changed that it would be better to emit a whole keyframe as opposed
-      // to a delta frame.
-      
-      emitKeyframe = TRUE;
-    }
-  }
-  
-
-  if (emitKeyframe) {
-    // Emit Keyframe
-    
-    char *buffer = cgBuffer.pixels;
-    int numBytesInBuffer = cgBuffer.numBytes;
-    
-    worked = [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];
-    
-    if (worked == FALSE) {
-      fprintf(stderr, "cannot write keyframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
-      exit(1);
-    }    
-  } else {
-    // Emit the delta frame
-    
-    if (encodedDeltaData == nil) {
-      // The two frames are pixel identical, this is a no-op delta frame
-      
-      [mvidWriter writeNopFrame];
-      worked = TRUE;
-    } else {
-      // Convert generic maxvid codes to c4 codes and emit as a data buffer
-      
-      void *pixelsPtr = (void*)cgBuffer.pixels;
-      int inputBufferNumBytes = cgBuffer.numBytes;
-      NSUInteger frameBufferNumPixels = cgBuffer.width * cgBuffer.height;
-      
-      worked = maxvid_write_delta_pixels(mvidWriter,
-                                         encodedDeltaData,
-                                         pixelsPtr,
-                                         inputBufferNumBytes,
-                                         frameBufferNumPixels);
-    }
-    
-    if (worked == FALSE) {
-      fprintf(stderr, "cannot write deltaframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
-      exit(1);
-    }
-  }
-
-  // Wrote either keyframe, nop delta, or delta frame. In the case where we need to scan the pixels
-  // to determine if any alpha channel pixels are used we might change the write bpp from 24 to 32 bpp.
+  // Scan the alpha values in the framebuffer to determine if any of the pixels have a non-0xFF alpha channel
+  // value. If any pixels are non-opaque then the data needs to be treated as 32BPP.
   
   if (checkAlphaChannel) {
     uint32_t *currentPixels = (uint32_t*)cgBuffer.pixels;
@@ -539,9 +466,120 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     }
     
     if (allOpaque == FALSE) {
-      mvidWriter.bpp = 32;
+      /*
+      // FIXME: need to record somewhere that we have detected 32BPP
+      if (mvidWriter) {
+        mvidWriter.bpp = 32;
+      }
+      */
+      
+      mvidFileMetaData->bpp = 32;
+      mvidFileMetaData->checkAlphaChannel = FALSE;
     }
   }
+  
+  // The CGFrameBuffer now contains the rendered pixels in the expected output format. Write to MVID frame.
+  
+  if (mvidWriter) {
+    
+    BOOL emitKeyframe = isKeyframe;
+    
+    // In the case where we know the frame is a keyframe, then don't bother to run delta calculation
+    // logic. In the case of the first frame, there is nothing to compare to anyway. The tricky case
+    // is when the delta compare logic finds that all of the pixels have changed or the vast majority
+    // of pixels have changed, in this case it is actually less optimal to emit a delta frame as compared
+    // to a keyframe.
+    
+    NSData *encodedDeltaData = nil;
+    
+    if (isKeyframe == FALSE) {
+      // Calculate delta pixels by comparing the previous frame to the current frame.
+      // Once we know specific delta pixels, then only those pixels that actually changed
+      // can be stored in a delta frame.
+      
+      assert(prevFrameBuffer);
+      
+      assert(prevFrameBuffer.width == cgBuffer.width);
+      assert(prevFrameBuffer.height == cgBuffer.height);
+      assert(prevFrameBuffer.bitsPerPixel == cgBuffer.bitsPerPixel);
+      
+      void *prevPixels = (void*)prevFrameBuffer.pixels;
+      void *currentPixels = (void*)cgBuffer.pixels;
+      int numWords;
+      int width = cgBuffer.width;
+      int height = cgBuffer.height;
+      
+      BOOL emitKeyframeAnyway = FALSE;
+      
+      if (prevFrameBuffer.bitsPerPixel == 16) {
+        numWords = cgBuffer.numBytes / sizeof(uint16_t);
+        encodedDeltaData = maxvid_encode_generic_delta_pixels16(prevPixels,
+                                                                currentPixels,
+                                                                numWords,
+                                                                width,
+                                                                height,
+                                                                &emitKeyframeAnyway);
+        
+      } else {
+        numWords = cgBuffer.numBytes / sizeof(uint32_t);
+        encodedDeltaData = maxvid_encode_generic_delta_pixels32(prevPixels,
+                                                                currentPixels,
+                                                                numWords,
+                                                                width,
+                                                                height,
+                                                                &emitKeyframeAnyway);
+      }
+      
+      if (emitKeyframeAnyway) {
+        // The delta calculation indicates that all the pixels in the frame changed or
+        // so many changed that it would be better to emit a whole keyframe as opposed
+        // to a delta frame.
+        
+        emitKeyframe = TRUE;
+      }
+    }
+    
+    
+    if (emitKeyframe) {
+      // Emit Keyframe
+      
+      char *buffer = cgBuffer.pixels;
+      int numBytesInBuffer = cgBuffer.numBytes;
+      
+      worked = [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];
+      
+      if (worked == FALSE) {
+        fprintf(stderr, "cannot write keyframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
+        exit(1);
+      }
+    } else {
+      // Emit the delta frame
+      
+      if (encodedDeltaData == nil) {
+        // The two frames are pixel identical, this is a no-op delta frame
+        
+        [mvidWriter writeNopFrame];
+        worked = TRUE;
+      } else {
+        // Convert generic maxvid codes to c4 codes and emit as a data buffer
+        
+        void *pixelsPtr = (void*)cgBuffer.pixels;
+        int inputBufferNumBytes = cgBuffer.numBytes;
+        NSUInteger frameBufferNumPixels = cgBuffer.width * cgBuffer.height;
+        
+        worked = maxvid_write_delta_pixels(mvidWriter,
+                                           encodedDeltaData,
+                                           pixelsPtr,
+                                           inputBufferNumBytes,
+                                           frameBufferNumPixels);
+      }
+      
+      if (worked == FALSE) {
+        fprintf(stderr, "cannot write deltaframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
+        exit(1);
+      }
+    }
+  } // if (mvidWriter)
   
   if (TRUE) {
     if (prevFrameBuffer) {
@@ -843,6 +881,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   CGImageRef frameImage;
   //int frameNum = 1;
   NSTimeInterval timeInterval;
+  NSTimeInterval movieFramerateInterval;
   int mvidBPP = 24; // assume 24BPP at first, up to 32bpp if non-opaque pixels are found
   
   QTMovie *movie = [QTMovie movieWithFile:movFilename error:&errState];
@@ -1089,16 +1128,19 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     totalNumFrames = countNumQuicktimeFrames(startTimeInMediaTime, frameTimeInMediaTime, startEndRangeInMediaTime);
   }
+  
+  movieFramerateInterval = timeInterval;
 
   fprintf(stdout, "extracting %d frame(s) from QT Movie\n", totalNumFrames);
   fprintf(stdout, "movie duration is %.4f second\n", (float)movieDurationInterval);
   fprintf(stdout, "frame duration is %.4f seconds\n", (float)timeInterval);
-  fprintf(stdout, "approx fps %.4f\n", 1.0f/(float)timeInterval);
+  fprintf(stdout, "approx fps %.4f\n", 1.0f/(float)movieFramerateInterval);
   fprintf(stdout, "movie pixels at %dBPP\n", mvidBPP);
   
   // Determine the BPP that the output movie will be written as, this could differ from the
-  // BPP of the input .mov in the case where as -bpp argument is passed on the command line
-  // to indicate that the render should be done at a different color depth.
+  // BPP of the input .mov in the case where a -bpp argument is passed on the command line.
+  // When we find an explict -bpp argument, it can cause the render to be done at another
+  // color depth.
   
   assert(mvidBPP == 16 || mvidBPP == 24 || mvidBPP == 32);
   
@@ -1134,16 +1176,20 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     }
   }
 
-  // Create output .mvid file writer
+  // Stage 1: scan all the pixels in all the frames to figure out key info like the BPP
+  // of output pixels. We cannot know certain key info about the input data until it
+  // has all been scanned.
   
-  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, timeInterval, totalNumFrames);
+  MvidFileMetaData mvidFileMetaData;
+  mvidFileMetaData.bpp = renderAtBpp;
+  mvidFileMetaData.checkAlphaChannel = checkAlphaChannel;
   
   setupMovFrameAtTime(movie, firstTrackMedia, mvidBPP);
   
   done = FALSE;
   currentTime = startTime;
   int frameIndex = 0;
-  
+
   while (!done) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     
@@ -1152,7 +1198,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     frameImage = getMovFrameAtTime(currentTime);
     worked = (frameImage != nil);
-        
+    
     if (worked == FALSE) {
       done = TRUE;
       
@@ -1165,8 +1211,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       // Note that this value will always be 32bpp for a rendered movie frame, we need to
       // actually scan the pixels composited here to figure out if the alpha channel is used.
       //int bpp = CGImageGetBitsPerPixel(frameImage);
-
-      fprintf(stdout, "extracted frame %d at time %.4f\n", frameIndex+1, (float)timeInterval);
+      
+      //fprintf(stdout, "extracted frame %d at time %.4f\n", frameIndex+1, (float)timeInterval);
       //fprintf(stdout, "extracted frame %d at time %.4f, width x height : %d x %d at bpp %d\n", frameIndex+1, (float)timeInterval, width, height, bpp);
       
       if (FALSE) {
@@ -1201,6 +1247,77 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         NSLog(@"wrote %@", dumpFilename);
       }
       
+      // Scan frame (image)
+      
+      BOOL isKeyframe = FALSE;
+      if (frameIndex == 0) {
+        isKeyframe = TRUE;
+      }
+      
+      process_frame_file(NULL, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
+      frameIndex++;
+    }
+    
+    // FIXME: need to evaluate how the QTTime maps to "real time" to deal with
+    // the case where the fixed integer values do not map exactly the floating
+    // point representation of time. Does adding a fixed QT time over and over
+    // actually lead to round off error when converted to wall clock? Would the
+    // emitted file get out of sync if the file was long enough?
+    
+    currentTime = QTTimeIncrement(currentTime, frameTimeInMediaTime);
+    
+    // Done once at the end of the movie
+    
+    if (!QTTimeInTimeRange(currentTime, startEndRangeInMediaTime)) {
+      done = TRUE;
+    }
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    [pool drain];
+  } // end while !done loop
+  
+  // Stage 2: once scanning all the input pixels is completed, we can loop over all the frames
+  // again but this time we actually write the output at the correct BPP. The scan step takes
+  // extra time, but it means that we do not need to write twice in the common case where
+  // input is all 24 BPP pixels, so this logic is a win.
+  
+  renderAtBpp = mvidFileMetaData.bpp;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
+  AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, movieFramerateInterval, totalNumFrames);
+  
+  done = FALSE;
+  currentTime = startTime;
+  frameIndex = 0;
+  
+  while (!done) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    worked = QTGetTimeInterval(currentTime, &timeInterval);
+    assert(worked);
+    
+    frameImage = getMovFrameAtTime(currentTime);
+    worked = (frameImage != nil);
+        
+    if (worked == FALSE) {
+      done = TRUE;
+      
+      fprintf(stdout, "failed to extract frame %d at time %f\n", frameIndex+1, (float)timeInterval);
+    } else {
+      extractedFirstFrame = TRUE;
+      
+      //int width = CGImageGetWidth(frameImage);
+      //int height = CGImageGetHeight(frameImage);
+      // Note that this value will always be 32bpp for a rendered movie frame, we need to
+      // actually scan the pixels composited here to figure out if the alpha channel is used.
+      //int bpp = CGImageGetBitsPerPixel(frameImage);
+
+      fprintf(stdout, "extracted frame %d at time %.4f\n", frameIndex+1, (float)timeInterval);
+      //fprintf(stdout, "extracted frame %d at time %.4f, width x height : %d x %d at bpp %d\n", frameIndex+1, (float)timeInterval, width, height, bpp);
+      
       // Write frame data to MVID
       
       BOOL isKeyframe = FALSE;
@@ -1208,7 +1325,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         isKeyframe = TRUE;
       }
       
-      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe);
+      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
       frameIndex++;
     }
     
@@ -1437,10 +1554,47 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       renderAtBpp = 32;
     }
   }
+
+  // Stage 1: scan all the pixels in all the frames to figure out key info like the BPP
+  // of output pixels. We cannot know certain key info about the input data until it
+  // has all been scanned.
   
-  AVMvidFileWriter *mvidWriter;
+  MvidFileMetaData mvidFileMetaData;
+  mvidFileMetaData.bpp = renderAtBpp;
+  mvidFileMetaData.checkAlphaChannel = checkAlphaChannel;
+  
   int frameIndex;
   
+  frameIndex = 0;
+  for (NSString *framePath in inFramePaths) {
+    //fprintf(stdout, "saved %s as frame %d\n", [framePath UTF8String], frameIndex+1);
+    //fflush(stdout);
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    if (keyframeNum == 0) {
+      // All frames are key frames
+      isKeyframe = TRUE;
+    } else if ((keyframeNum > 0) && ((frameIndex % keyframeNum) == 0)) {
+      // Keyframe every N frames
+      isKeyframe = TRUE;
+    }
+        
+    process_frame_file(NULL, framePath, NULL, frameIndex, &mvidFileMetaData, isKeyframe);
+    frameIndex++;
+  }
+  
+  // Stage 2: once scanning all the input pixels is completed, we can loop over all the frames
+  // again but this time we actually write the output at the correct BPP. The scan step takes
+  // extra time, but it means that we do not need to write twice in the common case where
+  // input is all 24 BPP pixels, so this logic is a win.
+
+  renderAtBpp = mvidFileMetaData.bpp;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
+  AVMvidFileWriter *mvidWriter;
   mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, framerateNum, [inFramePaths count]);
   
   fprintf(stdout, "writing %d frames to %s\n", [inFramePaths count], [[mvidFilename lastPathComponent] UTF8String]);
@@ -1465,7 +1619,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(mvidWriter, framePath, NULL, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe);
+    process_frame_file(mvidWriter, framePath, NULL, frameIndex, &mvidFileMetaData, isKeyframe);
     frameIndex++;
   }
   
@@ -1474,49 +1628,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   [mvidWriter rewriteHeader];
   
   [mvidWriter close];
-  
-  // In the detect case where we wrote 32BPP pixels but found that all the pixel were actually opaque, it is actually
-  // better to rewrite the output file with 24BPP pixels. This reworking of the output is not needed if any
-  // non-opaque pixels were actually discovered while writing the first time.
-  
-  if (checkAlphaChannel && mvidWriter.bpp == 24) {
-    BOOL worked;
-    worked = [[NSFileManager defaultManager] removeItemAtPath:mvidFilename error:nil];
-    assert(worked);
     
-    renderAtBpp = 24;
-    checkAlphaChannel = FALSE;
-    
-    mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, framerateNum, [inFramePaths count]);
-    
-    frameIndex = 0;
-    for (NSString *framePath in inFramePaths) {
-      //fprintf(stdout, "saved %s as frame %d\n", [framePath UTF8String], frameIndex+1);
-      //fflush(stdout);
-      
-      BOOL isKeyframe = FALSE;
-      if (frameIndex == 0) {
-        isKeyframe = TRUE;
-      }
-      if (keyframeNum == 0) {
-        // All frames are key frames
-        isKeyframe = TRUE;
-      } else if ((keyframeNum > 0) && ((frameIndex % keyframeNum) == 0)) {
-        // Keyframe every N frames
-        isKeyframe = TRUE;
-      }
-      
-      process_frame_file(mvidWriter, framePath, NULL, frameIndex, renderAtBpp, checkAlphaChannel, isKeyframe);
-      frameIndex++;
-    }
-    
-    // Done writing .mvid file
-    
-    [mvidWriter rewriteHeader];
-    
-    [mvidWriter close];
-  }
-  
   fprintf(stdout, "done writing %d frames to %s\n", frameIndex, mvidFilenameCstr);
   fflush(stdout);
   
@@ -2859,6 +2971,10 @@ splitalpha(char *mvidFilenameCstr)
   
   // Writer that will write the RGB values
   
+  MvidFileMetaData mvidFileMetaDataRGB;
+  mvidFileMetaDataRGB.bpp = 24;
+  mvidFileMetaDataRGB.checkAlphaChannel = FALSE;
+  
   AVMvidFileWriter *fileWriter;
   fileWriter = makeMVidWriter(rgbPath, 24, frameDuration, numFrames);
   
@@ -2911,8 +3027,7 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      BOOL checkAlphaChannel = FALSE;
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe);
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaDataRGB, isKeyframe);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -2936,6 +3051,10 @@ splitalpha(char *mvidFilenameCstr)
   // threshold RGB values to further correct Alpha values when decoding.
   
   const BOOL alphaAsGrayscale = TRUE;
+  
+  MvidFileMetaData mvidFileMetaDataAlpha;
+  mvidFileMetaDataAlpha.bpp = 24;
+  mvidFileMetaDataAlpha.checkAlphaChannel = FALSE;
   
   {
     CGFrameBuffer *alphaFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
@@ -2995,14 +3114,12 @@ splitalpha(char *mvidFilenameCstr)
       
       CGImageRef frameImage = [alphaFrameBuffer createCGImageRef];
       
-      BOOL checkAlphaChannel = FALSE;
-      
       BOOL isKeyframe = FALSE;
       if (frameIndex == 0) {
         isKeyframe = TRUE;
       }
       
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, 24, checkAlphaChannel, isKeyframe);
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaDataAlpha, isKeyframe);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -3164,6 +3281,10 @@ joinalpha(char *mvidFilenameCstr)
   
   const BOOL alphaAsGrayscale = TRUE;
   
+  MvidFileMetaData mvidFileMetaData;
+  mvidFileMetaData.bpp = 32;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
   // Create output file writer object
   
   AVMvidFileWriter *fileWriter = makeMVidWriter(mvidPath, 32, frameRate, numFrames);
@@ -3264,14 +3385,12 @@ joinalpha(char *mvidFilenameCstr)
     
     CGImageRef frameImage = [combinedFrameBuffer createCGImageRef];
     
-    BOOL checkAlphaChannel = FALSE;
-    
     BOOL isKeyframe = FALSE;
     if (frameIndex == 0) {
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, 32, checkAlphaChannel, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3402,6 +3521,10 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
+  MvidFileMetaData mvidFileMetaData;
+  mvidFileMetaData.bpp = bpp;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
   AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
   
   CGFrameBuffer *croppedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:cropW height:cropH];
@@ -3438,14 +3561,12 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
     worked = (frameImage != nil);
     assert(worked);
     
-    BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
-    
     BOOL isKeyframe = FALSE;
     if (frameIndex == 0) {
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3572,6 +3693,10 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
+  MvidFileMetaData mvidFileMetaData;
+  mvidFileMetaData.bpp = bpp;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
   AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
   
   CGFrameBuffer *resizedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:resizeW height:resizeH];
@@ -3662,15 +3787,13 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
     frameImage = [resizedFrameBuffer createCGImageRef];
     worked = (frameImage != nil);
     assert(worked);
-  
-    BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
     
     BOOL isKeyframe = FALSE;
     if (frameIndex == 0) {
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3766,6 +3889,10 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the width/height on the output.
   
+  MvidFileMetaData mvidFileMetaData;
+  mvidFileMetaData.bpp = bpp;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
   AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
   
   for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
@@ -3787,14 +3914,12 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
     worked = (frameImage != nil);
     assert(worked);
     
-    BOOL checkAlphaChannel = FALSE;
-    
     BOOL isKeyframe = FALSE;
     if (frameIndex == 0) {
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4161,6 +4286,10 @@ void alphaMapMvid(NSString *inMvidPath,
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
+  MvidFileMetaData mvidFileMetaData;
+  mvidFileMetaData.bpp = bpp;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
   AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
   
   CGFrameBuffer *mappedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
@@ -4242,14 +4371,12 @@ void alphaMapMvid(NSString *inMvidPath,
     worked = (frameImage != nil);
     assert(worked);
     
-    BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
-    
     BOOL isKeyframe = FALSE;
     if (frameIndex == 0) {
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4369,6 +4496,10 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
   
+  MvidFileMetaData mvidFileMetaData;
+  mvidFileMetaData.bpp = bpp;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
   AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
   
   CGFrameBuffer *outFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
@@ -4474,14 +4605,12 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
     worked = (frameImage != nil);
     assert(worked);
     
-    BOOL checkAlphaChannel = FALSE; // Do not check alpha since that logic is done when creating the input .mvid
-    
     BOOL isKeyframe = FALSE;
     if (frameIndex == 0) {
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, bpp, checkAlphaChannel, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, &mvidFileMetaData, isKeyframe);
     
     if (frameImage) {
       CGImageRelease(frameImage);
