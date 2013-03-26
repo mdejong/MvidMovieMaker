@@ -49,12 +49,7 @@
     for (NSNumber *key in allKeys) {
       NSNumber *countThisPixel = [self.allPixelOccurances objectForKey:key];
       NSAssert(countThisPixel != nil, @"countThisPixel is nil");
-      uint32_t count = [countThisPixel unsignedIntValue];
-      countThisPixel = [NSNumber numberWithUnsignedInt:count];
-      
-      // Remove the previous key and create a new key without the alpha value
-      [self.allPixelOccurances removeObjectForKey:key];
-      
+            
       uint32_t pixel = [key unsignedIntValue];
       assert((pixel >> 24) == 0xFF || (pixel >> 24) == 0x0);
       pixel = pixel & 0xFFFFFF;
@@ -62,82 +57,21 @@
       key = [NSNumber numberWithUnsignedInt:pixel];
       
       [self.allPixelOccurances setObject:countThisPixel forKey:key];
+      
+      // Remove the previous key to value mapping after adding the new mapping
+      // so that the value object is not deallocated.
+      
+      [self.allPixelOccurances removeObjectForKey:key];
     }
   }
   
   // Once all pixel are ready, sort the pixel by the number of times each
   // is found in the file to create a list of keys sorted by frequency.
   
-  @autoreleasepool {
-    NSArray *allKeys = [self.allPixelOccurances allKeys];
-    NSAssert(allKeys, @"must be at least 1 pixel in allPixelOccurances");
+  // Now iterate over the sorted counts from largest to smallest to see the values in terms
+  // of the most frequently used pixels.
   
-    NSArray *allValues = [self.allPixelOccurances allValues];
-      
-    NSArray *sortedValues = [allValues sortedArrayUsingComparator:^NSComparisonResult(id a, id b) {
-      NSNumber *first = (NSNumber*)a;
-      NSNumber *second = (NSNumber*)b;
-      //return [first compare:second];
-      // Note that we reverse the sort to get a most to least sorted count
-      return [second compare:first];
-    }];
-    
-    // Create a new table that maps the pixel count to an array of pixel
-    // values for this specific count.
-    
-    NSMutableDictionary *countToPixels = [NSMutableDictionary dictionaryWithCapacity:[allKeys count]];
-    
-    for (NSNumber *key in allKeys) {
-      NSNumber *countThisPixel = [self.allPixelOccurances objectForKey:key];
-      
-      NSMutableArray *arrayOfPixels = [countToPixels objectForKey:countThisPixel];
-      
-      if (arrayOfPixels == nil) {
-        arrayOfPixels = [NSMutableArray array];
-      }
-      
-      // Add this pixel to the list of pixels for this count
-      [arrayOfPixels addObject:key];
-      
-      [countToPixels setObject:arrayOfPixels forKey:countThisPixel];
-    }
-    
-    // Now iterate over the sorted counts from largest to smallest to see the values in terms
-    // of the most frequently used pixels.
-    
-    NSMutableArray *pixelsSortedByDescendingCount = [NSMutableArray arrayWithCapacity:[allKeys count]];
-    
-    for (NSNumber *sortedValue in sortedValues) {
-      NSMutableArray *arrayOfPixels = [countToPixels objectForKey:sortedValue];
-      
-      uint32_t count = [sortedValue unsignedIntValue];
-      
-      // Note that we need to empty out the pixel array after seeing it once
-      // to avoid duplicates for the same count number.
-      
-      if ([arrayOfPixels count] > 0) {
-        NSLog(@"Count: %d, pixels %@", count, arrayOfPixels);
-        
-        for (NSNumber *pixelKey in arrayOfPixels) {
-          [pixelsSortedByDescendingCount addObject:pixelKey];
-        }
-        
-        [arrayOfPixels removeAllObjects];
-      }
-    }
-    
-    // Finally we have a deduped list of keys in descending sorted order
-    
-    NSLog(@"pixelsSortedByDescendingCount table has %d entries\n%@", [pixelsSortedByDescendingCount count], pixelsSortedByDescendingCount);
-    
-    for (NSNumber *pixelKey in pixelsSortedByDescendingCount) {
-      uint32_t pixel = [pixelKey unsignedIntValue];
-      NSNumber *countThisPixel = [self.allPixelOccurances objectForKey:pixelKey];
-      uint32_t count = [countThisPixel unsignedIntValue];
-      
-      NSLog(@"pixel 0x%.06X, %d", pixel, count);
-    }
-  }
+  NSArray *pixelsSortedByDescendingCount = [self sortPixelOccurances:self.allPixelOccurances];
   
   return;
 }
@@ -194,6 +128,93 @@
   }
   
   [self.allPixelOccurances setObject:countThisPixel forKey:pixelNum];
+}
+
+// Sort pixels in a dictionary of pixel value (NSNumber) to occurance count (NSNumber).
+// The sort order is always descending, so that the list of returned keys indicates
+// the pixel values in terms of most to least number of pixels in the table.
+
+- (NSArray*) sortPixelOccurances:(NSDictionary*)dict
+{
+  NSMutableArray *pixelsSortedByDescendingCount = nil;
+  
+  @autoreleasepool {
+    NSArray *allKeys = [self.allPixelOccurances allKeys];
+    NSAssert(allKeys, @"must be at least 1 pixel in allPixelOccurances");
+    
+    NSArray *allValues = [self.allPixelOccurances allValues];
+    
+    // Sort the values in the table in terms of descending cound number
+    
+    NSArray *sortedValues = [allValues sortedArrayUsingComparator:^NSComparisonResult(id a, id b) {
+      NSNumber *first = (NSNumber*)a;
+      NSNumber *second = (NSNumber*)b;
+      return [second compare:first];
+    }];
+    
+    // Create a new table that maps the pixel count to an array of pixel
+    // values for this specific count.
+    
+    NSMutableDictionary *countToPixels = [NSMutableDictionary dictionaryWithCapacity:[allKeys count]];
+    
+    for (NSNumber *key in allKeys) {
+      NSNumber *countThisPixel = [self.allPixelOccurances objectForKey:key];
+      
+      NSMutableArray *arrayOfPixels = [countToPixels objectForKey:countThisPixel];
+      
+      if (arrayOfPixels == nil) {
+        arrayOfPixels = [NSMutableArray array];
+      }
+      
+      // Add this pixel to the list of pixels for this count
+      [arrayOfPixels addObject:key];
+      
+      [countToPixels setObject:arrayOfPixels forKey:countThisPixel];
+    }
+    
+    // Now iterate over the sorted counts from largest to smallest to see the values in terms
+    // of the most frequently used pixels.
+    
+    pixelsSortedByDescendingCount = [[NSMutableArray alloc] initWithCapacity:[allKeys count]];
+    
+    for (NSNumber *sortedValue in sortedValues) {
+      NSMutableArray *arrayOfPixels = [countToPixels objectForKey:sortedValue];
+      
+      //uint32_t count = [sortedValue unsignedIntValue];
+      
+      // Note that we need to empty out the pixel array after seeing it once
+      // to avoid duplicates for the same count number.
+      
+      if ([arrayOfPixels count] > 0) {
+        //NSLog(@"Count: %d, pixels %@", count, arrayOfPixels);
+        
+        for (NSNumber *pixelKey in arrayOfPixels) {
+          [pixelsSortedByDescendingCount addObject:pixelKey];
+        }
+        
+        [arrayOfPixels removeAllObjects];
+      }
+    }
+    
+    // Finally we have a deduped list of keys in descending sorted order
+    
+    NSLog(@"pixelsSortedByDescendingCount table has %d entries", [pixelsSortedByDescendingCount count]);
+    
+    for (NSNumber *pixelKey in pixelsSortedByDescendingCount) {
+      NSNumber *countThisPixel = [self.allPixelOccurances objectForKey:pixelKey];
+      uint32_t count = [countThisPixel unsignedIntValue];
+      
+      if (self.bpp == 16) {
+        uint32_t pixel16 = [pixelKey unsignedShortValue];
+        NSLog(@"pixel 0x%.04X, %d", pixel16, count);
+      } else {
+        uint32_t pixel32 = [pixelKey unsignedIntValue];
+        NSLog(@"pixel 0x%.06X, %d", pixel32, count);
+      }
+    }
+  }
+  
+  return [pixelsSortedByDescendingCount autorelease];
 }
 
 @end
