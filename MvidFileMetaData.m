@@ -72,6 +72,7 @@
   // of the most frequently used pixels.
   
   NSArray *pixelsSortedByDescendingCount = [self sortPixelOccurances:self.allPixelOccurances];
+  NSAssert([pixelsSortedByDescendingCount count] > 0, @"pixelsSortedByDescendingCount");
   
   return;
 }
