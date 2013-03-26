@@ -12,8 +12,7 @@
 #import "maxvid_file.h"
 
 #if MV_ENABLE_DELTAS
-// FIXME: create new "maxvid_deltas_decode.h" to hold this logic
-#import "maxvid_encode.h"
+#include "maxvid_deltas.h"
 #endif // MV_ENABLE_DELTAS
 
 #if defined(USE_SEGMENTED_MMAP)
@@ -754,9 +753,9 @@
           actualInputBuffer32 = self->decompressionBuffer;
           
           if (bpp == 16) {
-            status = maxvid_deltas_decompress_delta_pixels16(inputBuffer32, actualInputBuffer32, inputBuffer32NumWords);
+            status = maxvid_deltas_decompress16(inputBuffer32, actualInputBuffer32, inputBuffer32NumWords);
           } else {
-            status = maxvid_deltas_decompress_delta_pixels32(inputBuffer32, actualInputBuffer32, inputBuffer32NumWords);
+            status = maxvid_deltas_decompress32(inputBuffer32, actualInputBuffer32, inputBuffer32NumWords);
           }
           NSAssert(status == 0, @"status");
         }

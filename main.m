@@ -8,6 +8,8 @@
 
 #include "maxvid_encode.h"
 
+#include "maxvid_deltas.h"
+
 #import "movdata.h"
 
 #import "qtencode.h"
@@ -754,13 +756,12 @@ void process_frame_file_write_deltas(BOOL isKeyframe,
     // codes, it will only modify the pixel values of the COPY and
     // DUP values.
     
-    worked = maxvid_deltas_rewrite_delta_pixels(
-                                                encodedDeltaData,
-                                                recodedDeltaData,
-                                                pixelsPtr,
-                                                inputBufferNumBytes,
-                                                frameBufferNumPixels,
-                                                processAsBPP);
+    worked = maxvid_deltas_compress(encodedDeltaData,
+                                    recodedDeltaData,
+                                    pixelsPtr,
+                                    inputBufferNumBytes,
+                                    frameBufferNumPixels,
+                                    processAsBPP);
     
     if (worked == FALSE) {
       fprintf(stderr, "cannot recode delta data to pixel delta\n");
