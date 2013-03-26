@@ -39,6 +39,7 @@ typedef struct
   float framerate;
   int   bpp;
   int   keyframe;
+  int   deltas;
 } MovieOptions;
 
 // BGRA is iOS native pixel format, it is the most optimal format since
@@ -49,6 +50,19 @@ uint32_t rgba_to_bgra(uint32_t red, uint32_t green, uint32_t blue, uint32_t alph
 {
   return (alpha << 24) | (red << 16) | (green << 8) | blue;
 }
+
+void process_frame_file_write_nodeltas(BOOL isKeyframe,
+                                       CGFrameBuffer *cgBuffer,
+                                       AVMvidFileWriter *mvidWriter);
+
+#if MV_ENABLE_DELTAS
+
+void process_frame_file_write_deltas(BOOL isKeyframe,
+                                     CGFrameBuffer *cgBuffer,
+                                     CGFrameBuffer *emptyInitialFrameBuffer,
+                                     AVMvidFileWriter *mvidWriter);
+
+#endif // MV_ENABLE_DELTAS
 
 // ------------------------------------------------------------------------
 //
@@ -101,6 +115,7 @@ char *usageArray =
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n"
 "-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n"
 "-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n"
+"-deltas BOOL : 1 or true to enable frame deltas mode\n"
 "OPTIONS_RESIZE:\n"
 "\"WIDTH HEIGHT\" : pass integer width and height to scale to specific dimensions\n"
 "DOUBLE : resize to 2x input width and height with special 4up pixel copy logic\n"
@@ -226,13 +241,15 @@ AVMvidFileWriter* makeMVidWriter(
 // frameIndex  : Frame index (starts at zero)
 // mvidFileMetaData : container for info found while scanning/writing
 // isKeyframe  : TRUE if this specific frame should be stored as a keyframe (as opposed to a delta frame)
+// optionsPtr : command line options settings
 
 int process_frame_file(AVMvidFileWriter *mvidWriter,
                        NSString *filenameStr,
                        CGImageRef existingImageRef,
                        int frameIndex,
                        MvidFileMetaData *mvidFileMetaData,
-                       BOOL isKeyframe)
+                       BOOL isKeyframe,
+                       MovieOptions *optionsPtr)
 {
   // Push pool after creating global resources
 
@@ -479,108 +496,26 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     }
   }
   
-  // The CGFrameBuffer now contains the rendered pixels in the expected output format. Write to MVID frame.
+  // Emit either regular or delta data depending on mode
   
   if (mvidWriter) {
-    
-    BOOL emitKeyframe = isKeyframe;
-    
-    // In the case where we know the frame is a keyframe, then don't bother to run delta calculation
-    // logic. In the case of the first frame, there is nothing to compare to anyway. The tricky case
-    // is when the delta compare logic finds that all of the pixels have changed or the vast majority
-    // of pixels have changed, in this case it is actually less optimal to emit a delta frame as compared
-    // to a keyframe.
-    
-    NSData *encodedDeltaData = nil;
-    
-    if (isKeyframe == FALSE) {
-      // Calculate delta pixels by comparing the previous frame to the current frame.
-      // Once we know specific delta pixels, then only those pixels that actually changed
-      // can be stored in a delta frame.
-      
-      assert(prevFrameBuffer);
-      
-      assert(prevFrameBuffer.width == cgBuffer.width);
-      assert(prevFrameBuffer.height == cgBuffer.height);
-      assert(prevFrameBuffer.bitsPerPixel == cgBuffer.bitsPerPixel);
-      
-      void *prevPixels = (void*)prevFrameBuffer.pixels;
-      void *currentPixels = (void*)cgBuffer.pixels;
-      int numWords;
-      int width = cgBuffer.width;
-      int height = cgBuffer.height;
-      
-      BOOL emitKeyframeAnyway = FALSE;
-      
-      if (prevFrameBuffer.bitsPerPixel == 16) {
-        numWords = cgBuffer.numBytes / sizeof(uint16_t);
-        encodedDeltaData = maxvid_encode_generic_delta_pixels16(prevPixels,
-                                                                currentPixels,
-                                                                numWords,
-                                                                width,
-                                                                height,
-                                                                &emitKeyframeAnyway);
-        
-      } else {
-        numWords = cgBuffer.numBytes / sizeof(uint32_t);
-        encodedDeltaData = maxvid_encode_generic_delta_pixels32(prevPixels,
-                                                                currentPixels,
-                                                                numWords,
-                                                                width,
-                                                                height,
-                                                                &emitKeyframeAnyway);
+#if MV_ENABLE_DELTAS
+    if (optionsPtr &&
+        optionsPtr->deltas == 1)
+    {
+      CGFrameBuffer *emptyInitialFrameBuffer = nil;
+      if (frameIndex == 0) {
+        emptyInitialFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bppNum width:imageWidth height:imageHeight];
       }
-      
-      if (emitKeyframeAnyway) {
-        // The delta calculation indicates that all the pixels in the frame changed or
-        // so many changed that it would be better to emit a whole keyframe as opposed
-        // to a delta frame.
-        
-        emitKeyframe = TRUE;
-      }
-    }
-    
-    
-    if (emitKeyframe) {
-      // Emit Keyframe
-      
-      char *buffer = cgBuffer.pixels;
-      int numBytesInBuffer = cgBuffer.numBytes;
-      
-      worked = [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];
-      
-      if (worked == FALSE) {
-        fprintf(stderr, "cannot write keyframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
-        exit(1);
-      }
-    } else {
-      // Emit the delta frame
-      
-      if (encodedDeltaData == nil) {
-        // The two frames are pixel identical, this is a no-op delta frame
-        
-        [mvidWriter writeNopFrame];
-        worked = TRUE;
-      } else {
-        // Convert generic maxvid codes to c4 codes and emit as a data buffer
-        
-        void *pixelsPtr = (void*)cgBuffer.pixels;
-        int inputBufferNumBytes = cgBuffer.numBytes;
-        NSUInteger frameBufferNumPixels = cgBuffer.width * cgBuffer.height;
-        
-        worked = maxvid_write_delta_pixels(mvidWriter,
-                                           encodedDeltaData,
-                                           pixelsPtr,
-                                           inputBufferNumBytes,
-                                           frameBufferNumPixels);
-      }
-      
-      if (worked == FALSE) {
-        fprintf(stderr, "cannot write deltaframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
-        exit(1);
-      }
+      process_frame_file_write_deltas(isKeyframe, cgBuffer, emptyInitialFrameBuffer, mvidWriter);
+    } else
+#endif // MV_ENABLE_DELTAS
+    {
+      process_frame_file_write_nodeltas(isKeyframe, cgBuffer, mvidWriter);
     }
   } // if (mvidWriter)
+
+  // cleanup
   
   if (TRUE) {
     if (prevFrameBuffer) {
@@ -596,6 +531,266 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
 	
 	return 0;
 }
+
+// This method implements the "writing" portion of the frame emit logic for the normal case
+// where either a keyframe or a delta frame is generated. If pixel deltas are going to be
+// calculated then the other write method is invoked.
+
+void process_frame_file_write_nodeltas(BOOL isKeyframe,
+                                       CGFrameBuffer *cgBuffer,
+                                       AVMvidFileWriter *mvidWriter)
+{
+  BOOL worked;  
+  BOOL emitKeyframe = isKeyframe;
+  
+  // In the case where we know the frame is a keyframe, then don't bother to run delta calculation
+  // logic. In the case of the first frame, there is nothing to compare to anyway. The tricky case
+  // is when the delta compare logic finds that all of the pixels have changed or the vast majority
+  // of pixels have changed, in this case it is actually less optimal to emit a delta frame as compared
+  // to a keyframe.
+  
+  NSData *encodedDeltaData = nil;
+  
+  if (isKeyframe == FALSE) {
+    // Calculate delta pixels by comparing the previous frame to the current frame.
+    // Once we know specific delta pixels, then only those pixels that actually changed
+    // can be stored in a delta frame.
+    
+    assert(prevFrameBuffer);
+    
+    assert(prevFrameBuffer.width == cgBuffer.width);
+    assert(prevFrameBuffer.height == cgBuffer.height);
+    assert(prevFrameBuffer.bitsPerPixel == cgBuffer.bitsPerPixel);
+    
+    void *prevPixels = (void*)prevFrameBuffer.pixels;
+    void *currentPixels = (void*)cgBuffer.pixels;
+    int numWords;
+    int width = cgBuffer.width;
+    int height = cgBuffer.height;
+    
+    BOOL emitKeyframeAnyway = FALSE;
+    
+    if (prevFrameBuffer.bitsPerPixel == 16) {
+      numWords = cgBuffer.numBytes / sizeof(uint16_t);
+      encodedDeltaData = maxvid_encode_generic_delta_pixels16(prevPixels,
+                                                              currentPixels,
+                                                              numWords,
+                                                              width,
+                                                              height,
+                                                              &emitKeyframeAnyway);
+      
+    } else {
+      numWords = cgBuffer.numBytes / sizeof(uint32_t);
+      encodedDeltaData = maxvid_encode_generic_delta_pixels32(prevPixels,
+                                                              currentPixels,
+                                                              numWords,
+                                                              width,
+                                                              height,
+                                                              &emitKeyframeAnyway);
+    }
+    
+    if (emitKeyframeAnyway) {
+      // The delta calculation indicates that all the pixels in the frame changed or
+      // so many changed that it would be better to emit a whole keyframe as opposed
+      // to a delta frame.
+      
+      emitKeyframe = TRUE;
+    }
+  }
+  
+  
+  if (emitKeyframe) {
+    // Emit Keyframe
+    
+    char *buffer = cgBuffer.pixels;
+    int numBytesInBuffer = cgBuffer.numBytes;
+    
+    worked = [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "cannot write keyframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
+      exit(1);
+    }
+  } else {
+    // Emit the delta frame
+    
+    if (encodedDeltaData == nil) {
+      // The two frames are pixel identical, this is a no-op delta frame
+      
+      [mvidWriter writeNopFrame];
+      worked = TRUE;
+    } else {
+      // Convert generic maxvid codes to c4 codes and emit as a data buffer
+      
+      void *pixelsPtr = (void*)cgBuffer.pixels;
+      int inputBufferNumBytes = cgBuffer.numBytes;
+      NSUInteger frameBufferNumPixels = cgBuffer.width * cgBuffer.height;
+      
+      worked = maxvid_write_delta_pixels(mvidWriter,
+                                         encodedDeltaData,
+                                         pixelsPtr,
+                                         inputBufferNumBytes,
+                                         frameBufferNumPixels);
+    }
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "cannot write deltaframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
+      exit(1);
+    }
+  }
+}
+
+#if MV_ENABLE_DELTAS
+
+// This method implements the "writing" portion of the frame emit logic for case where
+// pixel deltas will be generated. Pixel deltas imply that a diff of every frame is needed
+// since the delta logic is tied up with the delta logic.
+
+void process_frame_file_write_deltas(BOOL isKeyframe,
+                                     CGFrameBuffer *cgBuffer,
+                                     CGFrameBuffer *emptyInitialFrameBuffer,
+                                     AVMvidFileWriter *mvidWriter)
+{
+  BOOL worked;
+  
+  // In the case of the first frame, we need to create a fake "empty" previous frame so that
+  // delta logic can generate a diff from all black to the current frame.
+  
+  if (emptyInitialFrameBuffer) {
+    [emptyInitialFrameBuffer retain];
+    prevFrameBuffer = emptyInitialFrameBuffer;
+  }
+  
+  if (mvidWriter.isAllKeyframes) {
+    // This type of file contains all deltas, so we know it
+    // is not "all feyframes"
+
+    mvidWriter.isAllKeyframes = FALSE;
+  }
+  
+#if MV_ENABLE_DELTAS
+  // Mark the mvid file as containing all frame deltas and pixel deltas
+  mvidWriter.isDeltas = TRUE;
+#endif // MV_ENABLE_DELTAS
+  
+  // Run delta calculation in all cases, a keyframe in the initial frame is basically just the
+  // same as a plain delta. Note that all frames are deltas when emitting pixel deltas, no
+  // specific support for keyframes exists in this mode since max space savings is the goal.
+  // The decoder will implicitly create an all black prev frame also.
+  
+  NSData *encodedDeltaData = nil;
+  
+  assert(prevFrameBuffer);
+  
+  assert(prevFrameBuffer.width == cgBuffer.width);
+  assert(prevFrameBuffer.height == cgBuffer.height);
+  assert(prevFrameBuffer.bitsPerPixel == cgBuffer.bitsPerPixel);
+  
+  void *prevPixels = (void*)prevFrameBuffer.pixels;
+  void *currentPixels = (void*)cgBuffer.pixels;
+  int numWords;
+  int width = cgBuffer.width;
+  int height = cgBuffer.height;
+  
+  // Note that we pass NULL as the emitKeyframeAnyway argument to explicitly
+  // ignore the case where all the pixels change. We want to emit a delta
+  // in the case, not a keyframe.
+  
+  if (prevFrameBuffer.bitsPerPixel == 16) {
+    numWords = cgBuffer.numBytes / sizeof(uint16_t);
+    encodedDeltaData = maxvid_encode_generic_delta_pixels16(prevPixels,
+                                                            currentPixels,
+                                                            numWords,
+                                                            width,
+                                                            height,
+                                                            NULL);
+    
+  } else {
+    numWords = cgBuffer.numBytes / sizeof(uint32_t);
+    encodedDeltaData = maxvid_encode_generic_delta_pixels32(prevPixels,
+                                                            currentPixels,
+                                                            numWords,
+                                                            width,
+                                                            height,
+                                                            NULL);
+  }
+  
+  // Emit the delta frame
+  
+  if (encodedDeltaData == nil) {
+    // The two frames are pixel identical, this is a no-op delta frame
+    
+    if (emptyInitialFrameBuffer) {
+      // Special case handler for first frame that is a nop frame, this basically
+      // means that an all black prev frame should be used.
+      [mvidWriter writeInitialNopFrame];
+    } else {
+      [mvidWriter writeNopFrame];
+    }
+
+    worked = TRUE;
+  } else {
+    // There is a bunch of tricky logic involved in converting the raw deltas pixels
+    // into a set of generic codes that capture all the pixels in the delta. Use
+    // the output of the generic delta pixels logic as input to another method that
+    // will examine the COPY (and possibly the DUP codes) and transform these
+    // COPY codes to COPYD codes which indicate application of a pixel delta.
+    
+    void *pixelsPtr = (void*)cgBuffer.pixels;
+    int inputBufferNumBytes = cgBuffer.numBytes;
+    NSUInteger frameBufferNumPixels = cgBuffer.width * cgBuffer.height;
+    
+    NSMutableData *recodedDeltaData = [NSMutableData data];
+    
+    uint32_t processAsBPP;
+    if (cgBuffer.bitsPerPixel == 16) {
+      processAsBPP = 16;
+    } else {
+      processAsBPP = 32;
+    }
+    
+    // Rewrite pixel values using previous pixel values as opposed to
+    // absolute pixel values. This logic will not change the generic
+    // codes, it will only modify the pixel values of the COPY and
+    // DUP values.
+    
+    worked = maxvid_deltas_rewrite_delta_pixels(
+                                                encodedDeltaData,
+                                                recodedDeltaData,
+                                                pixelsPtr,
+                                                inputBufferNumBytes,
+                                                frameBufferNumPixels,
+                                                processAsBPP);
+    
+    if (worked == FALSE) {
+      fprintf(stderr, "cannot recode delta data to pixel delta\n");
+      exit(1);
+    }
+    
+    // Convert generic maxvid codes to c4 codes and emit as a data buffer
+    
+    worked = maxvid_write_delta_pixels(mvidWriter,
+                                       recodedDeltaData,
+                                       pixelsPtr,
+                                       inputBufferNumBytes,
+                                       frameBufferNumPixels);
+    
+    // FIXME: if additional modification is needed then translate the code values
+    // of the c4 codes after writing. For example, if there will be more COPY
+    // codes than SKIP, then make SKIP 0x0 and make DUP 0x1 so that there will
+    // be the maximul number of zero bits in a row. Another possible optimization
+    // would be to store the SKIP and number values so that the 1 values are together
+    // for the most common small values. This might result in additional compression
+    // even though the actual values would be the same
+  }
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "cannot write deltaframe data to mvid file \"%s\"\n", [mvidWriter.mvidPath UTF8String]);
+    exit(1);
+  }
+}
+
+#endif // MV_ENABLE_DELTAS
 
 // Extract all the frames of movie data from an archive file into
 // files indicated by a path prefix.
@@ -1256,7 +1451,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         isKeyframe = TRUE;
       }
       
-      process_frame_file(NULL, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
+      process_frame_file(NULL, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, optionsPtr);
       frameIndex++;
     }
     
@@ -1331,7 +1526,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
         isKeyframe = TRUE;
       }
       
-      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
+      process_frame_file(mvidWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, optionsPtr);
       frameIndex++;
     }
     
@@ -1589,7 +1784,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
         
-    process_frame_file(NULL, framePath, NULL, frameIndex, mvidFileMetaData, isKeyframe);
+    process_frame_file(NULL, framePath, NULL, frameIndex, mvidFileMetaData, isKeyframe, optionsPtr);
     frameIndex++;
   }
   
@@ -1630,7 +1825,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(mvidWriter, framePath, NULL, frameIndex, mvidFileMetaData, isKeyframe);
+    process_frame_file(mvidWriter, framePath, NULL, frameIndex, mvidFileMetaData, isKeyframe, optionsPtr);
     frameIndex++;
   }
   
@@ -1722,10 +1917,20 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   fprintStdoutFixedWidth("Frames:");
   fprintf(stdout, "%d\n", numFrames);
   
-  // If the "all keyframes" bit is set then print print TRUE for this element
+  // If the "all keyframes" bit is set then print TRUE for this element
   
   fprintStdoutFixedWidth("AllKeyFrames:");
   fprintf(stdout, "%s\n", [frameDecoder isAllKeyframes] ? "TRUE" : "FALSE");
+  
+#if MV_ENABLE_DELTAS
+  
+  // If the "deltas" bit is set, then print TRUE to indicate that all
+  // pixel values are deltas and all frames are deltas.
+
+  fprintStdoutFixedWidth("Deltas:");
+  fprintf(stdout, "%s\n", [frameDecoder isDeltas] ? "TRUE" : "FALSE");
+  
+#endif // MV_ENABLE_DELTAS
   
   [frameDecoder close];
 }
@@ -3038,7 +3243,7 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaDataRGB, isKeyframe);
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaDataRGB, isKeyframe, NULL);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -3130,7 +3335,7 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaDataAlpha, isKeyframe);
+      process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaDataAlpha, isKeyframe, NULL);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -3401,7 +3606,7 @@ joinalpha(char *mvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3577,7 +3782,7 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3804,7 +4009,7 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3930,7 +4135,7 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4005,7 +4210,15 @@ void printMvidFrameAdler(NSString *mvidFilename)
     assert(frame);
     
     uint32_t currentAdler = frame->adler;
-
+    
+#if MV_ENABLE_DELTAS
+    if (frameIndex == 0 && [frameDecoder isDeltas]) {
+      // A nop delta frame is a special case in that it contains an adler
+      // that corresponds to all black pixels.
+      
+      lastAdler = currentAdler;
+    } else // note that the else/if here is only enabled in deltas mode
+#endif // MV_ENABLE_DELTAS
     if (maxvid_frame_isnopframe(frame)) {
       currentAdler = lastAdler;
     } else {
@@ -4387,7 +4600,7 @@ void alphaMapMvid(NSString *inMvidPath,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4621,7 +4834,7 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe);
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4867,6 +5080,19 @@ int main (int argc, const char * argv[]) {
           }
           
           options.keyframe = keyframe;
+        } else if ([optionStr isEqualToString:@"-deltas"]) {
+          if ([valueStr isEqualToString:@"true"] ||
+              [valueStr isEqualToString:@"TRUE"] ||
+              [valueStr isEqualToString:@"1"]) {
+            options.deltas = 1;
+          } else if ([valueStr isEqualToString:@"false"] ||
+                     [valueStr isEqualToString:@"FALSE"] ||
+                     [valueStr isEqualToString:@"0"]) {
+            options.deltas = 0;
+          } else {
+            fprintf(stderr, "error: option %s is invalid\n", optionCstr);
+            exit(1);
+          }
         } else {
           // Unmatched option
           

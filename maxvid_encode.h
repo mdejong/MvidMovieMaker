@@ -223,4 +223,25 @@ maxvid_write_delta_pixels(AVMvidFileWriter *mvidWriter,
                           uint32_t inputBufferNumBytes,
                           NSUInteger frameBufferNumPixels);
 
+#if MV_ENABLE_DELTAS
+
+BOOL
+maxvid_deltas_rewrite_delta_pixels(NSData *maxvidInData,
+                                   NSMutableData *maxvidOutData,
+                                   void *inputBuffer,
+                                   uint32_t inputBufferNumBytes,
+                                   NSUInteger frameBufferNumPixels,
+                                   uint32_t processAsBPP);
+
+// Rewrite generic maxvid delta codes to "pixel delta" codes where each
+// pixel data element is a delta as compared to the previous pixel.
+
+uint32_t
+maxvid_deltas_decompress_delta_pixels16(uint32_t *inputBuffer32, uint32_t *outputBuffer32, uint32_t inputBuffer32NumWords);
+
+uint32_t
+maxvid_deltas_decompress_delta_pixels32(uint32_t *inputBuffer32, uint32_t *outputBuffer32, uint32_t inputBuffer32NumWords);
+
+#endif // MV_ENABLE_DELTAS
+
 #undef EXTRA_CHECKS
