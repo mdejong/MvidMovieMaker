@@ -214,8 +214,7 @@ maxvid_encode_generic_delta_pixels32(const uint32_t * restrict prevInputBuffer32
                                      BOOL *emitKeyframeAnyway);
 
 // This method will convert maxvid codes to the final output format, calculate an adler
-// checksum for the frame data and then write the data to the mvidWriter. Note that
-// the deltas this function generates are frame to frame deltas.
+// checksum for the frame data and then write the data to the mvidWriter.
 
 BOOL
 maxvid_write_delta_pixels(AVMvidFileWriter *mvidWriter,

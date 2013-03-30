@@ -2270,7 +2270,7 @@ maxvid_calculate_delta_pixels(NSArray *deltaPixels,
     if (bpp == 16) {
       doneCode = maxvid16_code(DONE, 0x0);
     } else {
-      doneCode = maxvid32_code(DONE, 0x0);
+      doneCode = maxvid32_code(DONE, 0x0);    
     }
     
     NSData *wordCode = [NSData dataWithBytes:&doneCode length:sizeof(uint32_t)];
@@ -2370,3 +2370,4 @@ maxvid_write_delta_pixels(AVMvidFileWriter *mvidWriter,
     return FALSE;
   }
 }
+
