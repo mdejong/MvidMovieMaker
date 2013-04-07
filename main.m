@@ -545,6 +545,8 @@ void process_frame_file_write_nodeltas(BOOL isKeyframe,
   BOOL worked;  
   BOOL emitKeyframe = isKeyframe;
   
+  uint32_t encodeFlags = 0;
+  
   // In the case where we know the frame is a keyframe, then don't bother to run delta calculation
   // logic. In the case of the first frame, there is nothing to compare to anyway. The tricky case
   // is when the delta compare logic finds that all of the pixels have changed or the vast majority
@@ -579,7 +581,8 @@ void process_frame_file_write_nodeltas(BOOL isKeyframe,
                                                               numWords,
                                                               width,
                                                               height,
-                                                              &emitKeyframeAnyway);
+                                                              &emitKeyframeAnyway,
+                                                              encodeFlags);
       
     } else {
       numWords = cgBuffer.numBytes / sizeof(uint32_t);
@@ -588,7 +591,8 @@ void process_frame_file_write_nodeltas(BOOL isKeyframe,
                                                               numWords,
                                                               width,
                                                               height,
-                                                              &emitKeyframeAnyway);
+                                                              &emitKeyframeAnyway,
+                                                              encodeFlags);
     }
     
     if (emitKeyframeAnyway) {
@@ -632,7 +636,8 @@ void process_frame_file_write_nodeltas(BOOL isKeyframe,
                                          encodedDeltaData,
                                          pixelsPtr,
                                          inputBufferNumBytes,
-                                         frameBufferNumPixels);
+                                         frameBufferNumPixels,
+                                         encodeFlags);
     }
     
     if (worked == FALSE) {
@@ -694,6 +699,14 @@ void process_frame_file_write_deltas(BOOL isKeyframe,
   int width = cgBuffer.width;
   int height = cgBuffer.height;
   
+  // In the case of deltas, set this special flag to indicate that DUP codes
+  // should not be generated. Instead, only COPY codes will be emitted. This
+  // leads to less code overhead since only SKIP and COPY codes should be
+  // emitted.
+
+  //uint32_t encodeFlags = 0;
+  uint32_t encodeFlags = MaxvidEncodeFlags_NO_DUP;
+  
   // Note that we pass NULL as the emitKeyframeAnyway argument to explicitly
   // ignore the case where all the pixels change. We want to emit a delta
   // in the case, not a keyframe.
@@ -705,7 +718,8 @@ void process_frame_file_write_deltas(BOOL isKeyframe,
                                                             numWords,
                                                             width,
                                                             height,
-                                                            NULL);
+                                                            NULL,
+                                                            encodeFlags);
     
   } else {
     numWords = cgBuffer.numBytes / sizeof(uint32_t);
@@ -714,7 +728,8 @@ void process_frame_file_write_deltas(BOOL isKeyframe,
                                                             numWords,
                                                             width,
                                                             height,
-                                                            NULL);
+                                                            NULL,
+                                                            encodeFlags);
   }
   
   // Emit the delta frame
@@ -774,7 +789,8 @@ void process_frame_file_write_deltas(BOOL isKeyframe,
                                        recodedDeltaData,
                                        pixelsPtr,
                                        inputBufferNumBytes,
-                                       frameBufferNumPixels);
+                                       frameBufferNumPixels,
+                                       encodeFlags);
     
     // FIXME: if additional modification is needed then translate the code values
     // of the c4 codes after writing. For example, if there will be more COPY
