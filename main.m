@@ -100,6 +100,7 @@ char *usageArray =
 "or   : mvidmoviemaker INFILE.mvid OUTFILE.mov ?OPTIONS?" "\n"
 "or   : mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?" "\n"
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
+"or   : mvidmoviemaker -extractpixels FILE.mvid ?FILEPREFIX?" "\n"
 "or   : mvidmoviemaker -upgrade FILE.mvid ?OUTFILE.mvid?" "\n"
 "or   : mvidmoviemaker -info movie.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
@@ -812,7 +813,15 @@ void process_frame_file_write_deltas(BOOL isKeyframe,
 // Extract all the frames of movie data from an archive file into
 // files indicated by a path prefix.
 
-void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
+typedef enum
+{
+  EXTRACT_FRAMES_TYPE_PNG = 0,
+  EXTRACT_FRAMES_TYPE_PIXELS,
+} ExtractFramesType;
+
+void extractFramesFromMvidMain(char *mvidFilename,
+                               char *extractFramesPrefix,
+                               ExtractFramesType type) {
 	BOOL worked;
   
   AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
@@ -849,20 +858,53 @@ void extractFramesFromMvidMain(char *mvidFilename, char *extractFramesPrefix) {
     CGColorSpaceRef sRGBColorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     assert(sRGBColorspace == cgFrameBuffer.colorspace);
     CGColorSpaceRelease(sRGBColorspace);
+
+    NSString *outFilename;
     
-    NSData *pngData = [cgFrameBuffer formatAsPNG];
-    assert(pngData);
-    
-    NSString *pngFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".png"];
-    
-    [pngData writeToFile:pngFilename atomically:NO];
-    
+    if (type == EXTRACT_FRAMES_TYPE_PNG) {
+      NSData *pngData = [cgFrameBuffer formatAsPNG];
+      assert(pngData);
+      
+      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".png"];
+      
+      [pngData writeToFile:outFilename atomically:NO];
+    } else if (type == EXTRACT_FRAMES_TYPE_PIXELS) {
+      // Write data as "*.pixels" with format {WIDTH HEIGHT PIXEL0 PIXEL1 ...}
+
+      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".pixels"];
+      
+      FILE *outfd = fopen((char*)[outFilename UTF8String], "wb");
+      assert(outfd);
+      
+      uint32_t width = (uint32_t)cgFrameBuffer.width;
+      uint32_t height = (uint32_t)cgFrameBuffer.height;
+      
+      int result;
+      
+      result = (int)fwrite(&width, sizeof(uint32_t), 1, outfd);
+      assert(result == 1);
+      result = (int)fwrite(&height, sizeof(uint32_t), 1, outfd);
+      assert(result == 1);
+      
+      uint32_t size = sizeof(uint32_t);
+      if (cgFrameBuffer.bitsPerPixel == 16) {
+        size = sizeof(uint16_t);
+      }
+      
+      result = (int)fwrite(cgFrameBuffer.pixels, size * width * height, 1, outfd);
+      assert(result == 1);
+      
+      fclose(outfd);
+    } else {
+      assert(0);
+    }
+        
     NSString *dupString = @"";
     if (frame.isDuplicate) {
       dupString = @" (duplicate)";
     }
     
-    fprintf(stdout, "wrote %s%s\n", [pngFilename UTF8String], [dupString UTF8String]);
+    fprintf(stdout, "wrote %s%s\n", [outFilename UTF8String], [dupString UTF8String]);
     
     [pool drain];
   }
@@ -4874,7 +4916,7 @@ int main (int argc, const char * argv[]) {
 	NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
   
 	if ((argc == 3 || argc == 4) && (strcmp(argv[1], "-extract") == 0)) {
-		// Extract movie frames from an existing archive
+		// mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?
 
     char *mvidFilename = (char *)argv[2];
     char *framesFilePrefix;
@@ -4885,7 +4927,20 @@ int main (int argc, const char * argv[]) {
       framesFilePrefix = (char*)argv[3];
     }
     
-		extractFramesFromMvidMain(mvidFilename, framesFilePrefix);
+		extractFramesFromMvidMain(mvidFilename, framesFilePrefix, EXTRACT_FRAMES_TYPE_PNG);
+	} else if ((argc == 3 || argc == 4) && (strcmp(argv[1], "-extractpixels") == 0)) {
+		// mvidmoviemaker -extractpixels FILE.mvid ?FILEPREFIX?
+
+    char *mvidFilename = (char *)argv[2];
+    char *framesFilePrefix;
+    
+    if (argc == 3) {
+      framesFilePrefix = "Frame";
+    } else {
+      framesFilePrefix = (char*)argv[3];
+    }
+    
+		extractFramesFromMvidMain(mvidFilename, framesFilePrefix, EXTRACT_FRAMES_TYPE_PIXELS);
 	} else if ((argc == 5) && (strcmp(argv[1], "-crop") == 0)) {
     // mvidmoviemaker -crop "X Y WIDTH HEIGHT" INMOVIE.mvid OUTMOVIE.mvid
     
@@ -5128,13 +5183,7 @@ int main (int argc, const char * argv[]) {
       // file for reasons of space savings.
       
       encodeMvidFromMovMain(firstFilenameCstr, mvidFilenameCstr, &options);
-      
-      if (FALSE) {
-        // Extract frames we just encoded into the .mvid file for debug purposes
-        
-        extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
-      }
-      
+            
       if (TRUE) {
         printMovieHeaderInfo(mvidFilenameCstr);
       }
@@ -5155,12 +5204,6 @@ int main (int argc, const char * argv[]) {
       encodeMvidFromFramesMain(mvidFilenameCstr,
                                firstFilenameCstr,
                                &options);
-      
-      if (FALSE) {
-        // Extract frames we just encoded into the .mvid file for debug purposes
-        
-        extractFramesFromMvidMain(mvidFilenameCstr, "ExtractedFrame");
-      }
       
       if (TRUE) {
         printMovieHeaderInfo(mvidFilenameCstr);
