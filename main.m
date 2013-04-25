@@ -6,6 +6,14 @@
 
 #import "AVMvidFrameDecoder.h"
 
+// private properties declaration for class AVMvidFrameDecoder, used here
+// to implete looking directly into the file header.
+
+@interface AVMvidFrameDecoder ()
+@property (nonatomic, assign) MVFrame *mvFrames;
+@end
+
+
 #include "maxvid_encode.h"
 
 #include "maxvid_deltas.h"
@@ -100,19 +108,21 @@ char *usageArray =
 "or   : mvidmoviemaker INFILE.mvid OUTFILE.mov ?OPTIONS?" "\n"
 "or   : mvidmoviemaker FIRSTFRAME.png OUTFILE.mvid ?OPTIONS?" "\n"
 "or   : mvidmoviemaker -extract FILE.mvid ?FILEPREFIX?" "\n"
-"or   : mvidmoviemaker -extractpixels FILE.mvid ?FILEPREFIX?" "\n"
 "or   : mvidmoviemaker -upgrade FILE.mvid ?OUTFILE.mvid?" "\n"
 "or   : mvidmoviemaker -info movie.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid or movie.mov" "\n"
-"or   : mvidmoviemaker -alphamap FILE.mvid OUTFILE.mvid MAPSPEC" "\n"
 "or   : mvidmoviemaker -pixels movie.mvid" "\n"
 "or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
 "or   : mvidmoviemaker -resize OPTIONS_RESIZE INFILE.mvid OUTFILE.mvid" "\n"
-"or   : mvidmoviemaker -rdelta INORIG.mvid INMOD.mvid OUTFILE.mvid" "\n"
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 #endif
+"options that are less commonly used" "\n"
+"or   : mvidmoviemaker -extractpixels FILE.mvid ?FILEPREFIX?" "\n"
+"or   : mvidmoviemaker -extractcodec FILE.mvid ?FILEPREFIX?" "\n"
+"or   : mvidmoviemaker -alphamap FILE.mvid OUTFILE.mvid MAPSPEC" "\n"
+"or   : mvidmoviemaker -rdelta INORIG.mvid INMOD.mvid OUTFILE.mvid" "\n"
 "OPTIONS:\n"
 "-fps FLOAT : required when creating .mvid from a series of images\n"
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n"
@@ -817,6 +827,7 @@ typedef enum
 {
   EXTRACT_FRAMES_TYPE_PNG = 0,
   EXTRACT_FRAMES_TYPE_PIXELS,
+  EXTRACT_FRAMES_TYPE_CODEC
 } ExtractFramesType;
 
 void extractFramesFromMvidMain(char *mvidFilename,
@@ -893,6 +904,61 @@ void extractFramesFromMvidMain(char *mvidFilename,
       
       result = (int)fwrite(cgFrameBuffer.pixels, size * width * height, 1, outfd);
       assert(result == 1);
+      
+      fclose(outfd);
+    } else if (type == EXTRACT_FRAMES_TYPE_CODEC) {
+      // Read the frame data encoded with codec specific word values.
+      // Format: {WIDTH HEIGHT IS_DELTA WORD0 WORD1 ...}
+      
+      MVFrame *mvFrames = frameDecoder.mvFrames;
+      assert(mvFrames);
+      
+      MVFrame *frame = maxvid_file_frame(mvFrames, frameIndex);
+      assert(frame);
+      
+      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".codec"];
+      
+      FILE *outfd = fopen((char*)[outFilename UTF8String], "wb");
+      assert(outfd);
+      
+      uint32_t width = (uint32_t)cgFrameBuffer.width;
+      uint32_t height = (uint32_t)cgFrameBuffer.height;
+      
+      if (maxvid_frame_isnopframe(frame)) {
+        // A nop frame is the same as the previous one, write a zero length file.
+      } else {
+        // Write: WIDTH HEIGHT
+        
+        int result;
+        
+        result = (int)fwrite(&width, sizeof(uint32_t), 1, outfd);
+        assert(result == 1);
+        result = (int)fwrite(&height, sizeof(uint32_t), 1, outfd);
+        assert(result == 1);
+        
+        // Write: IS_DELTA
+        
+        uint32_t is_delta = 1;
+        if (maxvid_frame_iskeyframe(frame)) {
+          is_delta = 0;
+        }
+        
+        result = (int)fwrite(&is_delta, sizeof(uint32_t), 1, outfd);
+        assert(result == 1);
+        
+        // Write: WORDS
+        
+        // The memory is already mapped, so just get the pointer to
+        // the front of the frame data and the length.
+              
+        uint32_t offset = maxvid_frame_offset(frame);
+        uint32_t length = maxvid_frame_length(frame);
+        
+        uint32_t *frameDataPtr = (uint32_t*) (frameDecoder.mappedData.bytes + offset);
+        
+        result = (int)fwrite(frameDataPtr, length, 1, outfd);
+        assert(result == 1);
+      }
       
       fclose(outfd);
     } else {
@@ -4229,13 +4295,6 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
 // file is created, so this function is trivial to implement since we just
 // iterate over the frames and print the values.
 
-// private properties declaration for class AVMvidFrameDecoder, used here
-// to implete looking directly into the file header.
-
-@interface AVMvidFrameDecoder ()
-@property (nonatomic, assign) MVFrame *mvFrames;
-@end
-
 void printMvidFrameAdler(NSString *mvidFilename)
 {
 	BOOL worked;
@@ -4941,6 +5000,19 @@ int main (int argc, const char * argv[]) {
     }
     
 		extractFramesFromMvidMain(mvidFilename, framesFilePrefix, EXTRACT_FRAMES_TYPE_PIXELS);
+	} else if ((argc == 3 || argc == 4) && (strcmp(argv[1], "-extractcodec") == 0)) {
+		// mvidmoviemaker -extractcodec FILE.mvid ?FILEPREFIX?
+    
+    char *mvidFilename = (char *)argv[2];
+    char *framesFilePrefix;
+    
+    if (argc == 3) {
+      framesFilePrefix = "Frame";
+    } else {
+      framesFilePrefix = (char*)argv[3];
+    }
+    
+		extractFramesFromMvidMain(mvidFilename, framesFilePrefix, EXTRACT_FRAMES_TYPE_CODEC);
 	} else if ((argc == 5) && (strcmp(argv[1], "-crop") == 0)) {
     // mvidmoviemaker -crop "X Y WIDTH HEIGHT" INMOVIE.mvid OUTMOVIE.mvid
     

@@ -89,6 +89,8 @@ void maxvid_frame_setnopframe(MVFrame *mvFrame) {
   mvFrame->lengthAndFlags |= MV_FRAME_IS_NOPFRAME;
 }
 
+// Set/Get frame offset and length, both in terms of bytes
+
 static inline
 void maxvid_frame_setoffset(MVFrame *mvFrame, uint32_t offset) {
   mvFrame->offset = offset;
