@@ -118,6 +118,7 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   } else if (bitsPerPixel == 24 || bitsPerPixel == 32) {
     bytesPerPixel = 4;
   } else {
+    bytesPerPixel = 0;
     NSAssert(FALSE, @"bitsPerPixel is invalid");
   }
   
@@ -190,10 +191,10 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   		return FALSE;
   }
   
-  size_t bitsPerComponent;
-  size_t numComponents;
-  size_t bitsPerPixel;
-  size_t bytesPerRow;
+  size_t bitsPerComponent = 0;
+  size_t numComponents = 0;
+  size_t bitsPerPixel = 0;
+  size_t bytesPerRow = 0;
   
   if (self.bitsPerPixel == 16) {
     bitsPerComponent = 5;
@@ -266,10 +267,10 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
 {
   // Render cgImageRef into this buffer at the current width and height
   
-  size_t bitsPerComponent;
-  size_t numComponents;
-  size_t bitsPerPixel;
-  size_t bytesPerRow;
+  size_t bitsPerComponent = 0;
+  size_t numComponents = 0;
+  size_t bitsPerPixel = 0;
+  size_t bytesPerRow = 0;
   
   if (self.bitsPerPixel == 16) {
     bitsPerComponent = 5;
@@ -326,10 +327,10 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
   
   NSAssert(self.width > 0 && self.height > 0, @"width or height is zero");
   
-  size_t bitsPerComponent;
-  size_t numComponents;
-  size_t bitsPerPixel;
-  size_t bytesPerRow;
+  size_t bitsPerComponent = 0;
+  size_t numComponents = 0;
+  size_t bitsPerPixel = 0;
+  size_t bytesPerRow = 0;
   
   if (self.bitsPerPixel == 16) {
     bitsPerComponent = 5;

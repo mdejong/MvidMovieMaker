@@ -77,6 +77,9 @@ NSData* encodeAnimationPixels(
           numPixels = copyPixels.length / 3;
         } else if (bpp == 32) {
           numPixels = copyPixels.length / 4;
+        } else {
+          numPixels = 0;
+          assert(FALSE);
         }
 
         assert(numPixels == pixelCount);
@@ -155,6 +158,9 @@ NSData* encodeAnimationPixels(
         numPixels = copyPixels.length / 3;
       } else if (bpp == 32) {
         numPixels = copyPixels.length / 4;
+      } else {
+        numPixels = 0;
+        assert(0);
       }
       assert(numPixels == pixelCount);
       rleCode = numPixels; // positive value indicates number of pixels to copy
