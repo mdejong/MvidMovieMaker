@@ -467,7 +467,9 @@
 {
   // The movie data must have been mapped into memory by the time advanceToFrame is invoked
   
-  NSAssert(self.mappedData, @"file not mapped");
+  if (self.mappedData == nil) {
+    NSAssert(FALSE, @"file not mapped");
+  }
   
   // Get from queue of frame buffers!
   
@@ -485,11 +487,10 @@
     return self.lastFrame;
   } else if ((frameIndex != -1) && (newFrameIndex < frameIndex)) {
     // movie frame index can only go forward via advanceToFrame
-    NSString *msg = [NSString stringWithFormat:@"%@: %d -> %d",
-                     @"can't advance to frame before current frameIndex",
-                     frameIndex,
-                     newFrameIndex];
-    NSAssert(FALSE, msg);
+    NSAssert(FALSE, @"%@: %d -> %d",
+             @"can't advance to frame before current frameIndex",
+             frameIndex,
+             newFrameIndex);
   }
   
   // Get the number of frames directly from the header
@@ -498,10 +499,7 @@
   int numFrames = [self numFrames];
   
   if (newFrameIndex >= numFrames) {
-    NSString *msg = [NSString stringWithFormat:@"%@: %d",
-                     @"can't advance past last frame",
-                     newFrameIndex];
-    NSAssert(FALSE, msg);
+    NSAssert(FALSE, @"%@: %d", @"can't advance past last frame", newFrameIndex);
   }
   
   BOOL changeFrameData = FALSE;
@@ -1011,6 +1009,17 @@
   } else {
     return FALSE;
   }
+}
+
+- (NSString*) description
+{
+  return [NSString stringWithFormat:@"AVMvidFrameDecoder %p, file %@, isOpen %d, isMapped %d, w/h %d x %d, numFrames %d",
+          self,
+          [self.filePath lastPathComponent],
+          self.isOpen,
+          (self.mappedData == nil ? 0 : 1),
+          self.width, self.height,
+          self.numFrames];
 }
 
 #if MV_ENABLE_DELTAS
