@@ -145,7 +145,7 @@
     
     NSArray *allValues = [self.allPixelOccurances allValues];
     
-    // Sort the values in the table in terms of descending cound number
+    // Sort the values in the table in terms of descending count number
     
     NSArray *sortedValues = [allValues sortedArrayUsingComparator:^NSComparisonResult(id a, id b) {
       NSNumber *first = (NSNumber*)a;
