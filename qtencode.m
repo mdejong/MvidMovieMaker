@@ -7,6 +7,8 @@
 
 #import "qtencode.h"
 
+#import "AVFrame.h"
+
 #import "AVMvidFrameDecoder.h"
 
 #import "CGFrameBuffer.h"

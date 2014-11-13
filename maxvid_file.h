@@ -7,7 +7,7 @@
 #include "maxvid_decode.h"
 
 // If this define is set to 1, then support for the experimental "deltas"
-// input format will be abled. This deltas logic will generate a diff
+// input format will be enabled. This deltas logic will generate a diff
 // of every frame, including the initial frame.
 
 #define MV_ENABLE_DELTAS 0
@@ -186,7 +186,7 @@ static inline
 uint32_t maxvid_file_is_valid(FILE *inFile) {
   (void)fseek(inFile, 0L, SEEK_SET);
   uint32_t magic;
-  int numRead = fread(&magic, sizeof(uint32_t), 1, inFile);
+  int numRead = (int) fread(&magic, sizeof(uint32_t), 1, inFile);
   if (numRead != 1) {
     // Could not read magic number
     return 0;

@@ -2,6 +2,8 @@
 
 #import "CGFrameBuffer.h"
 
+#import "AVFrame.h"
+
 #import "AVMvidFileWriter.h"
 
 #import "AVMvidFrameDecoder.h"
