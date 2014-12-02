@@ -4152,9 +4152,11 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
   return;
 }
 
-// This method provides an easy command line operation that will upgrade from a
-// previous mvid version to the most recent mvid version. This logic basically
-// just reads the old video data from a file and then writes a new file. The
+// This method provides an easy command line operation that will upgrade from
+// v1 to v2. This change is a nasty one because the file format changed in
+// a way that makes it impossible to support loading the old format. The
+// code that needed to change was duplicated so that only the upgrade
+// operation would need to deal with this horror show. The
 // new file will be written with the most recent version number. If specific
 // file format changes are needed, then will be implemented when the new file
 // is written. This method writes to a tmp file and then the existing mvid
@@ -4197,6 +4199,8 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
   
   AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
   
+  frameDecoder.upgradeFromV1 = TRUE;
+  
   BOOL worked = [frameDecoder openForReading:inMvidPath];
   
   if (worked == FALSE) {
@@ -4204,15 +4208,14 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
     exit(1);
   }
   
-  // Check for Version 0 -> Version 1 upgrade. Raise error if not MVID version 0.
+  // Check for upgrade from version 1 or 0 to version 2.
   
   MVFileHeader *header = [frameDecoder header];
   int version = maxvid_file_version(header);
-  if (version == MV_FILE_VERSION_ZERO) {
-    // No-op
+  if (version == MV_FILE_VERSION_ZERO || version == MV_FILE_VERSION_ONE) {
+    // Success
   } else {
-    // Do not "upgrade" when newer than the previous version
-    fprintf(stderr, "error: cannot upgrade mvid file already at version %d, only files at verion %d can be upgraded\n", version, MV_FILE_VERSION_ZERO);
+    fprintf(stderr, "error: cannot upgrade mvid file version %d to version 2\n", version);
     exit(1);
   }
   
