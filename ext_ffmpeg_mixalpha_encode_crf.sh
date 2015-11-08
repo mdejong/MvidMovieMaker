@@ -50,26 +50,26 @@ mvidmoviemaker $MIX $MIX_MOV
 #echo "exec ext_ffmpeg_encode_main_crf.sh \"$MIX_MOV\" \"$MIX_M4V\" $CRF $PROFILE"
 ext_ffmpeg_encode_crf.sh $MIX_MOV $MIX_M4V $CRF $PROFILE
 
-# The ext_ffmpeg_encode_crf.sh also implicitly decodes the
-# emitted .m4v data back into .mov format so that the
-# calling script need not know how ffmpeg handles that.
-# We just decode the .mov back into .mvid so that the
-# two alpha and rgb files can be merged back together
-# to test out the split/join logic.
+# Stopping at this point is significantly faster
+exit 0
 
-#MIX_ENCODED_MOV=`echo "$MIX_M4V" | sed -e s/.m4v/.mov/g`
+# Convert the encoded h264 video back to MOV with Animation codec and then
+# unmix the RGB and alpha frames so that the compressed output can be seen
+# with the lossy encoding applied.
 
-# Encode mixed .mov back to .mvid
+MIX_ENCODED_MOV=`echo "$MIX_M4V" | sed -e s/.m4v/.mov/g`
 
-#echo "exec mvidmoviemaker $MIX_M4V $MIX_ENCODED_MOV -bpp 24"
-#ffmpeg -y -i $MIX_M4V $MIX_ENCODED_MOV
-#mvidmoviemaker $MIX_ENCODED_MOV encoded.mvid -bpp 24
+echo "exec ffmpeg -y -i $MIX_M4V $MIX_ENCODED_MOV"
+ffmpeg -y -i $MIX_M4V -vcodec qtrle $MIX_ENCODED_MOV
 
-# Now join the alpha and rgb components back together into a 32BPP movie
-#mvidmoviemaker -joinalpha $MVID
+echo "exec mvidmoviemaker $MIX_ENCODED_MOV encoded_mix.mvid -bpp 24"
+mvidmoviemaker $MIX_ENCODED_MOV encoded_mix.mvid -bpp 24
 
-#echo "Rewrote MVID $MVID with video encoded as H264"
-#mvidmoviemaker -info $MVID
+echo "exec mvidmoviemaker -unmixalpha encoded.mvid"
+mvidmoviemaker -unmixalpha encoded.mvid
+
+echo "Rewrote MVID $MVID with video encoded as H264"
+mvidmoviemaker -info encoded.mvid
 
 # FIXME: could cleanup large tmp files here
 

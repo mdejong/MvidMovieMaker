@@ -120,6 +120,7 @@ char *usageArray =
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -mixalpha FILE.mvid (writes FILE_mix.mvid)" "\n"
+"or   : mvidmoviemaker -unmixalpha FILE.mvid (reads FILE_mix.mvid)" "\n"
 #endif
 "options that are less commonly used" "\n"
 "or   : mvidmoviemaker -extractpixels FILE.mvid ?FILEPREFIX?" "\n"
@@ -3544,7 +3545,7 @@ joinalpha(char *mvidFilenameCstr)
   
   // Remove output file if it exists
   
-  if (fileExists(mvidPath) == FALSE) {
+  if (fileExists(mvidPath) == TRUE) {
     [[NSFileManager defaultManager] removeItemAtPath:mvidPath error:nil];
   }
   
@@ -3694,6 +3695,8 @@ joinalpha(char *mvidFilenameCstr)
 
         const float thresholdPercent = 0.90;
         const int thresholdValue = (int) (0xFF * thresholdPercent);
+        
+        // FIXME: threshold should be in terms of 0, X, 255
         
         if (pixelAlphaRed >= thresholdValue) {
           // Fully transparent pixel
@@ -3952,6 +3955,228 @@ mixalpha(char *mvidFilenameCstr)
   }
   
   fprintf(stdout, "Wrote %s\n", [mixPath UTF8String]);
+}
+
+// Undo a mix where RGB and Alpha where split into different H.264 frames
+
+void
+unmixalpha(char *mvidFilenameCstr)
+{
+  NSString *mvidPath = [NSString stringWithUTF8String:mvidFilenameCstr];
+  
+  BOOL isMvid = [mvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  premultiply_init();
+  
+  // The join logic accepts a .mvid filename like "low_car.mvid" and looks
+  // for an input file "low_car_mix.mvid"
+  
+  NSString *mvidFilename = [mvidPath lastPathComponent];
+  NSString *mvidFilenameNoExtension = [mvidFilename stringByDeletingPathExtension];
+  
+  NSString *mixFilename = [NSString stringWithFormat:@"%@_mix.mvid", mvidFilenameNoExtension];
+  
+  // Reconstruct the fully qualified path for the RGB and ALPHA filenames
+  
+  NSArray *mvidPathComponents = [mvidPath pathComponents];
+  assert(mvidPathComponents);
+  
+  NSArray *pathPrefixComponents = [NSArray array];
+  if ([mvidPathComponents count] > 1) {
+    NSRange range;
+    range.location = 0;
+    range.length = [mvidPathComponents count] - 1;
+    pathPrefixComponents = [mvidPathComponents subarrayWithRange:range];
+  }
+  NSString *pathPrefix = nil;
+  if ([pathPrefixComponents count] > 0) {
+    pathPrefix = [NSString pathWithComponents:pathPrefixComponents];
+  }
+  
+  NSString *mixPath = mixFilename;
+  if (pathPrefix != nil) {
+    mixPath = [pathPrefix stringByAppendingPathComponent:mixPath];
+  }
+    
+  if (fileExists(mixPath) == FALSE) {
+    fprintf(stderr, "Cannot find input RGB file %s\n", [mixPath UTF8String]);
+    exit(1);
+  }
+  
+  // Remove output file if it exists
+  
+  if (fileExists(mvidPath) == TRUE) {
+    [[NSFileManager defaultManager] removeItemAtPath:mvidPath error:nil];
+  }
+  
+  fprintf(stdout, "Combine mix %s as %s\n", [mixFilename UTF8String], [mvidFilename UTF8String]);
+  
+  // Open both the rgb and alpha mvid files for reading
+  
+  AVMvidFrameDecoder *frameDecoderRGB = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked;
+  worked = [frameDecoderRGB openForReading:mixPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open RGB mvid filename \"%s\"\n", [mixPath UTF8String]);
+    exit(1);
+  }
+  
+  [frameDecoderRGB allocateDecodeResources];
+  
+  int foundBPP;
+  
+  foundBPP = [frameDecoderRGB header]->bpp;
+  if (foundBPP != 24) {
+    fprintf(stderr, "error: RGB mvid file must be 24BPP, found %dBPP\n", foundBPP);
+    exit(1);
+  }
+  
+  NSTimeInterval frameRate = frameDecoderRGB.frameDuration;
+  
+  NSUInteger numFrames = [frameDecoderRGB numFrames];
+  
+  int width = [frameDecoderRGB width];
+  int height = [frameDecoderRGB height];
+  CGSize size = CGSizeMake(width, height);
+  
+  // If alphaAsGrayscale is TRUE, then emit grayscale RGB values where all the componenets are equal.
+  // If alphaAsGrayscale is FALSE, then emit componenet RGB values that are able to make use of
+  // threshold RGB values to further correct Alpha values when decoding.
+  
+  const BOOL alphaAsGrayscale = TRUE;
+  
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
+  mvidFileMetaData.bpp = 32;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
+  // Create output file writer object
+  
+  int numOutputFrames = numFrames / 2;
+  
+  AVMvidFileWriter *fileWriter = makeMVidWriter(mvidPath, 32, frameRate, numOutputFrames);
+  
+  fileWriter.movieSize = size;
+  
+  CGFrameBuffer *combinedFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:32 width:width height:height];
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex += 2) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frameRGB = [frameDecoderRGB advanceToFrame:frameIndex];
+    assert(frameRGB);
+    
+    AVFrame *frameAlpha = [frameDecoderRGB advanceToFrame:frameIndex+1];
+    assert(frameAlpha);
+    
+    // Release the NSImage ref inside the frame since we will operate on the image data directly.
+    frameRGB.image = nil;
+    frameAlpha.image = nil;
+    
+    CGFrameBuffer *cgFrameBufferRGB = frameRGB.cgFrameBuffer;
+    assert(cgFrameBufferRGB);
+    
+    CGFrameBuffer *cgFrameBufferAlpha = frameAlpha.cgFrameBuffer;
+    assert(cgFrameBufferAlpha);
+    
+    // sRGB
+    
+    if (frameIndex == 0) {
+      combinedFrameBuffer.colorspace = cgFrameBufferRGB.colorspace;
+    }
+    
+    // Join RGB and ALPHA
+    
+    NSUInteger numPixels = width * height;
+    uint32_t *combinedPixels = (uint32_t*)combinedFrameBuffer.pixels;
+    uint32_t *rgbPixels = (uint32_t*)cgFrameBufferRGB.pixels;
+    uint32_t *alphaPixels = (uint32_t*)cgFrameBufferAlpha.pixels;
+    
+    for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+      uint32_t pixelAlpha = alphaPixels[pixeli];
+      
+      if (alphaAsGrayscale) {
+        // All 3 components of the ALPHA pixel need to be the same in grayscale mode.
+        
+        uint32_t pixelAlphaRed = (pixelAlpha >> 16) & 0xFF;
+        uint32_t pixelAlphaGreen = (pixelAlpha >> 8) & 0xFF;
+        uint32_t pixelAlphaBlue = (pixelAlpha >> 0) & 0xFF;
+        
+        if (pixelAlphaRed != pixelAlphaGreen || pixelAlphaRed != pixelAlphaBlue) {
+          fprintf(stderr, "Input Alpha MVID input movie R G B components do not match at pixel %d in frame %d\n", pixeli, frameIndex);
+          exit(1);
+        }
+        
+        pixelAlpha = pixelAlphaRed;
+      } else {
+        // R = transparent, G = partial transparency, B = opaque.
+        
+        uint32_t pixelAlphaRed = (pixelAlpha >> 16) & 0xFF;
+        uint32_t pixelAlphaGreen = (pixelAlpha >> 8) & 0xFF;
+        uint32_t pixelAlphaBlue = (pixelAlpha >> 0) & 0xFF;
+        
+        const float thresholdPercent = 0.90;
+        const int thresholdValue = (int) (0xFF * thresholdPercent);
+        
+        if (pixelAlphaRed >= thresholdValue) {
+          // Fully transparent pixel
+          pixelAlpha = 0x0;
+        } else if (pixelAlphaBlue >= thresholdValue) {
+          // Fully opaque pixel
+          pixelAlpha = 0xFF;
+        } else {
+          // Partial transparency
+          pixelAlpha = pixelAlphaGreen;
+          assert(pixelAlpha != 0x0);
+          assert(pixelAlpha != 0xFF);
+        }
+      }
+      
+      // RGB componenets are 24 BPP non pre multiplied values
+      
+      uint32_t pixelRGB = rgbPixels[pixeli];
+      uint32_t pixelRed = (pixelRGB >> 16) & 0xFF;
+      uint32_t pixelGreen = (pixelRGB >> 8) & 0xFF;
+      uint32_t pixelBlue = (pixelRGB >> 0) & 0xFF;
+      
+      // Create BGRA pixel that is not premultiplied
+      
+      uint32_t combinedPixel = premultiply_bgra_inline(pixelRed, pixelGreen, pixelBlue, pixelAlpha);
+      
+      combinedPixels[pixeli] = combinedPixel;
+    }
+    
+    // Write combined RGBA pixles
+    
+    // Copy RGB data into a CGImage and apply frame delta compression to output
+    
+    CGImageRef frameImage = [combinedFrameBuffer createCGImageRef];
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex/2, mvidFileMetaData, isKeyframe, NULL);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    [pool drain];
+  }
+  
+  [fileWriter rewriteHeader];
+  [fileWriter close];
+  
+  fprintf(stdout, "Wrote %s\n", [fileWriter.mvidPath UTF8String]);
+  return;
 }
 
 #endif // SPLITALPHA
@@ -5324,6 +5549,10 @@ int main (int argc, const char * argv[]) {
     // mvidmoviemaker -mixalpha INFILE.mvid
     char *mvidFilenameCstr = (char*)argv[2];
     mixalpha(mvidFilenameCstr);
+  } else if (argc == 3 && (strcmp(argv[1], "-unmixalpha") == 0)) {
+    // mvidmoviemaker -unmixalpha INFILE.mvid
+    char *mvidFilenameCstr = (char*)argv[2];
+    unmixalpha(mvidFilenameCstr);
 #endif // SPLITALPHA
   } else if (argc >= 3) {
     // Either:
