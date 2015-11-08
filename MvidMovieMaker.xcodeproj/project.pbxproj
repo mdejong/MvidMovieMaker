@@ -41,6 +41,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3C80C3151BED6C15003910B9 /* ext_ffmpeg_mixalpha_encode_crf.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = ext_ffmpeg_mixalpha_encode_crf.sh; sourceTree = SOURCE_ROOT; };
 		CD04C2B81646608D002DD253 /* movdata.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = movdata.c; sourceTree = SOURCE_ROOT; };
 		CD04C2B91646608D002DD253 /* movdata.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = movdata.h; sourceTree = SOURCE_ROOT; };
 		CD1E74F415F3432B001D5C64 /* AVFrame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AVFrame.h; sourceTree = SOURCE_ROOT; };
@@ -155,6 +156,7 @@
 				CD3D17BA17006447009D01AD /* MvidFileMetaData.m */,
 				CDA165051694A37F008D271C /* ext_ffmpeg_encode_crf.sh */,
 				CDA165061694A37F008D271C /* ext_ffmpeg_splitalpha_encode_crf.sh */,
+				3C80C3151BED6C15003910B9 /* ext_ffmpeg_mixalpha_encode_crf.sh */,
 			);
 			path = MvidMovieMaker;
 			sourceTree = "<group>";

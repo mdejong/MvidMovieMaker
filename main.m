@@ -119,6 +119,7 @@ char *usageArray =
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
+"or   : mvidmoviemaker -mixalpha FILE.mvid (writes FILE_mix.mvid)" "\n"
 #endif
 "options that are less commonly used" "\n"
 "or   : mvidmoviemaker -extractpixels FILE.mvid ?FILEPREFIX?" "\n"
@@ -3749,6 +3750,210 @@ joinalpha(char *mvidFilenameCstr)
   return;
 }
 
+// Mix alpha means to split the RGB and Alpha channels into frames and then
+// display one RGB frame and then one Alpha frame one after another.
+
+void
+mixalpha(char *mvidFilenameCstr)
+{
+  NSString *mvidPath = [NSString stringWithUTF8String:mvidFilenameCstr];
+  
+  BOOL isMvid = [mvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  // Create "xyz_mix.mvid" as output filenames
+  
+  NSString *mvidFilename = [mvidPath lastPathComponent];
+  NSString *mvidFilenameNoExtension = [mvidFilename stringByDeletingPathExtension];
+  
+  NSString *mixFilename = [NSString stringWithFormat:@"%@_mix.mvid", mvidFilenameNoExtension];
+  
+  // Reconstruct the fully qualified path for the RGB and ALPHA filenames
+  
+  NSArray *mvidPathComponents = [mvidPath pathComponents];
+  assert(mvidPathComponents);
+  
+  NSArray *pathPrefixComponents = [NSArray array];
+  if ([mvidPathComponents count] > 1) {
+    NSRange range;
+    range.location = 0;
+    range.length = [mvidPathComponents count] - 1;
+    pathPrefixComponents = [mvidPathComponents subarrayWithRange:range];
+  }
+  NSString *pathPrefix = nil;
+  if ([pathPrefixComponents count] > 0) {
+    pathPrefix = [NSString pathWithComponents:pathPrefixComponents];
+  }
+  
+  NSString *mixPath = mixFilename;
+  if (pathPrefix != nil) {
+    mixPath = [pathPrefix stringByAppendingPathComponent:mixFilename];
+  }
+  
+  // Read in frames from input file, then split the RGB and ALPHA components such that
+  // the premultiplied color values are writted to one file and the ALPHA (grayscale)
+  // values are written to the other.
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:mvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", mvidFilenameCstr);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
+  
+  if (bpp != 32) {
+    fprintf(stderr, "%s\n", "-mixalpha can only be used on a 32BPP MVID movie");
+    exit(1);
+  }
+  
+  // Verify that the input color data has been mapped to the sRGB colorspace.
+  
+  if (maxvid_file_version([frameDecoder header]) == MV_FILE_VERSION_ZERO) {
+    fprintf(stderr, "%s\n", "-mixalpha on MVID is not supported for an old MVID file version 0.");
+    exit(1);
+  }
+  
+  fprintf(stdout, "Mix %s RGB+A as %s\n", [mvidFilename UTF8String], [mixFilename UTF8String]);
+  
+  // Writer that will write the RGB values to an output file that is 2 times longer than the input
+  
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
+  mvidFileMetaData.bpp = 24;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
+  AVMvidFileWriter *fileWriter;
+  fileWriter = makeMVidWriter(mixPath, 24, frameDuration, numFrames*2);
+  
+  // If alphaAsGrayscale is TRUE, then emit grayscale RGB values where all the componenets are equal.
+  // If alphaAsGrayscale is FASLE, then emit componenet RGB values that are able to make use of
+  // threshold RGB values to further correct Alpha values when decoding.
+  
+  const BOOL alphaAsGrayscale = TRUE;
+  
+  {
+    CGFrameBuffer *rgbFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
+    
+    // Loop over all the frame data and emit RGB values without the alpha channel
+    
+    NSUInteger outFrameIndex = 0;
+    
+    for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+      NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+      
+      AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+      assert(frame);
+      
+      // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+      frame.image = nil;
+      
+      CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+      assert(cgFrameBuffer);
+      
+      if (frameIndex == 0) {
+        rgbFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+      }
+      
+      NSUInteger numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
+      uint32_t *pixels = (uint32_t*)cgFrameBuffer.pixels;
+      uint32_t *rgbPixels = (uint32_t*)rgbFrameBuffer.pixels;
+      
+      for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+        uint32_t pixel = pixels[pixeli];
+        
+        // First reverse the premultiply logic so that the color of the pixel is disconnected from
+        // the specific alpha value it will be displayed with.
+        
+        uint32_t rgbPixel = unpremultiply_bgra(pixel);
+        
+        // Now toss out the alpha value entirely and emit the pixel by itself in 24BPP mode
+        
+        rgbPixel = rgbPixel & 0xFFFFFF;
+        
+        rgbPixels[pixeli] = rgbPixel;
+      }
+      
+      // Copy RGB data into a CGImage and apply frame delta compression to output
+      
+      CGImageRef frameImage = [rgbFrameBuffer createCGImageRef];
+      
+      BOOL isKeyframe = TRUE;
+      
+      process_frame_file(fileWriter, NULL, frameImage, outFrameIndex, mvidFileMetaData, isKeyframe, NULL);
+      outFrameIndex++;
+      
+      if (frameImage) {
+        CGImageRelease(frameImage);
+      }
+      
+      // Emit Alpha frame
+
+      for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
+        uint32_t pixel = pixels[pixeli];
+        uint32_t alpha = (pixel >> 24) & 0xFF;
+        uint32_t alphaPixel;
+        if (alphaAsGrayscale) {
+          alphaPixel = (alpha << 16) | (alpha << 8) | alpha;
+        } else {
+          // R = transparent, G = partial transparency, B = opaque.
+          // This logic uses the green channel to map partial transparency
+          // values since the human visual system is able to descern more
+          // precision in the green values and so H264 encoders are more
+          // likely to store green with more precision.
+          
+          uint8_t red = 0x0, green = 0x0, blue = 0x0;
+          if (alpha == 0xFF) {
+            // Fully opaque pixel
+            blue = 0xFF;
+          } else if (alpha == 0x0) {
+            // Fully transparent pixel
+            red = 0xFF;
+          } else {
+            // Partial transparency
+            green = alpha;
+          }
+          alphaPixel = rgba_to_bgra(red, green, blue, 0xFF);
+        }
+        rgbPixels[pixeli] = alphaPixel;
+      }
+      
+      frameImage = [rgbFrameBuffer createCGImageRef];
+      
+      process_frame_file(fileWriter, NULL, frameImage, outFrameIndex, mvidFileMetaData, isKeyframe, NULL);
+      outFrameIndex++;
+      
+      if (frameImage) {
+        CGImageRelease(frameImage);
+      }
+      
+      [pool release];
+    }
+    
+    [fileWriter rewriteHeader];
+    [fileWriter close];
+  }
+  
+  fprintf(stdout, "Wrote %s\n", [mixPath UTF8String]);
+}
+
 #endif // SPLITALPHA
 
 // This method provides a command line interface that makes it possible to crop
@@ -5115,6 +5320,10 @@ int main (int argc, const char * argv[]) {
     // mvidmoviemaker -joinalpha OUTFILE.mvid
     char *mvidFilenameCstr = (char*)argv[2];
     joinalpha(mvidFilenameCstr);
+  } else if (argc == 3 && (strcmp(argv[1], "-mixalpha") == 0)) {
+    // mvidmoviemaker -mixalpha INFILE.mvid
+    char *mvidFilenameCstr = (char*)argv[2];
+    mixalpha(mvidFilenameCstr);
 #endif // SPLITALPHA
   } else if (argc >= 3) {
     // Either:

@@ -26,9 +26,12 @@ if test "$CRF" = ""; then
   exit 1
 fi
 
+PROFILE=baseline
+#PROFILE=main
+
 # Create the subdirectory
 
-SUBDIR="MVID_ENCODE_CRF_$CRF"
+SUBDIR="MVID_ENCODE_CRF_${CRF}_${PROFILE}"
 rm -rf "$SUBDIR"
 mkdir "$SUBDIR"
 cd "$SUBDIR"
@@ -54,8 +57,8 @@ mvidmoviemaker $ALPHA $ALPHA_MOV
 
 #sh -x ~/bin/ext_ffmpeg_encode_crf.sh $RGB_MOV $RGB_M4V $CRF
 #sh -x ~/bin/ext_ffmpeg_encode_crf.sh $ALPHA_MOV $ALPHA_M4V $CRF
-ext_ffmpeg_encode_crf.sh $RGB_MOV $RGB_M4V $CRF
-ext_ffmpeg_encode_crf.sh $ALPHA_MOV $ALPHA_M4V $CRF
+ext_ffmpeg_encode_crf.sh $RGB_MOV $RGB_M4V $CRF $PROFILE
+ext_ffmpeg_encode_crf.sh $ALPHA_MOV $ALPHA_M4V $CRF $PROFILE
 
 # The ext_ffmpeg_encode_crf.sh also implicitly decodes the
 # emitted .m4v data back into .mov format so that the
