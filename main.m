@@ -8,6 +8,8 @@
 
 #import "AVMvidFrameDecoder.h"
 
+#import "SegmentedMappedData.h"
+
 // private properties declaration for class AVMvidFrameDecoder, used here
 // to implete looking directly into the file header.
 

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3CB4D4831C9B937200553E73 /* SegmentedMappedData.m in Sources */ = {isa = PBXBuildFile; fileRef = 3CB4D4821C9B937200553E73 /* SegmentedMappedData.m */; };
 		CD04C2BA1646608D002DD253 /* movdata.c in Sources */ = {isa = PBXBuildFile; fileRef = CD04C2B81646608D002DD253 /* movdata.c */; };
 		CD1E74F615F3432B001D5C64 /* AVFrame.m in Sources */ = {isa = PBXBuildFile; fileRef = CD1E74F515F3432B001D5C64 /* AVFrame.m */; };
 		CD2154D217017BE6006F6BFB /* maxvid_deltas.m in Sources */ = {isa = PBXBuildFile; fileRef = CD2154D117017BE6006F6BFB /* maxvid_deltas.m */; };
@@ -42,6 +43,8 @@
 
 /* Begin PBXFileReference section */
 		3C80C3151BED6C15003910B9 /* ext_ffmpeg_mixalpha_encode_crf.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = ext_ffmpeg_mixalpha_encode_crf.sh; sourceTree = SOURCE_ROOT; };
+		3CB4D4811C9B937200553E73 /* SegmentedMappedData.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SegmentedMappedData.h; sourceTree = SOURCE_ROOT; };
+		3CB4D4821C9B937200553E73 /* SegmentedMappedData.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SegmentedMappedData.m; sourceTree = SOURCE_ROOT; };
 		CD04C2B81646608D002DD253 /* movdata.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = movdata.c; sourceTree = SOURCE_ROOT; };
 		CD04C2B91646608D002DD253 /* movdata.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = movdata.h; sourceTree = SOURCE_ROOT; };
 		CD1E74F415F3432B001D5C64 /* AVFrame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AVFrame.h; sourceTree = SOURCE_ROOT; };
@@ -154,6 +157,8 @@
 				CD7E243615F341A000027DA6 /* AVMvidFrameDecoder.m */,
 				CD3D17B917006447009D01AD /* MvidFileMetaData.h */,
 				CD3D17BA17006447009D01AD /* MvidFileMetaData.m */,
+				3CB4D4811C9B937200553E73 /* SegmentedMappedData.h */,
+				3CB4D4821C9B937200553E73 /* SegmentedMappedData.m */,
 				CDA165051694A37F008D271C /* ext_ffmpeg_encode_crf.sh */,
 				CDA165061694A37F008D271C /* ext_ffmpeg_splitalpha_encode_crf.sh */,
 				3C80C3151BED6C15003910B9 /* ext_ffmpeg_mixalpha_encode_crf.sh */,
@@ -217,6 +222,7 @@
 				CDCC050E15F2036E00C08C52 /* maxvid_encode.m in Sources */,
 				CDCC050F15F2036E00C08C52 /* maxvid_file.c in Sources */,
 				CD7E243815F341A000027DA6 /* AVFrameDecoder.m in Sources */,
+				3CB4D4831C9B937200553E73 /* SegmentedMappedData.m in Sources */,
 				CD7E243915F341A000027DA6 /* AVMvidFrameDecoder.m in Sources */,
 				CD7E243A15F341A000027DA6 /* maxvid_decode.c in Sources */,
 				CD1E74F615F3432B001D5C64 /* AVFrame.m in Sources */,

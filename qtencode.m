@@ -730,10 +730,7 @@ void convertMvidToMov(
   
   // Add media samples, 1 sample for each frame image
   
-  for (int frame = 0; frame < numFrames; frame++)
-  {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    
+  for (int frame = 0; frame < numFrames; frame++) @autoreleasepool {
     AVFrame *frameObj = [frameDecoder advanceToFrame:frame];
     assert(frameObj);
     frameObj.image = nil;
@@ -881,8 +878,6 @@ void convertMvidToMov(
      }
      
      */
-    
-    [pool drain];
   }
   
   // It is important to push out any remaining frames before we release the compression session.
