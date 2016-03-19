@@ -4251,7 +4251,7 @@ mixstraight(char *rgbMvidFilenameCstr, char *alphaMvidFilenameCstr, char *mixedM
   worked = [frameDecoderAlpha openForReading:alphaMvidPath];
   
   if (worked == FALSE) {
-    fprintf(stderr, "error: cannot open RGB mvid filename \"%s\"\n", [alphaMvidPath UTF8String]);
+    fprintf(stderr, "error: cannot open ALPHA mvid filename \"%s\"\n", [alphaMvidPath UTF8String]);
     exit(1);
   }
   
