@@ -2414,7 +2414,7 @@ int unpremultiply(const uint32_t premultRGBComponent, const float alphaMult, con
     
     // Recheck
     
-    if (0) {
+    if ((0)) {
       premultPixel = premultiply_bgra_inline(unpremultRGBComponent, 0, 0, alpha);
       premultActualRGBComponent = (premultPixel >> 16) & 0xFF;
       assert(premultRGBComponent == premultActualRGBComponent);
@@ -2444,7 +2444,7 @@ uint32_t unpremultiply_bgra(uint32_t premultPixelBGRA)
   } else if (alpha == 0xFF) {
     // Nop
   } else {
-    float alphaMult = 1.0 / (alpha / 255.0);
+    float alphaMult = 1.0f / (alpha / 255.0f);
     
     red = unpremultiply(red, alphaMult, alpha);
     green = unpremultiply(green, alphaMult, alpha);

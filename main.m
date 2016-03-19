@@ -1622,6 +1622,11 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   
   AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, movieFramerateInterval, totalNumFrames);
   
+  if (optionsPtr->keyframe == 1) {
+    // When every frame will be emitted as a keyframe, emit v3 to enable 64bit support
+    mvidWriter.genV3PageOffsetBlocks = TRUE;
+  }
+  
   done = FALSE;
   currentTime = startTime;
   frameIndex = 0;
@@ -1655,6 +1660,10 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       
       BOOL isKeyframe = FALSE;
       if (frameIndex == 0) {
+        isKeyframe = TRUE;
+      }
+      
+      if (optionsPtr->keyframe == 1) {
         isKeyframe = TRUE;
       }
       
@@ -4294,6 +4303,8 @@ mixstraight(char *rgbMvidFilenameCstr, char *alphaMvidFilenameCstr, char *mixedM
   AVMvidFileWriter *fileWriter = makeMVidWriter(mixedMvidPath, 24, frameRate, numOutputFrames);
   
   fileWriter.movieSize = size;
+  
+  fileWriter.genV3PageOffsetBlocks = TRUE;
   
   CGFrameBuffer *rgbOutputFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
   
