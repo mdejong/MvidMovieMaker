@@ -1718,6 +1718,32 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     [prevFrameBuffer release];
   }
   
+  // Verify that each encoded frame matches the adler generated for that frame. This
+  // basically checks that the encoding process is working by doing a binary
+  // verification of the decode result for each frame.
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  worked = [frameDecoder openForReading:mvidFilename];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", mvidFilenameCstr);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) @autoreleasepool {
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    printf("verified frame %d\n", frameIndex);
+  }
+  
   return;
 }
 

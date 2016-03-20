@@ -379,15 +379,15 @@
   return;
 }
 
-- (NSData *)subdataWithRange:(NSRange)range
+// This API will create a mapped segment subrange with 64 bit support.
+
+- (SegmentedMappedData*) subdataWithOffset:(off_t)offset len:(off_t)len
 {
-  NSAssert(isContainer == TRUE, @"subdataWithRange can only be invoked on container");
+  NSAssert(isContainer == TRUE, @"subdataWithOffset can only be invoked on container");
   
   NSAssert(m_refCountedFD, @"refCountedFD");
   
-  NSUInteger offset = range.location;
-  NSUInteger len = range.length;
-  NSUInteger lastByteOffset = offset + len;
+  off_t lastByteOffset = offset + len;
   
   if ((len == 0) || (lastByteOffset > m_mappedLen)) {
     return nil;

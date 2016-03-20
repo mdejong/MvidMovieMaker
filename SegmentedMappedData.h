@@ -69,7 +69,7 @@
 // ref is dropped. Note that the actual mapping is not created until the
 // mapSegment API is invoked on a specific segment.
 
-- (SegmentedMappedData*) subdataWithRange:(NSRange)range;
+- (SegmentedMappedData*) subdataWithOffset:(off_t)offset len:(off_t)len;
 
 // This method will invoke mmap to actually map a segment into a memory buffer.
 // If the memory was successfully mapped, then TRUE is returned. Otherwise FALSE.

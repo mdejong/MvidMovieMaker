@@ -368,11 +368,7 @@
         
         BOOL worked;
         
-        NSRange range;
-        range.location = 0;
-        range.length = MV_PAGESIZE;
-        
-        SegmentedMappedData *seg0 = [self.mappedData subdataWithRange:range];
+        SegmentedMappedData *seg0 = [self.mappedData subdataWithOffset:0 len:MV_PAGESIZE];
         if (seg0) {
           worked = TRUE;
         } else {
@@ -751,12 +747,8 @@
       // Create a mapped segment using the frame offset and length for this frame.
 
       uint32_t *inputBuffer32 = NULL;
-      
-      NSRange range;
-      range.location = (NSUInteger) frameStartOffset; // 64 bit
-      range.length = inputBuffer32NumBytes;
-  
-      SegmentedMappedData *mappedSeg = [self.mappedData subdataWithRange:range];
+        
+      SegmentedMappedData *mappedSeg = [self.mappedData subdataWithOffset:frameStartOffset len:inputBuffer32NumBytes];
       
       if (mappedSeg == nil) {
         inputMemoryMapped = FALSE;
