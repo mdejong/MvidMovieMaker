@@ -807,9 +807,11 @@ void convertMvidToMov(
       for (NSUInteger pixeli = 0; pixeli < numPixels; pixeli++) {
         uint32_t pixel = inPixels[pixeli];
         
+#if defined(DEBUG)
         if (pixeli == 1) {
           assert(pixeli == 1); // useful when debugging
         }
+#endif // DEBUG
         
         // Write each byte of LE 32BPP pixel as BE 32BPP (4 bytes)
         
@@ -878,6 +880,8 @@ void convertMvidToMov(
      }
      
      */
+    
+    fprintf(stdout, "emitted frame %d at click seconds %0.3f", frame, timeValue/((float)timeScale));
   }
   
   // It is important to push out any remaining frames before we release the compression session.

@@ -4357,11 +4357,11 @@ mixstraight(char *rgbMvidFilenameCstr, char *alphaMvidFilenameCstr, char *mixedM
     // Straight memcpy into rgbOutputFrameBuffer
     
     [rgbOutputFrameBuffer copyPixels:frameRGB.cgFrameBuffer];
-    //[rgbOutputFrameBuffer rewriteOpaquePixels];
     
     // Copy RGB data into a CGImage and apply frame delta compression to output
     
     CGImageRef frameImage = [rgbOutputFrameBuffer createCGImageRef];
+    assert(frameImage);
     
     BOOL isKeyframe = TRUE;
     
@@ -4375,9 +4375,9 @@ mixstraight(char *rgbMvidFilenameCstr, char *alphaMvidFilenameCstr, char *mixedM
     // Straight memcpy into rgbOutputFrameBuffer
     
     [rgbOutputFrameBuffer copyPixels:frameAlpha.cgFrameBuffer];
-    //[rgbOutputFrameBuffer rewriteOpaquePixels];
     
     frameImage = [rgbOutputFrameBuffer createCGImageRef];
+    assert(frameImage);
     
     process_frame_file(fileWriter, NULL, frameImage, outFrameIndex, mvidFileMetaData, isKeyframe, NULL);
     outFrameIndex++;
