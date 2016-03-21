@@ -1525,6 +1525,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     worked = QTGetTimeInterval(currentTime, &timeInterval);
     assert(worked);
     
+//    fprintf(stdout, "extract frame %d at time %f\n", frameIndex+1, (float)timeInterval);
+    
     frameImage = getMovFrameAtTime(currentTime);
     worked = (frameImage != nil);
     
@@ -1532,6 +1534,8 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       done = TRUE;
       
       fprintf(stdout, "failed to extract frame %d at time %f\n", frameIndex+1, (float)timeInterval);
+      
+      frameIndex--;
     } else {
       extractedFirstFrame = TRUE;
       
@@ -1607,6 +1611,10 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     [pool drain];
   } // end while !done loop
+  
+  if (totalNumFrames != (frameIndex+1)) {
+    totalNumFrames = frameIndex+1;
+  }
   
   // Stage 2: once scanning all the input pixels is completed, we can loop over all the frames
   // again but this time we actually write the output at the correct BPP. The scan step takes

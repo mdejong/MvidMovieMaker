@@ -648,6 +648,8 @@ CGImageRef decodeAnimation_getMovFrameAtTime(QTTime atTime)
   MediaSampleFlags sampleFlags;
   void *sampleData = NULL;
   
+  //NSLog(@"decodeTime %5d : mediaTimeScale %5d", (int)decodeTime, (int)[mediaTimeScale longValue]);
+  
   err = GetMediaSample2(
                         mediaRef.quickTimeMedia,
                         NULL,
@@ -656,7 +658,10 @@ CGImageRef decodeAnimation_getMovFrameAtTime(QTTime atTime)
                         decodeTime,
                         NULL, NULL, NULL, NULL, NULL, 1, NULL,
                         &sampleFlags);
-  assert(err == noErr);
+  
+  if (err != noErr) {
+    return NULL;
+  }
   
   sampleData = malloc(sampleDataSize);
   assert(sampleData);
