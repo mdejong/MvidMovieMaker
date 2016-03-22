@@ -23,7 +23,10 @@ ffmpeg -y -i "$MOV" -vcodec rawvideo -pix_fmt yuv444p "$Y4M"
 
 # encode to lossless H.264, video header info stored in Y4M already
 
-ffmpeg -y -pix_fmt yuv444p -i "$Y4M" -c:v libx264 -pix_fmt yuv444p -profile:v high444 -crf 0 -preset:v slow "$M4V"
+#echo "ffmpeg -y -i $Y4M -c:v libx264 -pix_fmt yuv444p -profile:v high444 -crf 0 -preset:v slow $M4V"
+ffmpeg -y -i "$Y4M" -c:v libx264 -pix_fmt yuv444p -profile:v high444 -crf 0 -preset:v slow "$M4V"
+
+rm "$Y4M"
 
 exit 0
 
