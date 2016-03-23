@@ -1535,7 +1535,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
       
       fprintf(stdout, "failed to extract frame %d at time %f\n", frameIndex+1, (float)timeInterval);
       
-      frameIndex--;
+      totalNumFrames--;
     } else {
       extractedFirstFrame = TRUE;
       
@@ -1611,10 +1611,6 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     
     [pool drain];
   } // end while !done loop
-  
-  if (totalNumFrames != (frameIndex+1)) {
-    totalNumFrames = frameIndex+1;
-  }
   
   // Stage 2: once scanning all the input pixels is completed, we can loop over all the frames
   // again but this time we actually write the output at the correct BPP. The scan step takes
@@ -1706,8 +1702,11 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     fprintf(stderr, "Could not extract initial frame from movie file %s\n", movFilenameCstr);
     exit(2);
   }
-  
-  assert(frameIndex == totalNumFrames);
+
+  if (frameIndex != totalNumFrames) {
+    fprintf(stderr, "extracted just %d frames of %d from movie file %s\n", frameIndex, totalNumFrames, movFilenameCstr);
+    exit(3);
+  }
   
   // Note that the process_frame_file() method could have modified the bpp field by changing it
   // from 24bpp to 32bpp in the case where alpha channel usage was found in the image data.
