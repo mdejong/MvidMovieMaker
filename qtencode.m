@@ -881,7 +881,7 @@ void convertMvidToMov(
      
      */
     
-    fprintf(stdout, "emitted frame %d at click seconds %0.3f", frame, timeValue/((float)timeScale));
+    fprintf(stdout, "emitted frame %d at click seconds %0.3f\n", frame, timeValue/((float)timeScale));
   }
   
   // It is important to push out any remaining frames before we release the compression session.
