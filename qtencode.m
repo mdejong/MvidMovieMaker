@@ -552,9 +552,13 @@ void convertMvidToMov(
   float frameDuration = [frameDecoder frameDuration];
   
   long timeScale      = 600; // 600 "clicks" in a clock second
-  long long timeValue;
+  long long frameDurationTimeValue;
   
-  timeValue = (long long) round(frameDuration * timeScale);
+  frameDurationTimeValue = (long long) round(frameDuration * timeScale);
+
+  // Explicitly calculate the frame display time
+  
+  long long frameDisplayTimeValue;
   
   //QTTime frameDurationTime = QTMakeTime(timeValue, timeScale);
   
@@ -728,6 +732,8 @@ void convertMvidToMov(
                                  &pixelBuffer);
   assert(cvReturn == 0);
   
+  fprintf(stdout, "each frame duration is click seconds %0.5f\n", frameDurationTimeValue/((float)timeScale));
+  
   // Add media samples, 1 sample for each frame image
   
   for (int frame = 0; frame < numFrames; frame++) @autoreleasepool {
@@ -849,12 +855,14 @@ void convertMvidToMov(
     
     // encode specific frames
     
+    frameDisplayTimeValue = (long long) round((frameDuration * frame) * timeScale);
+    
     currentPixelBuffer = pixelBuffer;
     osError = ICMCompressionSessionEncodeFrame(compressionSession,
                                                pixelBuffer,
-                                               0, // timeStamp
-                                               timeValue, // TimeValue64 displayDuration
-                                               kICMValidTime_DisplayDurationIsValid,
+                                               frameDisplayTimeValue, // timeStamp
+                                               frameDurationTimeValue, // TimeValue64 displayDuration
+                                               kICMValidTime_DisplayTimeStampIsValid | kICMValidTime_DisplayDurationIsValid,
                                                NULL, NULL, NULL);
     currentPixelBuffer = NULL;
     assert(osError == 0);
@@ -881,7 +889,9 @@ void convertMvidToMov(
      
      */
     
-    fprintf(stdout, "emitted frame %d at click seconds %0.3f\n", frame, timeValue/((float)timeScale));
+    // 5 decimal digits needed to tell the diff between 1.0/30 vs 1.0/29.97
+    
+    fprintf(stdout, "emitted frame %5d at click seconds %0.5f\n", frame+1, frameDisplayTimeValue/((float)timeScale));
   }
   
   // It is important to push out any remaining frames before we release the compression session.
