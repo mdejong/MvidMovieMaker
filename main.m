@@ -1748,7 +1748,7 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
     AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
     assert(frame);
     
-    printf("verified frame %d\n", frameIndex);
+    printf("verified frame %d\n", frameIndex+1);
   }
   
   return;
