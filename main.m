@@ -14,7 +14,7 @@
 // to implete looking directly into the file header.
 
 @interface AVMvidFrameDecoder ()
-@property (nonatomic, assign) MVFrame *mvFrames;
+@property (nonatomic, assign, readonly) void *mvFrames;
 @end
 
 
@@ -234,6 +234,7 @@ AVMvidFileWriter* makeMVidWriter(
   mvidWriter.totalNumFrames = totalNumFrames;
   
   mvidWriter.genAdler = TRUE;
+  mvidWriter.genV3 = TRUE;
   
   BOOL worked = [mvidWriter open];
   if (worked == FALSE) {
@@ -331,7 +332,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     bppNum = 32;
   }
   
-  int isSizeOkay = maxvid_frame_check_max_size(imageWidth, imageHeight, bppNum);
+  int isSizeOkay = maxvid_v3_frame_check_max_size(imageWidth, imageHeight, bppNum);
   if (isSizeOkay != 0) {
     fprintf(stderr, "error: frame size is so large that it cannot be stored in MVID file : %d x %d at %d BPP\n",
             (int)imageWidth, (int)imageHeight, bppNum);
@@ -859,6 +860,8 @@ void extractFramesFromMvidMain(char *mvidFilename,
   NSUInteger numFrames = [frameDecoder numFrames];
   assert(numFrames > 0);
 
+  int isV3 = (maxvid_file_version([frameDecoder header]) == MV_FILE_VERSION_THREE);
+  
   for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     
@@ -913,14 +916,11 @@ void extractFramesFromMvidMain(char *mvidFilename,
       assert(result == 1);
       
       fclose(outfd);
-    } else if (type == EXTRACT_FRAMES_TYPE_CODEC) {
+    } else if (type == EXTRACT_FRAMES_TYPE_CODEC && !isV3) {
       // Read the frame data encoded with codec specific word values.
       // Format: {WIDTH HEIGHT IS_DELTA WORD0 WORD1 ...}
       
-      MVFrame *mvFrames = frameDecoder.mvFrames;
-      assert(mvFrames);
-      
-      MVFrame *frame = maxvid_file_frame(mvFrames, frameIndex);
+      MVFrame *frame = maxvid_file_frame(frameDecoder.mvFrames, frameIndex);
       assert(frame);
       
       outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".codec"];
@@ -960,6 +960,58 @@ void extractFramesFromMvidMain(char *mvidFilename,
               
         uint32_t offset = maxvid_frame_offset(frame);
         uint32_t length = maxvid_frame_length(frame);
+        
+        uint32_t *frameDataPtr = (uint32_t*) (frameDecoder.mappedData.bytes + offset);
+        
+        result = (int)fwrite(frameDataPtr, length, 1, outfd);
+        assert(result == 1);
+      }
+      
+      fclose(outfd);
+    } else if (type == EXTRACT_FRAMES_TYPE_CODEC && isV3) {
+      // Read the frame data encoded with codec specific word values.
+      // Format: {WIDTH HEIGHT IS_DELTA WORD0 WORD1 ...}
+      
+      MVV3Frame *frame = maxvid_v3_file_frame(frameDecoder.mvFrames, frameIndex);
+      assert(frame);
+      
+      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".codec"];
+      
+      FILE *outfd = fopen((char*)[outFilename UTF8String], "wb");
+      assert(outfd);
+      
+      uint32_t width = (uint32_t)cgFrameBuffer.width;
+      uint32_t height = (uint32_t)cgFrameBuffer.height;
+      
+      if (maxvid_v3_frame_isnopframe(frame)) {
+        // A nop frame is the same as the previous one, write a zero length file.
+      } else {
+        // Write: WIDTH HEIGHT
+        
+        int result;
+        
+        result = (int)fwrite(&width, sizeof(uint32_t), 1, outfd);
+        assert(result == 1);
+        result = (int)fwrite(&height, sizeof(uint32_t), 1, outfd);
+        assert(result == 1);
+        
+        // Write: IS_DELTA
+        
+        uint32_t is_delta = 1;
+        if (maxvid_v3_frame_iskeyframe(frame)) {
+          is_delta = 0;
+        }
+        
+        result = (int)fwrite(&is_delta, sizeof(uint32_t), 1, outfd);
+        assert(result == 1);
+        
+        // Write: WORDS
+        
+        // The memory is already mapped, so just get the pointer to
+        // the front of the frame data and the length.
+        
+        uint64_t offset = maxvid_v3_frame_offset(frame);
+        uint32_t length = maxvid_v3_frame_length(frame);
         
         uint32_t *frameDataPtr = (uint32_t*) (frameDecoder.mappedData.bytes + offset);
         
@@ -1625,11 +1677,6 @@ void encodeMvidFromMovMain(char *movFilenameCstr,
   mvidFileMetaData.checkAlphaChannel = FALSE;
   
   AVMvidFileWriter *mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, movieFramerateInterval, totalNumFrames);
-  
-  if (optionsPtr->keyframe == 1) {
-    // When every frame will be emitted as a keyframe, emit v3 to enable 64bit support
-    mvidWriter.genV3PageOffsetBlocks = TRUE;
-  }
   
   done = FALSE;
   currentTime = startTime;
@@ -4337,8 +4384,6 @@ mixstraight(char *rgbMvidFilenameCstr, char *alphaMvidFilenameCstr, char *mixedM
   
   fileWriter.movieSize = size;
   
-  fileWriter.genV3PageOffsetBlocks = TRUE;
-  
   CGFrameBuffer *rgbOutputFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:24 width:width height:height];
   
   int outFrameIndex = 0;
@@ -4973,38 +5018,66 @@ void printMvidFrameAdler(NSString *mvidFilename)
   NSUInteger numFrames = [frameDecoder numFrames];
   assert(numFrames > 0);
   
-  //fprintf(stdout, "%s\n", [[mvidFilename lastPathComponent] UTF8String]);
+  int isV3 = (maxvid_file_version([frameDecoder header]) == MV_FILE_VERSION_THREE);
   
-  MVFrame *mvFrames = frameDecoder.mvFrames;
-  assert(mvFrames);
+  //fprintf(stdout, "%s\n", [[mvidFilename lastPathComponent] UTF8String]);
   
   uint32_t lastAdler = 0x0;
   
-  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    
-    MVFrame *frame = maxvid_file_frame(mvFrames, frameIndex);
-    assert(frame);
-    
-    uint32_t currentAdler = frame->adler;
-    
-#if MV_ENABLE_DELTAS
-    if (frameIndex == 0 && [frameDecoder isDeltas]) {
-      // A nop delta frame is a special case in that it contains an adler
-      // that corresponds to all black pixels.
+  if (isV3) {
+    for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+      NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
       
-      lastAdler = currentAdler;
-    } else // note that the else/if here is only enabled in deltas mode
+      MVV3Frame *frame = maxvid_v3_file_frame(frameDecoder.mvFrames, frameIndex);
+      assert(frame);
+      
+      uint32_t currentAdler = frame->adler;
+      
+#if MV_ENABLE_DELTAS
+      if (frameIndex == 0 && [frameDecoder isDeltas]) {
+        // A nop delta frame is a special case in that it contains an adler
+        // that corresponds to all black pixels.
+        
+        lastAdler = currentAdler;
+      } else // note that the else/if here is only enabled in deltas mode
 #endif // MV_ENABLE_DELTAS
-    if (maxvid_frame_isnopframe(frame)) {
-      currentAdler = lastAdler;
-    } else {
-      lastAdler = currentAdler;
+        if (maxvid_v3_frame_isnopframe(frame)) {
+          currentAdler = lastAdler;
+        } else {
+          lastAdler = currentAdler;
+        }
+      
+      fprintf(stdout, "0x%X\n", currentAdler);
+      
+      [pool drain];
     }
-    
-    fprintf(stdout, "0x%X\n", currentAdler);
-    
-    [pool drain];
+  } else {
+    for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+      NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+      
+      MVFrame *frame = maxvid_file_frame(frameDecoder.mvFrames, frameIndex);
+      assert(frame);
+      
+      uint32_t currentAdler = frame->adler;
+      
+#if MV_ENABLE_DELTAS
+      if (frameIndex == 0 && [frameDecoder isDeltas]) {
+        // A nop delta frame is a special case in that it contains an adler
+        // that corresponds to all black pixels.
+        
+        lastAdler = currentAdler;
+      } else // note that the else/if here is only enabled in deltas mode
+#endif // MV_ENABLE_DELTAS
+        if (maxvid_frame_isnopframe(frame)) {
+          currentAdler = lastAdler;
+        } else {
+          lastAdler = currentAdler;
+        }
+      
+      fprintf(stdout, "0x%X\n", currentAdler);
+      
+      [pool drain];
+    }
   }
   
   [frameDecoder close];

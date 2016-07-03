@@ -23,7 +23,7 @@
 @interface AVMvidFrameDecoder : AVFrameDecoder {
   NSString *m_filePath;
   MVFileHeader m_mvHeader;
-  MVFrame *m_mvFrames;
+  void *m_mvFrames;
   BOOL m_isOpen;
   
 #if defined(USE_SEGMENTED_MMAP)
