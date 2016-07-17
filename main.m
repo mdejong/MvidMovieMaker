@@ -118,6 +118,7 @@ char *usageArray =
 "or   : mvidmoviemaker -pixels movie.mvid" "\n"
 "or   : mvidmoviemaker -crop \"X Y WIDTH HEIGHT\" INFILE.mvid OUTFILE.mvid" "\n"
 "or   : mvidmoviemaker -resize OPTIONS_RESIZE INFILE.mvid OUTFILE.mvid" "\n"
+"or   : mvidmoviemaker -4up INFILE.mvid" "\n"
 #if defined(SPLITALPHA)
 "or   : mvidmoviemaker -splitalpha FILE.mvid (writes FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
 "or   : mvidmoviemaker -joinalpha FILE.mvid (reads FILE_rgb.mvid and FILE_alpha.mvid)" "\n"
@@ -4851,6 +4852,176 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
   return;
 }
 
+// The "-4up IN.mvid" command writes "IN_q1.mvid IN_q2.mvid IN_q3.mvid IN_q4.mvid"
+// after splitting each frame up into its own movie.
+
+void
+fourupMvidMovie(char *inMvidFilenameCstr)
+{
+  NSString *inMvidPath = [NSString stringWithUTF8String:inMvidFilenameCstr];
+  NSString *prefix;
+
+  // Generate prefix without .mvid
+  {
+    NSArray *elements = [inMvidPath componentsSeparatedByString:@".mvid"];
+    prefix = [NSString stringWithFormat:@"%@", elements[0]];
+  }
+  
+  NSString *outQ1MvidPath = [NSString stringWithFormat:@"%@_q1.mvid", prefix];
+  NSString *outQ2MvidPath = [NSString stringWithFormat:@"%@_q2.mvid", prefix];
+  NSString *outQ3MvidPath = [NSString stringWithFormat:@"%@_q3.mvid", prefix];
+  NSString *outQ4MvidPath = [NSString stringWithFormat:@"%@_q4.mvid", prefix];
+  
+  BOOL isMvid;
+  isMvid = [inMvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  NSArray *outMvidPaths = @[outQ1MvidPath, outQ2MvidPath, outQ3MvidPath, outQ4MvidPath];
+  
+  // Read in existing file into from the input file and create an output file
+  // that has exactly the same options.
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:inMvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open input mvid filename \"%s\"\n", [inMvidPath UTF8String]);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
+  assert(width > 0);
+  assert(height > 0);
+  
+  // Make sure the input frame can be split in half both ways
+  
+  if ((width % 2) != 0) {
+    fprintf(stderr, "input width %d must be even number of pxiels", width);
+    exit(1);
+  }
+  if ((height % 2) != 0) {
+    fprintf(stderr, "input height %d must be even number of pxiels", height);
+    exit(1);
+  }
+  
+  // Writer that will write the RGB values. Note that invoking process_frame_file()
+  // will define the output width/height based on the size of the image passed in.
+
+  NSMutableArray *metadataArr = [NSMutableArray array];
+  NSMutableArray *writerArr = [NSMutableArray array];
+  
+  for (int i = 0; i < 4; i++) {
+    MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
+    mvidFileMetaData.bpp = bpp;
+    mvidFileMetaData.checkAlphaChannel = FALSE;
+    [metadataArr addObject:mvidFileMetaData];
+    
+    AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPaths[i], bpp, frameDuration, numFrames);
+    [writerArr addObject:fileWriter];
+  }
+  
+  int qWidth = width / 2;
+  int qHeight = height / 2;
+  assert(width > 0);
+  assert(height > 0);
+  
+  CGFrameBuffer *qFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:qWidth height:qHeight];
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+    
+    // sRGB support
+    
+    if (frameIndex == 0) {
+      qFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+    }
+    
+    // Copy/Scale input image into resizedFrameBuffer
+    
+    BOOL worked;
+    
+    for (int i = 0; i < 4; i++) {
+      AVMvidFileWriter *fileWriter = writerArr[i];
+      MvidFileMetaData *mvidFileMetaData = metadataArr[i];
+      
+      int cx;
+      int cy;
+      
+      if (i == 0) {
+        cx = 0;
+        cy = 0;
+      } else if (i == 1) {
+        cx = qWidth;
+        cy = 0;
+      } else if (i == 2) {
+        cx = 0;
+        cy = qHeight;
+      } else if (i == 3) {
+        cx = qWidth;
+        cy = qHeight;
+      } else {
+        assert(0);
+      }
+      
+      [qFrameBuffer cropCopyPixels:cgFrameBuffer cropX:cx cropY:cy];
+      
+      // Render quarter image
+      
+      CGImageRef qFrameImage = [qFrameBuffer createCGImageRef];
+      worked = (qFrameImage != nil);
+      assert(worked);
+      
+      // Force all keyframes
+      
+      BOOL isKeyframe = TRUE;
+      
+      process_frame_file(fileWriter, NULL, qFrameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+      
+      if (qFrameImage) {
+        CGImageRelease(qFrameImage);
+      }
+    }
+    
+    [pool drain];
+  }
+  
+  for (int i = 0; i < 4; i++) {
+    AVMvidFileWriter *fileWriter = writerArr[i];
+    
+    [fileWriter rewriteHeader];
+    [fileWriter close];
+    
+    fprintf(stdout, "Wrote: %s\n", [fileWriter.mvidPath UTF8String]);
+  }
+  
+  return;
+}
+
 // This method provides an easy command line operation that will upgrade from
 // v1 to v2. This change is a nasty one because the file format changed in
 // a way that makes it impossible to support loading the old format. The
@@ -5761,6 +5932,11 @@ int main (int argc, const char * argv[]) {
     char *outMvidFilename = (char *)argv[4];
     
     resizeMvidMovie(resizeSpec, inMvidFilename, outMvidFilename);
+	} else if ((argc == 3) && (strcmp(argv[1], "-4up") == 0)) {
+    // mvidmoviemaker -4up INMOVIE.mvid
+
+    char *inMvidFilenameCstr = (char *)argv[2];
+    fourupMvidMovie(inMvidFilenameCstr);
 	} else if ((argc == 5) && (strcmp(argv[1], "-rdelta") == 0)) {
     // mvidmoviemaker -rdelta INORIG.mvid INMOD.mvid OUTFILE.mvid
     
