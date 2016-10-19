@@ -5872,6 +5872,249 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
   return;
 }
 
+// Flatten will read all of the frames from a movie and write all the frames
+// into a single PNG image. The output image will be a multiple of the original
+// image height based on the number of frames in the movie.
+
+void
+flattenMvidMovie(char *inOriginalMvidFilename, char *outFlatPNGFilename)
+{
+  NSString *mvidPath = [NSString stringWithUTF8String:inOriginalMvidFilename];
+  
+  BOOL isMvid = [mvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:mvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", inOriginalMvidFilename);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  //float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
+  
+  // Verify that the input color data has been mapped to the sRGB colorspace.
+  
+  if (maxvid_file_version([frameDecoder header]) == MV_FILE_VERSION_ZERO) {
+    fprintf(stderr, "%s\n", "-mixalpha on MVID is not supported for an old MVID file version 0.");
+    exit(1);
+  }
+  
+  // Allocate framebuffer large enought to hold all the output frames in a single image
+  
+  int outHeight = height * numFrames;
+  
+  CGFrameBuffer *outFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:outHeight];
+  uint32_t *outPixelsPtr = (uint32_t*)outFrameBuffer.pixels;
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    AVFrame *frame = [frameDecoder advanceToFrame:frameIndex];
+    assert(frame);
+    
+    // Release the NSImage ref inside the frame since we will operate on the CG image directly.
+    frame.image = nil;
+    
+    CGFrameBuffer *cgFrameBuffer = frame.cgFrameBuffer;
+    assert(cgFrameBuffer);
+    
+    if (frameIndex == 0) {
+      outFrameBuffer.colorspace = cgFrameBuffer.colorspace;
+    }
+    
+    NSUInteger numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
+    uint32_t *pixels = (uint32_t*)cgFrameBuffer.pixels;
+    
+    // Append pixels to outFrameBuffer
+    
+    int numBytes = numPixels * sizeof(uint32_t);
+    memcpy(outPixelsPtr, pixels, numBytes);
+    outPixelsPtr += numPixels;
+    
+    [pool release];
+  }
+  
+  NSString *pngPath = [NSString stringWithFormat:@"%s", outFlatPNGFilename];
+  
+  NSData *pngData = [outFrameBuffer formatAsPNG];
+  
+  [pngData writeToFile:pngPath atomically:NO];
+  
+  fprintf(stdout, "Wrote %s with size %d x %d\n", outFlatPNGFilename, (int)outFrameBuffer.width, (int)outFrameBuffer.height);
+  
+  return;
+}
+
+// Reverse a flatten operation by reading the framerate and BPP info from a MVID
+// reading the new image data from a flat PNG, and then writing the pixels from
+// the PNG to and output MVID.
+
+void
+unflattenMvidMovie(char *inOriginalMvidFilename, char *inFlatPNGFilename, char *outMvidFilename)
+{
+  NSString *mvidPath = [NSString stringWithUTF8String:inOriginalMvidFilename];
+  
+  BOOL isMvid = [mvidPath hasSuffix:@".mvid"];
+  
+  if (isMvid == FALSE) {
+    fprintf(stderr, "%s", USAGE);
+    exit(1);
+  }
+  
+  // Open original MVID for reading of header data
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  BOOL worked = [frameDecoder openForReading:mvidPath];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", inOriginalMvidFilename);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  float frameDuration = [frameDecoder frameDuration];
+  
+  int bpp = [frameDecoder header]->bpp;
+  
+  int width = [frameDecoder width];
+  int height = [frameDecoder height];
+  
+  // Verify that the input color data has been mapped to the sRGB colorspace.
+  
+  if (maxvid_file_version([frameDecoder header]) == MV_FILE_VERSION_ZERO) {
+    fprintf(stderr, "%s\n", "-unflatten on MVID is not supported for an old MVID file version 0.");
+    exit(1);
+  }
+  
+  // Read input PNG and verify that the size of the input matches the expected size in pixels
+  
+  CGImageRef imageRef = NULL;
+  
+  NSString *inFlatPNGFilenameStr = [NSString stringWithFormat:@"%s", inFlatPNGFilename];
+  imageRef = createImageFromFile(inFlatPNGFilenameStr);
+  
+  if (imageRef == NULL) {
+    fprintf(stderr, "error: cannot open flat PNG filename \"%s\"\n", inFlatPNGFilename);
+    exit(1);
+  }
+  
+  assert(imageRef);
+  
+  // Copy all pixels in input to a framebuffer
+  
+  int inHeight = height * numFrames;
+  
+  // Verify height of PNG
+
+  if (CGImageGetHeight(imageRef) != inHeight) {
+    fprintf(stderr, "error: input flat PNG filename \"%s\" must contain image of height %d not %d\n", inFlatPNGFilename, inHeight, (int)CGImageGetHeight(imageRef));
+    exit(1);
+  }
+  
+  if (CGImageGetWidth(imageRef) != width) {
+    fprintf(stderr, "error: input flat PNG filename \"%s\" must contain image of width %d not %d\n", inFlatPNGFilename, width, (int)CGImageGetWidth(imageRef));
+    exit(1);
+  }
+  
+  CGFrameBuffer *inFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:inHeight];
+  
+  // Explicitly use sRGB
+  {
+    CGColorSpaceRef colorSpace = NULL;
+    colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    assert(colorSpace);
+    inFrameBuffer.colorspace = colorSpace;
+    CGColorSpaceRelease(colorSpace);
+  }
+
+  [inFrameBuffer renderCGImage:imageRef];
+  CGImageRelease(imageRef);
+
+  uint32_t *inPixelsPtr = (uint32_t*)inFrameBuffer.pixels;
+  
+  // Open output MVID and duplicate the header settings from the original MVID
+  
+  MvidFileMetaData *mvidFileMetaData = [MvidFileMetaData mvidFileMetaData];
+  mvidFileMetaData.bpp = bpp;
+  mvidFileMetaData.checkAlphaChannel = FALSE;
+  
+  NSString *outMvidPath = [NSString stringWithFormat:@"%s", outMvidFilename];
+  
+  AVMvidFileWriter *fileWriter = makeMVidWriter(outMvidPath, bpp, frameDuration, numFrames);
+  
+  fileWriter.movieSize = CGSizeMake(width, height);
+  
+  // Allocate framebuffer for one frame from the input PNG
+  
+  CGFrameBuffer *currentFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:height];
+  assert(currentFrameBuffer);
+  
+  // Explicitly use sRGB
+  {
+    CGColorSpaceRef colorSpace = NULL;
+    colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    assert(colorSpace);
+    currentFrameBuffer.colorspace = colorSpace;
+    CGColorSpaceRelease(colorSpace);
+  }
+  
+  uint32_t *currentPixelsPtr = (uint32_t*)currentFrameBuffer.pixels;
+  
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex += 2) {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    int numBytes = width * height * sizeof(uint32_t);
+    memcpy(currentPixelsPtr, inPixelsPtr, numBytes);
+    
+    inPixelsPtr += (width * height);
+    
+    CGImageRef frameImage = [currentFrameBuffer createCGImageRef];
+    
+    BOOL isKeyframe = FALSE;
+    if (frameIndex == 0) {
+      isKeyframe = TRUE;
+    }
+    
+    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+    
+    if (frameImage) {
+      CGImageRelease(frameImage);
+    }
+    
+    [pool drain];
+  }
+  
+  [fileWriter rewriteHeader];
+  [fileWriter close];
+  
+  fprintf(stdout, "Wrote %s\n", [fileWriter.mvidPath UTF8String]);
+  return;
+}
+
 // main() Entry Point
 
 int main (int argc, const char * argv[]) {
@@ -5955,6 +6198,22 @@ int main (int argc, const char * argv[]) {
     }
     
     upgradeMvidMovie(inMvidFilename, optionalMvidFilename);
+  } else if ((argc == 4) && (strcmp(argv[1], "-flatten") == 0)) {
+    // mvidmoviemaker -flatten INORIG.mvid FLAT.png
+    
+    char *inOriginalMvidFilename = (char *)argv[2];
+    char *outFlatPNGFilename = (char *)argv[3];
+    
+    flattenMvidMovie(inOriginalMvidFilename, outFlatPNGFilename);
+
+  } else if ((argc == 5) && (strcmp(argv[1], "-unflatten") == 0)) {
+    // mvidmoviemaker -unflatten INORIG.mvid FLAT.png OUT.mvid
+    
+    char *inOriginalMvidFilename = (char *)argv[2];
+    char *inFlatPNGFilename = (char *)argv[3];
+    char *outMvidFilename = (char *)argv[4];
+    
+    unflattenMvidMovie(inOriginalMvidFilename, inFlatPNGFilename, outMvidFilename);
 	} else if ((argc == 3) && (strcmp(argv[1], "-info") == 0)) {
     // mvidmoviemaker -info movie.mvid
     
