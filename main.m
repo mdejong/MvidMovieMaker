@@ -131,6 +131,8 @@ char *usageArray =
 "or   : mvidmoviemaker -extractcodec FILE.mvid ?FILEPREFIX?" "\n"
 "or   : mvidmoviemaker -alphamap FILE.mvid OUTFILE.mvid MAPSPEC" "\n"
 "or   : mvidmoviemaker -rdelta INORIG.mvid INMOD.mvid OUTFILE.mvid" "\n"
+"or   : mvidmoviemaker -flatten INORIG.mvid FLAT.png" "\n"
+"or   : mvidmoviemaker -unflatten INORIG.mvid FLAT.png OUT.mvid" "\n"
 "OPTIONS:\n"
 "-fps FLOAT : required when creating .mvid from a series of images\n"
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n"
