@@ -6101,6 +6101,12 @@ unflattenMvidMovie(char *inOriginalMvidFilename, char *inFlatPNGFilename, char *
       isKeyframe = TRUE;
     }
     
+    // When original video is marked as "all keyframes" then retain this property in the output MVID
+    
+    if (frameDecoder.isAllKeyframes) {
+      isKeyframe = TRUE;
+    }
+    
     process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
