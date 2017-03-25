@@ -5571,15 +5571,51 @@ int main (int argc, const char * argv[]) {
         NSLog(@"option \"%s\" -> \"%s\"", optionCstr, valueCstr);
         
         if ([optionStr isEqualToString:@"-fps"]) {
-          float fps = [valueStr floatValue];
+          // Valid input:
+          // -fps 24
+          // -fps 0.5  (1 frame every 2 seconds)
+          // -fps 24/1 (24 frames per second)
+
+          NSString *fpsInputStr = [valueStr stringByReplacingOccurrencesOfString:@" " withString:@""];
+          NSString *fpsPairStr = [fpsInputStr stringByReplacingOccurrencesOfString:@"/" withString:@" "];
           
-          if ((fps <= 0.0f) || (fps >= 90.0f)) {
-            fprintf(stderr, "%s", USAGE);
-            exit(1);
+          float fps = 0.0;
+          
+          if ([fpsPairStr isEqualToString:fpsInputStr] == FALSE) {
+            // -fps "24/1" -> "24/1"
+            
+            NSArray *values = [fpsInputStr componentsSeparatedByString:@"/"];
+            
+            if (values.count != 2) {
+              fprintf(stderr, "-fps \"%s\" is invalid, must be an int value or FRAMES/SECONDS", (char*)[optionStr UTF8String]);
+              exit(1);
+            }
+            
+            float frames = [values[0] floatValue];
+            float second = [values[1] floatValue];
+            
+            if (frames == 0.0f) {
+              fprintf(stderr, "-fps \"%s\" is zero", (char*)[optionStr UTF8String]);
+              exit(1);
+            }
+            
+            float framerate = second / frames;
+            options.framerate = framerate;
+          } else {
+            fps = [valueStr floatValue];
+            
+            if ((fps <= 0.0f) || (fps >= 90.0f)) {
+              fprintf(stderr, "%s", USAGE);
+              exit(1);
+            }
+            
+            options.framerate = 1.0f / fps;
           }
-          
-          options.framerate = 1.0f / fps;
         } else if ([optionStr isEqualToString:@"-framerate"]) {
+          // Valid input:
+          // -framerate 0.0417 (24 FPS)
+          // -framerate 0.5    (2 FPS)
+          
           float framerate = [valueStr floatValue];
                     
           if (framerate <= 0.0f || framerate >= 90.0f) {

@@ -29,13 +29,8 @@ fi
 PROBE=`ffprobe -v 0 -of compact=p=0 -select_streams 0 -show_entries stream=r_frame_rate ${INPUT}`
 echo "PROBE=\"${PROBE}\""
 
-FPS_S2=`echo $PROBE | cut -d = -f 2`
-echo "FPS_S2=\"${FPS_S2}\""
-
-FPS_FRAME_F=`echo ${FPS_S2} | cut -d / -f 1`
-echo "FPS_FRAME_F=\"${FPS_FRAME_F}\""
-FPS_FRAME_S=`echo ${FPS_S2} | cut -d / -f 2`
-echo "FPS_FRAME_S=\"${FPS_FRAME_S}\""
+FPS_SPEC=`echo $PROBE | cut -d = -f 2`
+echo "FPS_SPEC=\"${FPS_SPEC}\""
 
 # Extract all the frames from the video to specific files
 
@@ -49,8 +44,8 @@ ffmpeg -y -i $INPUT ${FRAMES}/Frame%04d.png
 # Create .mvid in current directory by reading all frames
 # Pass -fps 24 to indicate 24 frames per second
 
-echo "mvidmoviemaker ${FRAMES}/Frame0001.png ${OUTPUT} -fps ${FPS_FRAME_F}"
-mvidmoviemaker ${FRAMES}/Frame0001.png ${OUTPUT} -fps ${FPS_FRAME_F}
+echo "mvidmoviemaker ${FRAMES}/Frame0001.png ${OUTPUT} -fps ${FPS_SPEC}"
+mvidmoviemaker ${FRAMES}/Frame0001.png ${OUTPUT} -fps ${FPS_SPEC}
 rm -rf ${FRAMES}
 
 exit 0
