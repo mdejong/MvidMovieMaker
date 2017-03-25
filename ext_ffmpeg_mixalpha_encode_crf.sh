@@ -43,7 +43,8 @@ MIX=`ls *_mix.mvid`
 MIX_MOV=`echo "$MIX" | sed -e s/.mvid/.mov/g`
 MIX_M4V=`echo "$MIX_MOV" | sed -e s/.mov/.m4v/g`
 
-mvidmoviemaker $MIX $MIX_MOV
+#mvidmoviemaker $MIX $MIX_MOV
+ext_ffmpeg_convert_mvid_to_mov.sh $MIX $MIX_MOV
 
 # Convert .mov to .m4v file using ffmpeg and x264 with main profile
 
@@ -63,7 +64,8 @@ echo "exec ffmpeg -y -i $MIX_M4V $MIX_ENCODED_MOV"
 ffmpeg -y -i $MIX_M4V -vcodec qtrle $MIX_ENCODED_MOV
 
 echo "exec mvidmoviemaker $MIX_ENCODED_MOV encoded_mix.mvid -bpp 24"
-mvidmoviemaker $MIX_ENCODED_MOV encoded_mix.mvid -bpp 24
+#mvidmoviemaker $MIX_ENCODED_MOV encoded_mix.mvid -bpp 24
+ext_ffmpeg_convert_mov_to_mvid.sh $MIX_ENCODED_MOV encoded_mix.mvid
 
 echo "exec mvidmoviemaker -unmixalpha encoded.mvid"
 mvidmoviemaker -unmixalpha encoded.mvid

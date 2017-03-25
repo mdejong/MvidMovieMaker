@@ -45,10 +45,10 @@ cd ${FRAMES}
 mvidmoviemaker -extract ../${INPUT}
 cd ..
 
-# Generate .mov from frame images and pass -fps to indicate framerate
+# Generate .mov from frame images and pass -framerate to ffmpeg indicate framerate
 
-echo "ffmpeg -y -fps ${MVID_FPS} -i ${FRAMES}/Frame%04d.png -c:v qtrle ${OUTPUT}"
-ffmpeg -y -fps ${MVID_FPS} -i ${FRAMES}/Frame%04d.png -c:v qtrle ${OUTPUT}
+echo "ffmpeg -y -framerate ${MVID_FPS} -i ${FRAMES}/Frame%04d.png -c:v qtrle ${OUTPUT}"
+ffmpeg -y -framerate ${MVID_FPS} -i ${FRAMES}/Frame%04d.png -c:v qtrle ${OUTPUT}
 rm -rf ${FRAMES}
 
 echo "wrote ${OUTPUT}"

@@ -50,8 +50,10 @@ RGB_M4V=`echo "$RGB_MOV" | sed -e s/.mov//g`
 RGB_M4V="${RGB_M4V}_CRF_${CRF}_24BPP.m4v"
 
 # convert RGB and ALPHA .mvid to .mov
-mvidmoviemaker $RGB $RGB_MOV 
-mvidmoviemaker $ALPHA $ALPHA_MOV
+#mvidmoviemaker $RGB $RGB_MOV
+#mvidmoviemaker $ALPHA $ALPHA_MOV
+ext_ffmpeg_convert_mvid_to_mov.sh $RGB $RGB_MOV
+ext_ffmpeg_convert_mvid_to_mov.sh $ALPHA $ALPHA_MOV
 
 # Convert .mov to .m4v files using ffmpeg and x264
 
