@@ -124,6 +124,7 @@ char *usageArray =
 "or   : mvidmoviemaker -alphamap FILE.mvid OUTFILE.mvid MAPSPEC" "\n"
 "or   : mvidmoviemaker -rdelta INORIG.mvid INMOD.mvid OUTFILE.mvid" "\n"
 "or   : mvidmoviemaker -adler movie.mvid" "\n"
+"or   : mvidmoviemaker -fps movie.mvid" "\n"
 "OPTIONS:\n"
 "-fps FLOAT : required when creating .mvid from a series of images\n"
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n"
@@ -4405,11 +4406,92 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
   return;
 }
 
-// This method will iterate through all the frames defined in a .mvid file and
-// print out the adler32 checksum for the video data in the specific frame.
-// With an mvid file, this checksum is already created at the time the .mvid
-// file is created, so this function is trivial to implement since we just
-// iterate over the frames and print the values.
+// Print the best FPS specification given the floating point framerate.
+// For example, 24 FPS is about 0.0417 seconds, this is displayed
+// as "24/1" in the output of this method.
+
+void printMvidFPS(NSString *mvidFilename)
+{
+  BOOL worked;
+  
+  AVMvidFrameDecoder *frameDecoder = [AVMvidFrameDecoder aVMvidFrameDecoder];
+  
+  worked = [frameDecoder openForReading:mvidFilename];
+  
+  if (worked == FALSE) {
+    fprintf(stderr, "error: cannot open mvid filename \"%s\"\n", [mvidFilename UTF8String]);
+    exit(1);
+  }
+  
+  worked = [frameDecoder allocateDecodeResources];
+  assert(worked);
+  
+  NSUInteger numFrames = [frameDecoder numFrames];
+  assert(numFrames > 0);
+  
+  NSTimeInterval framerate = frameDecoder.frameDuration;
+  
+  // Check for very common framerates
+  
+  float epsilon = 0.0001f;
+  
+  char buffer[256];
+  
+  if (fabs(1.0 - framerate) <= epsilon) {
+    // 1 FPS
+    snprintf(buffer, sizeof(buffer), "1/1");
+  } else if (fabs(1.0f/2.0f - framerate) <= epsilon) {
+    // 2 FPS
+    snprintf(buffer, sizeof(buffer), "2/1");
+  } else if (fabs(1.0f/10.0f - framerate) <= epsilon) {
+    // 10 FPS
+    snprintf(buffer, sizeof(buffer), "10/1");
+  } else if (fabs(1.0f/12.0f - framerate) <= epsilon) {
+    // 12 FPS
+    snprintf(buffer, sizeof(buffer), "12/1");
+  } else if (fabs(1.0f/15.0f - framerate) <= epsilon) {
+    // 15 FPS
+    snprintf(buffer, sizeof(buffer), "15/1");
+  } else if (fabs(1.0f/(1000.0f/1001.0f) - framerate) <= epsilon) {
+    // 23.98 FPS = 1000/1001 (NTSC film)
+    snprintf(buffer, sizeof(buffer), "1000/1001");
+  } else if (fabs(1.0f/24.0f - framerate) <= epsilon) {
+    // 24 FPS
+    snprintf(buffer, sizeof(buffer), "24/1");
+  } else if (fabs(1.0f/(30000.0f/1001.0f) - framerate) <= epsilon) {
+    // 29.97 FPS = 30000/1001
+    snprintf(buffer, sizeof(buffer), "30000/1001");
+  } else if (fabs(1.0f/30.0f - framerate) <= epsilon) {
+    // 30 FPS
+    snprintf(buffer, sizeof(buffer), "30/1");
+  } else if (fabs(1.0f/50.0f - framerate) <= epsilon) {
+    // 50 FPS
+    snprintf(buffer, sizeof(buffer), "50/1");
+  } else if (fabs(1.0f/(60000.0f/1001.0f) - framerate) <= epsilon) {
+    // 59.94 FPS = 60000/1001
+    snprintf(buffer, sizeof(buffer), "60000/1001");
+  } else if (fabs(1.0f/60.0f - framerate) <= epsilon) {
+    // 60 FPS
+    snprintf(buffer, sizeof(buffer), "60/1");
+  } else {
+    // Get as close as possible in terms of 1000 units
+    float oneThousandth = 1.0f / 1000.0f;
+    int i = 0;
+    for ( ; (oneThousandth * i) < framerate; i++) {
+      //fprintf(stdout, "%0.8f ?< %0.8f\n", (oneThousandth * i), framerate);
+    }
+    //fprintf(stdout, "%0.8f ?< %0.8f\n", (oneThousandth * i), framerate);
+    snprintf(buffer, sizeof(buffer), "%d/1000", i);
+  }
+  
+  fprintf(stdout, "%s\n", buffer);
+  
+  [frameDecoder close];
+  
+  return;
+}
+
+// Adler for each frame of video
 
 void printMvidFrameAdler(NSString *mvidFilename)
 {
@@ -5466,6 +5548,23 @@ int main (int argc, const char * argv[]) {
     if ([firstFilenameStr hasSuffix:@".mvid"])
     {
       printMvidPixels(firstFilenameStr);
+      exit(0);
+    } else {
+      fprintf(stderr, "error: FILENAME must be a .mvid file : %s\n", firstFilenameCstr);
+      exit(1);
+    }
+  } else if ((argc == 3) && (strcmp(argv[1], "-fps") == 0)) {
+    // Return a FRAME/SEC specification that most closely matches the
+    // exact framerate of the video for known values.
+    //
+    // mvidmoviemaker -fps movie.mvid
+    
+    char *firstFilenameCstr = (char*)argv[2];
+    NSString *firstFilenameStr = [NSString stringWithUTF8String:firstFilenameCstr];
+    
+    if ([firstFilenameStr hasSuffix:@".mvid"])
+    {
+      printMvidFPS(firstFilenameStr);
       exit(0);
     } else {
       fprintf(stderr, "error: FILENAME must be a .mvid file : %s\n", firstFilenameCstr);

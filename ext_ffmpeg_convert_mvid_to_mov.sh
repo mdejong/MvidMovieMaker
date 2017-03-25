@@ -27,24 +27,13 @@ fi
 
 # Extract FPS from mvid
 
-MVID_INFO=`mvidmoviemaker -info ${INPUT} > mvid.info 2>&1`
-MVID_INFO=`cat mvid.info`
-echo "MVID_INFO=\"${MVID_INFO}\""
+MVID_FPS=`mvidmoviemaker -fps ${INPUT}`
+echo "MVID_FPS=\"${MVID_FPS}\""
 
-if grep "cannot open mvid" mvid.info; then
+if echo ${MVID_FPS} | grep "cannot open mvid" - ; then
   echo "${MVID_INFO}"
-  rm mvid.info
   exit 1
 fi
-
-echo "MVID_INFO=\"${MVID_INFO}\""
-FPS=`cat mvid.info| grep FrameDuration | sed -e 's/[^0-9.]//g'`
-echo "FPS=\"${FPS}\""
-
-rm mvid.info
-
-#FPS_SPEC=`echo $PROBE | cut -d = -f 2`
-#echo "FPS_SPEC=\"${FPS_SPEC}\""
 
 # Extract all the frames from the mvid into the indicated directory
 
@@ -58,8 +47,8 @@ cd ..
 
 # Generate .mov from frame images and pass -fps to indicate framerate
 
-echo "ffmpeg -y -framerate 1/${FPS} -i ${FRAMES}/Frame%04d.png -c:v qtrle ${OUTPUT}"
-ffmpeg -y -framerate 1/${FPS} -i ${FRAMES}/Frame%04d.png -c:v qtrle ${OUTPUT}
+echo "ffmpeg -y -fps ${MVID_FPS} -i ${FRAMES}/Frame%04d.png -c:v qtrle ${OUTPUT}"
+ffmpeg -y -fps ${MVID_FPS} -i ${FRAMES}/Frame%04d.png -c:v qtrle ${OUTPUT}
 rm -rf ${FRAMES}
 
 echo "wrote ${OUTPUT}"

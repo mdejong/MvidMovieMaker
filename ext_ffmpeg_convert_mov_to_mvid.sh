@@ -48,5 +48,7 @@ echo "mvidmoviemaker ${FRAMES}/Frame0001.png ${OUTPUT} -fps ${FPS_SPEC}"
 mvidmoviemaker ${FRAMES}/Frame0001.png ${OUTPUT} -fps ${FPS_SPEC}
 rm -rf ${FRAMES}
 
+mvidmoviemaker -info ${OUTPUT}
+
 exit 0
 
