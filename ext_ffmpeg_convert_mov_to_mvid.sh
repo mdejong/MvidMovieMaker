@@ -14,7 +14,7 @@ OUTPUT=$2
 
 FRAMES="ffmpeg_FRAMES"
 
-USAGE="usage : ext_ffmpeg_convert_mov_to_mvid.sh IN.mov OUT.m4v"
+USAGE="usage : ext_ffmpeg_convert_mov_to_mvid.sh IN.mov OUT.mvid"
 
 if test "$INPUT" = ""; then
   echo "$USAGE : INPUT MOV ARGUMENT MISSING"

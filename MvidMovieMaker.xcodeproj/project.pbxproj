@@ -40,6 +40,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3C0D24521E87065B005BE70B /* ext_ffmpeg_convert_mvid_to_mov.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = ext_ffmpeg_convert_mvid_to_mov.sh; sourceTree = SOURCE_ROOT; };
 		3C2C44AE1CA09AD500A7B0FD /* ext_ffmpeg_encode_lossless_h264.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = ext_ffmpeg_encode_lossless_h264.sh; sourceTree = SOURCE_ROOT; };
 		3C80C3151BED6C15003910B9 /* ext_ffmpeg_mixalpha_encode_crf.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = ext_ffmpeg_mixalpha_encode_crf.sh; sourceTree = SOURCE_ROOT; };
 		3CB3A53D1E85B8D400D756FB /* ext_ffmpeg_convert_mov_to_mvid.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = ext_ffmpeg_convert_mov_to_mvid.sh; sourceTree = SOURCE_ROOT; };
@@ -155,6 +156,7 @@
 				3CD950F71C9DFD3200381411 /* AVAssetConvertCommon.h */,
 				CDA165051694A37F008D271C /* ext_ffmpeg_encode_crf.sh */,
 				3CB3A53D1E85B8D400D756FB /* ext_ffmpeg_convert_mov_to_mvid.sh */,
+				3C0D24521E87065B005BE70B /* ext_ffmpeg_convert_mvid_to_mov.sh */,
 				CDA165061694A37F008D271C /* ext_ffmpeg_splitalpha_encode_crf.sh */,
 				3C80C3151BED6C15003910B9 /* ext_ffmpeg_mixalpha_encode_crf.sh */,
 				3C2C44AE1CA09AD500A7B0FD /* ext_ffmpeg_encode_lossless_h264.sh */,
