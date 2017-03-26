@@ -5371,7 +5371,7 @@ unflattenMvidMovie(char *inOriginalMvidFilename, char *inFlatPNGFilename, char *
   
   uint32_t *currentPixelsPtr = (uint32_t*)currentFrameBuffer.pixels;
   
-  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex += 2) {
+  for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     
     int numBytes = width * height * sizeof(uint32_t);
