@@ -10,7 +10,7 @@
 // input format will be enabled. This deltas logic will generate a diff
 // of every frame, including the initial frame.
 
-#define MV_ENABLE_DELTAS 1
+//#define MV_ENABLE_DELTAS 1
 
 #define MV_FILE_MAGIC 0xCAFEBABE
 

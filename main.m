@@ -130,7 +130,9 @@ char *usageArray =
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n"
 "-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n"
 "-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n"
+#if MV_ENABLE_DELTAS
 "-deltas BOOL : 1 or true to enable frame deltas mode\n"
+#endif // MV_ENABLE_DELTAS
 "OPTIONS_RESIZE:\n"
 "\"WIDTH HEIGHT\" : pass integer width and height to scale to specific dimensions\n"
 "DOUBLE : resize to 2x input width and height with special 4up pixel copy logic\n"
