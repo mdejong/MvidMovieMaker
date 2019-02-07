@@ -23,7 +23,6 @@
 		CDCC050F15F2036E00C08C52 /* maxvid_file.c in Sources */ = {isa = PBXBuildFile; fileRef = CDCC050B15F2036E00C08C52 /* maxvid_file.c */; };
 		CDD23BA715EFD3F80021D00C /* libz.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = CDD23BA615EFD3F80021D00C /* libz.dylib */; };
 		CDE6D04B15EE6E570084FFAA /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDE6D04A15EE6E570084FFAA /* Cocoa.framework */; };
-		CDE728261606305400B34FB6 /* QuickTime.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDE728251606305400B34FB6 /* QuickTime.framework */; };
 		CDFD9BCE1632733600906116 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CDFD9BCD1632733600906116 /* CoreVideo.framework */; };
 /* End PBXBuildFile section */
 
@@ -86,7 +85,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				CDFD9BCE1632733600906116 /* CoreVideo.framework in Frameworks */,
-				CDE728261606305400B34FB6 /* QuickTime.framework in Frameworks */,
 				CD96F739160604AD00316089 /* QTKit.framework in Frameworks */,
 				CDD23BA715EFD3F80021D00C /* libz.dylib in Frameworks */,
 				CDE6D04B15EE6E570084FFAA /* Cocoa.framework in Frameworks */,
@@ -237,7 +235,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				ARCHS = "$(ARCHS_STANDARD)";
 				COPY_PHASE_STRIP = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -256,6 +254,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				VALID_ARCHS = x86_64;
 			};
 			name = Debug;
 		};
@@ -263,7 +262,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				ARCHS = "$(ARCHS_STANDARD)";
 				COPY_PHASE_STRIP = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				GCC_C_LANGUAGE_STANDARD = gnu99;
@@ -275,6 +274,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				SDKROOT = macosx;
+				VALID_ARCHS = x86_64;
 			};
 			name = Release;
 		};
