@@ -129,7 +129,7 @@ char *usageArray =
 "-fps FLOAT : required when creating .mvid from a series of images\n"
 "-framerate FLOAT : alternative way to indicate 1.0/fps\n"
 "-bpp INTEGER : 16, 24, or 32 (Thousands, Millions, Millions+)\n"
-"-keyframe INTEGER : create a keyframe every N frames, 1 for all keyframes\n"
+"-keyframe INTEGER : create a keyframe every N frames, defaults to all keyframes\n"
 #if MV_ENABLE_DELTAS
 "-deltas BOOL : 1 or true to enable frame deltas mode\n"
 #endif // MV_ENABLE_DELTAS
@@ -5650,7 +5650,8 @@ int main (int argc, const char * argv[]) {
     MovieOptions options;
     options.framerate = 0.0f;
     options.bpp = -1;
-    options.keyframe = 10000;
+    // Default to all keyframes
+    options.keyframe = 1;
     
     if ((argc > 3) && (((argc - 3) % 2) != 0)) {
       // Uneven number of options
