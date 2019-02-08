@@ -224,11 +224,11 @@ AVMvidFileWriter* makeMVidWriter(
   assert(mvidWriter);
   
   mvidWriter.mvidPath = mvidFilename;
-  mvidWriter.bpp = bpp;
+  mvidWriter.bpp = (int) bpp;
   // Note that we don't know the movie size until the first frame is read
   
   mvidWriter.frameDuration = frameRate;
-  mvidWriter.totalNumFrames = totalNumFrames;
+  mvidWriter.totalNumFrames = (int) totalNumFrames;
   
   mvidWriter.genAdler = TRUE;
   mvidWriter.genV3 = TRUE;
@@ -321,7 +321,7 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   // Render input image into a CGFrameBuffer at a specific BPP. If the input buffer actually contains
   // 16bpp pixels expanded to 24bpp, then this render logic will resample down to 16bpp.
   
-  int bppNum = mvidFileMetaData.bpp;
+  int bppNum = (int) mvidFileMetaData.bpp;
   int checkAlphaChannel = mvidFileMetaData.checkAlphaChannel;
   int recordFramePixelValues = mvidFileMetaData.recordFramePixelValues;
 
@@ -466,8 +466,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
   
   if ((checkAlphaChannel || recordFramePixelValues) && (prevFrameBuffer.bitsPerPixel != 16)) {
     uint32_t *currentPixels = (uint32_t*)cgBuffer.pixels;
-    int width = cgBuffer.width;
-    int height = cgBuffer.height;
+    int width = (int) cgBuffer.width;
+    int height = (int) cgBuffer.height;
     int numPixels = (width * height);
     
     BOOL allOpaque = TRUE;
@@ -504,8 +504,8 @@ int process_frame_file(AVMvidFileWriter *mvidWriter,
     }
   } else if (recordFramePixelValues && (prevFrameBuffer.bitsPerPixel == 16)) {
     uint16_t *currentPixels = (uint16_t*)cgBuffer.pixels;
-    int width = cgBuffer.width;
-    int height = cgBuffer.height;
+    int width = (int) cgBuffer.width;
+    int height = (int) cgBuffer.height;
     int numPixels = (width * height);
     
     for (int i=0; i < numPixels; i++) {
@@ -585,13 +585,13 @@ void process_frame_file_write_nodeltas(BOOL isKeyframe,
     void *prevPixels = (void*)prevFrameBuffer.pixels;
     void *currentPixels = (void*)cgBuffer.pixels;
     int numWords;
-    int width = cgBuffer.width;
-    int height = cgBuffer.height;
+    int width = (int) cgBuffer.width;
+    int height = (int) cgBuffer.height;
     
     BOOL emitKeyframeAnyway = FALSE;
     
     if (prevFrameBuffer.bitsPerPixel == 16) {
-      numWords = cgBuffer.numBytes / sizeof(uint16_t);
+      numWords = (int) cgBuffer.numBytes / sizeof(uint16_t);
       encodedDeltaData = maxvid_encode_generic_delta_pixels16(prevPixels,
                                                               currentPixels,
                                                               numWords,
@@ -601,7 +601,7 @@ void process_frame_file_write_nodeltas(BOOL isKeyframe,
                                                               encodeFlags);
       
     } else {
-      numWords = cgBuffer.numBytes / sizeof(uint32_t);
+      numWords = (int) cgBuffer.numBytes / sizeof(uint32_t);
       encodedDeltaData = maxvid_encode_generic_delta_pixels32(prevPixels,
                                                               currentPixels,
                                                               numWords,
@@ -625,7 +625,7 @@ void process_frame_file_write_nodeltas(BOOL isKeyframe,
     // Emit Keyframe
     
     char *buffer = cgBuffer.pixels;
-    int numBytesInBuffer = cgBuffer.numBytes;
+    int numBytesInBuffer = (int) cgBuffer.numBytes;
     
     worked = [mvidWriter writeKeyframe:buffer bufferSize:numBytesInBuffer];
     
@@ -645,7 +645,7 @@ void process_frame_file_write_nodeltas(BOOL isKeyframe,
       // Convert generic maxvid codes to c4 codes and emit as a data buffer
       
       void *pixelsPtr = (void*)cgBuffer.pixels;
-      int inputBufferNumBytes = cgBuffer.numBytes;
+      int inputBufferNumBytes = (int) cgBuffer.numBytes;
       NSUInteger frameBufferNumPixels = cgBuffer.width * cgBuffer.height;
       
       worked = maxvid_write_delta_pixels(mvidWriter,
@@ -883,13 +883,13 @@ void extractFramesFromMvidMain(char *mvidFilename,
       NSData *pngData = [cgFrameBuffer formatAsPNG];
       assert(pngData);
       
-      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".png"];
+      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, (int)frameIndex+1, ".png"];
       
       [pngData writeToFile:outFilename atomically:NO];
     } else if (type == EXTRACT_FRAMES_TYPE_PIXELS) {
       // Write data as "*.pixels" with format {WIDTH HEIGHT PIXEL0 PIXEL1 ...}
 
-      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".pixels"];
+      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, (int)frameIndex+1, ".pixels"];
       
       FILE *outfd = fopen((char*)[outFilename UTF8String], "wb");
       assert(outfd);
@@ -917,10 +917,10 @@ void extractFramesFromMvidMain(char *mvidFilename,
       // Read the frame data encoded with codec specific word values.
       // Format: {WIDTH HEIGHT IS_DELTA WORD0 WORD1 ...}
       
-      MVFrame *frame = maxvid_file_frame(frameDecoder.mvFrames, frameIndex);
+      MVFrame *frame = maxvid_file_frame(frameDecoder.mvFrames, (int)frameIndex);
       assert(frame);
       
-      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".codec"];
+      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, (int)frameIndex+1, ".codec"];
       
       FILE *outfd = fopen((char*)[outFilename UTF8String], "wb");
       assert(outfd);
@@ -969,10 +969,10 @@ void extractFramesFromMvidMain(char *mvidFilename,
       // Read the frame data encoded with codec specific word values.
       // Format: {WIDTH HEIGHT IS_DELTA WORD0 WORD1 ...}
       
-      MVV3Frame *frame = maxvid_v3_file_frame(frameDecoder.mvFrames, frameIndex);
+      MVV3Frame *frame = maxvid_v3_file_frame(frameDecoder.mvFrames, (int)frameIndex);
       assert(frame);
       
-      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, frameIndex+1, ".codec"];
+      outFilename = [NSString stringWithFormat:@"%s%0.4d%s", extractFramesPrefix, (int)frameIndex+1, ".codec"];
       
       FILE *outfd = fopen((char*)[outFilename UTF8String], "wb");
       assert(outfd);
@@ -1092,7 +1092,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   int numericStartIndex = -1;
   BOOL foundNonAlpha = FALSE;
   
-  for (int i = [firstFilenameTailNoExtension length] - 1; i > 0; i--) {
+  for (int i = (int)[firstFilenameTailNoExtension length] - 1; i > 0; i--) {
     unichar c = [firstFilenameTailNoExtension characterAtIndex:i];
     if ((c >= '0') && (c <= '9') && (foundNonAlpha == FALSE)) {
       numericStartIndex = i;
@@ -1119,7 +1119,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
   
   NSMutableArray *inFramePaths = [NSMutableArray arrayWithCapacity:1024];
   
-  int formatWidth = [numberPortion length];
+  int formatWidth = (int) [numberPortion length];
   int startingFrameNumber = [numberPortion intValue];
   int endingFrameNumber = -1;
   
@@ -1134,7 +1134,7 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
     NSMutableString *frameNumberWithLeadingZeros = [NSMutableString string];
     [frameNumberWithLeadingZeros appendFormat:@"%07d", i];
     if ([frameNumberWithLeadingZeros length] > formatWidth) {
-      int numToDelete = [frameNumberWithLeadingZeros length] - formatWidth;
+      int numToDelete = (int) [frameNumberWithLeadingZeros length] - formatWidth;
       NSRange delRange;
       delRange.location = 0;
       delRange.length = numToDelete;
@@ -1263,13 +1263,13 @@ void encodeMvidFromFramesMain(char *mvidFilenameCstr,
     [mvidFileMetaData doneRecordingFramePixelValues];
   }
 
-  renderAtBpp = mvidFileMetaData.bpp;
+  renderAtBpp = (int) mvidFileMetaData.bpp;
   mvidFileMetaData.checkAlphaChannel = FALSE;
   
   AVMvidFileWriter *mvidWriter;
   mvidWriter = makeMVidWriter(mvidFilename, renderAtBpp, framerateNum, [inFramePaths count]);
   
-  fprintf(stdout, "writing %d frames to %s\n", [inFramePaths count], [[mvidFilename lastPathComponent] UTF8String]);
+  fprintf(stdout, "writing %d frames to %s\n", (int)[inFramePaths count], [[mvidFilename lastPathComponent] UTF8String]);
   fflush(stdout);
   
   // We now know the start and end integer values of the frame filename range.
@@ -1352,10 +1352,10 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   fprintf(stdout, "%d\n", version);
 
   fprintStdoutFixedWidth("Width:");
-  fprintf(stdout, "%d\n", [frameDecoder width]);
+  fprintf(stdout, "%d\n", (int)[frameDecoder width]);
   
   fprintStdoutFixedWidth("Height:");
-  fprintf(stdout, "%d\n", [frameDecoder height]);
+  fprintf(stdout, "%d\n", (int)[frameDecoder height]);
 
   fprintStdoutFixedWidth("BitsPerPixel:");
   fprintf(stdout, "%d\n", bpp);
@@ -1381,7 +1381,7 @@ void printMovieHeaderInfo(char *mvidFilenameCstr) {
   fprintf(stdout, "%.4f\n", (1.0f / frameDuration));
 
   fprintStdoutFixedWidth("Frames:");
-  fprintf(stdout, "%d\n", numFrames);
+  fprintf(stdout, "%d\n", (int)numFrames);
   
   // If the "all keyframes" bit is set then print TRUE for this element
   
@@ -2634,8 +2634,8 @@ splitalpha(char *mvidFilenameCstr)
   
   int bpp = [frameDecoder header]->bpp;
   
-  int width = [frameDecoder width];
-  int height = [frameDecoder height];
+  int width = (int) [frameDecoder width];
+  int height = (int) [frameDecoder height];
   
   if (bpp != 32) {
     fprintf(stderr, "%s\n", "-splitalpha can only be used on a 32BPP MVID movie");
@@ -2709,7 +2709,7 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaDataRGB, isKeyframe, NULL);
+      process_frame_file(fileWriter, NULL, (int)frameImage, (int)frameIndex, mvidFileMetaDataRGB, isKeyframe, NULL);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -2801,7 +2801,7 @@ splitalpha(char *mvidFilenameCstr)
         isKeyframe = TRUE;
       }
       
-      process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaDataAlpha, isKeyframe, NULL);
+      process_frame_file(fileWriter, NULL, (int)frameImage, (int)frameIndex, mvidFileMetaDataAlpha, isKeyframe, NULL);
       
       if (frameImage) {
         CGImageRelease(frameImage);
@@ -2937,12 +2937,12 @@ joinalpha(char *mvidFilenameCstr)
   NSUInteger numFramesAlpha = [frameDecoderAlpha numFrames];
   if (numFrames != numFramesAlpha) {
     fprintf(stderr, "RGB movie numFrames %d does not match alpha movie numFrames %d\n",
-            numFrames, numFramesAlpha);
+            (int)numFrames, (int)numFramesAlpha);
     exit(1);
   }
   
-  int width = [frameDecoderRGB width];
-  int height = [frameDecoderRGB height];
+  int width = (int)[frameDecoderRGB width];
+  int height = (int)[frameDecoderRGB height];
   CGSize size = CGSizeMake(width, height);
   
   // Size of Alpha movie must match size of RGB movie
@@ -3018,7 +3018,7 @@ joinalpha(char *mvidFilenameCstr)
         uint32_t pixelAlphaBlue = (pixelAlpha >> 0) & 0xFF;
         
         if (pixelAlphaRed != pixelAlphaGreen || pixelAlphaRed != pixelAlphaBlue) {
-          fprintf(stderr, "Input Alpha MVID input movie R G B components do not match at pixel %d in frame %d\n", pixeli, frameIndex);
+          fprintf(stderr, "Input Alpha MVID input movie R G B components do not match at pixel %d in frame %d\n", (int)pixeli, (int)frameIndex);
           exit(1);
         }
         
@@ -3074,7 +3074,7 @@ joinalpha(char *mvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+    process_frame_file(fileWriter, NULL, (int)frameImage, (int)frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3157,8 +3157,8 @@ mixalpha(char *mvidFilenameCstr)
   
   int bpp = [frameDecoder header]->bpp;
   
-  int width = [frameDecoder width];
-  int height = [frameDecoder height];
+  int width = (int)[frameDecoder width];
+  int height = (int)[frameDecoder height];
   
   if (bpp != 32) {
     fprintf(stderr, "%s\n", "-mixalpha can only be used on a 32BPP MVID movie");
@@ -3237,7 +3237,7 @@ mixalpha(char *mvidFilenameCstr)
       
       BOOL isKeyframe = TRUE;
       
-      process_frame_file(fileWriter, NULL, frameImage, outFrameIndex, mvidFileMetaData, isKeyframe, NULL);
+      process_frame_file(fileWriter, NULL, frameImage, (int)outFrameIndex, mvidFileMetaData, isKeyframe, NULL);
       outFrameIndex++;
       
       if (frameImage) {
@@ -3277,7 +3277,7 @@ mixalpha(char *mvidFilenameCstr)
       
       frameImage = [rgbFrameBuffer createCGImageRef];
       
-      process_frame_file(fileWriter, NULL, frameImage, outFrameIndex, mvidFileMetaData, isKeyframe, NULL);
+      process_frame_file(fileWriter, NULL, frameImage, (int)outFrameIndex, mvidFileMetaData, isKeyframe, NULL);
       outFrameIndex++;
       
       if (frameImage) {
@@ -3379,8 +3379,8 @@ unmixalpha(char *mvidFilenameCstr)
   
   NSUInteger numFrames = [frameDecoderRGB numFrames];
   
-  int width = [frameDecoderRGB width];
-  int height = [frameDecoderRGB height];
+  int width = (int)[frameDecoderRGB width];
+  int height = (int)[frameDecoderRGB height];
   CGSize size = CGSizeMake(width, height);
   
   // If alphaAsGrayscale is TRUE, then emit grayscale RGB values where all the componenets are equal.
@@ -3395,7 +3395,7 @@ unmixalpha(char *mvidFilenameCstr)
   
   // Create output file writer object
   
-  int numOutputFrames = numFrames / 2;
+  int numOutputFrames = (int)numFrames / 2;
   
   AVMvidFileWriter *fileWriter = makeMVidWriter(mvidPath, 32, frameRate, numOutputFrames);
   
@@ -3446,7 +3446,7 @@ unmixalpha(char *mvidFilenameCstr)
         uint32_t pixelAlphaBlue = (pixelAlpha >> 0) & 0xFF;
         
         if (pixelAlphaRed != pixelAlphaGreen || pixelAlphaRed != pixelAlphaBlue) {
-          fprintf(stderr, "Input Alpha MVID input movie R G B components do not match at pixel %d in frame %d\n", pixeli, frameIndex);
+          fprintf(stderr, "Input Alpha MVID input movie R G B components do not match at pixel %d in frame %d\n", (int)pixeli, (int)frameIndex);
           exit(1);
         }
         
@@ -3500,7 +3500,7 @@ unmixalpha(char *mvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex/2, mvidFileMetaData, isKeyframe, NULL);
+    process_frame_file(fileWriter, NULL, frameImage, (int)frameIndex/2, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3603,12 +3603,12 @@ mixstraight(char *rgbMvidFilenameCstr, char *alphaMvidFilenameCstr, char *mixedM
   NSUInteger numFrames2 = [frameDecoderAlpha numFrames];
   
   if (numFrames != numFrames2) {
-    fprintf(stderr, "error:num frames mismatch %d != %d\n", numFrames, numFrames2);
+    fprintf(stderr, "error:num frames mismatch %d != %d\n", (int)numFrames, (int)numFrames2);
     exit(1);
   }
   
-  int width = [frameDecoderRGB width];
-  int height = [frameDecoderRGB height];
+  int width = (int)[frameDecoderRGB width];
+  int height = (int)[frameDecoderRGB height];
   CGSize size = CGSizeMake(width, height);
   
   // If alphaAsGrayscale is TRUE, then emit grayscale RGB values where all the componenets are equal.
@@ -3623,7 +3623,7 @@ mixstraight(char *rgbMvidFilenameCstr, char *alphaMvidFilenameCstr, char *mixedM
   
   // Create output file writer object
   
-  int numOutputFrames = numFrames * 2;
+  int numOutputFrames = (int)numFrames * 2;
   
   AVMvidFileWriter *fileWriter = makeMVidWriter(mixedMvidPath, 24, frameRate, numOutputFrames);
   
@@ -3761,8 +3761,8 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
   
   int bpp = [frameDecoder header]->bpp;
   
-  int width = [frameDecoder width];
-  int height = [frameDecoder height];
+  int width = (int)[frameDecoder width];
+  int height = (int)[frameDecoder height];
   
   // Verify the crop spec info once info from input file is available
 
@@ -3789,12 +3789,12 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
     cropWHInvalid = TRUE;
   }
   
-  int outputX2 = cropX + cropW;
+  int outputX2 = (int)(cropX + cropW);
   if (outputX2 > width) {
     cropWHInvalid = TRUE;
   }
 
-  int outputY2 = cropY + cropH;
+  int outputY2 = (int)(cropY + cropH);
   if (outputY2 > height) {
     cropWHInvalid = TRUE;
   }
@@ -3853,7 +3853,7 @@ cropMvidMovie(char *cropSpecCstr, char *inMvidFilenameCstr, char *outMvidFilenam
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+    process_frame_file(fileWriter, NULL, frameImage, (int)frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -3959,8 +3959,8 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
   
   int bpp = [frameDecoder header]->bpp;
   
-  int width = [frameDecoder width];
-  int height = [frameDecoder height];
+  int width = (int)[frameDecoder width];
+  int height = (int)[frameDecoder height];
   assert(width > 0);
   assert(height > 0);
   
@@ -4027,7 +4027,7 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
       assert(cgFrameBuffer.bitsPerPixel == resizedFrameBuffer.bitsPerPixel);
       assert(cgFrameBuffer.bitsPerPixel > 16); // FIXME later, add 16 BPP support
       
-      int numOutputPixels = resizedFrameBuffer.width * resizedFrameBuffer.height;
+      int numOutputPixels = (int) (resizedFrameBuffer.width * resizedFrameBuffer.height);
       
       uint32_t *inPixels32 = (uint32_t*)cgFrameBuffer.pixels;
       uint32_t *outPixels32 = (uint32_t*)resizedFrameBuffer.pixels;
@@ -4046,7 +4046,7 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
         int inRow = outRow / 2;
         
         // Get the pixel for the row and column this output pixel corresponds to
-        int inOffset = (inRow * cgFrameBuffer.width) + inColumn;
+        int inOffset = (int) ((inRow * cgFrameBuffer.width) + inColumn);
         uint32_t pixel = inPixels32[inOffset];
         
         outPixels32[i] = pixel;
@@ -4080,7 +4080,7 @@ resizeMvidMovie(char *resizeSpecCstr, char *inMvidFilenameCstr, char *outMvidFil
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+    process_frame_file(fileWriter, NULL, frameImage, (int)frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4148,8 +4148,8 @@ fourupMvidMovie(char *inMvidFilenameCstr)
   
   int bpp = [frameDecoder header]->bpp;
   
-  int width = [frameDecoder width];
-  int height = [frameDecoder height];
+  int width = (int) [frameDecoder width];
+  int height = (int) [frameDecoder height];
   assert(width > 0);
   assert(height > 0);
   
@@ -4244,7 +4244,7 @@ fourupMvidMovie(char *inMvidFilenameCstr)
       
       BOOL isKeyframe = TRUE;
       
-      process_frame_file(fileWriter, NULL, qFrameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+      process_frame_file(fileWriter, NULL, qFrameImage, (int)frameIndex, mvidFileMetaData, isKeyframe, NULL);
       
       if (qFrameImage) {
         CGImageRelease(qFrameImage);
@@ -4379,7 +4379,7 @@ upgradeMvidMovie(char *inMvidFilenameCstr, char *optionalMvidFilenameCstr)
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+    process_frame_file(fileWriter, NULL, frameImage, (int)frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4524,7 +4524,7 @@ void printMvidFrameAdler(NSString *mvidFilename)
     for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
       NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
       
-      MVV3Frame *frame = maxvid_v3_file_frame(frameDecoder.mvFrames, frameIndex);
+      MVV3Frame *frame = maxvid_v3_file_frame(frameDecoder.mvFrames, (int)frameIndex);
       assert(frame);
       
       uint32_t currentAdler = frame->adler;
@@ -4551,7 +4551,7 @@ void printMvidFrameAdler(NSString *mvidFilename)
     for (NSUInteger frameIndex = 0; frameIndex < numFrames; frameIndex++) {
       NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
       
-      MVFrame *frame = maxvid_file_frame(frameDecoder.mvFrames, frameIndex);
+      MVFrame *frame = maxvid_file_frame(frameDecoder.mvFrames, (int)frameIndex);
       assert(frame);
       
       uint32_t currentAdler = frame->adler;
@@ -4621,13 +4621,13 @@ void printMvidPixels(NSString *mvidPath)
     }
     
     if (frame.isDuplicate) {
-      fprintf(stdout, "FRAME %d (duplicate)\n", frameIndex+1);
+      fprintf(stdout, "FRAME %d (duplicate)\n", (int)frameIndex+1);
     } else {
-      fprintf(stdout, "FRAME %d\n", frameIndex+1);
+      fprintf(stdout, "FRAME %d\n", (int)frameIndex+1);
       
       // Iterate over the pixel contents of the framebuffer
       
-      int numPixels = cgFrameBuffer.width * cgFrameBuffer.height;
+      int numPixels = (int) (cgFrameBuffer.width * cgFrameBuffer.height);
       
       uint16_t *pixel16Ptr = (uint16_t*)cgFrameBuffer.pixels;
       uint32_t *pixel32Ptr = (uint32_t*)cgFrameBuffer.pixels;
@@ -4734,7 +4734,7 @@ void alphaMapMvid(NSString *inMvidPath,
   
   for (NSString *element in elements) {
     NSArray *singleSpecElements = [element componentsSeparatedByString:@"="];
-    int count = [singleSpecElements count];
+    int count = (int)[singleSpecElements count];
     if (count != 2) {
       fprintf(stderr, "MAPSPEC must contain 1 to N integer elements of the form IN=OUT, got \"%s\"\n", [element UTF8String]);
       exit(1);
@@ -4814,8 +4814,8 @@ void alphaMapMvid(NSString *inMvidPath,
     exit(1);
   }
   
-  int width = [frameDecoder width];
-  int height = [frameDecoder height];
+  int width = (int)[frameDecoder width];
+  int height = (int)[frameDecoder height];
     
   // Writer that will write the RGB values. Note that invoking process_frame_file()
   // will define the output width/height based on the size of the image passed in.
@@ -4868,7 +4868,7 @@ void alphaMapMvid(NSString *inMvidPath,
     // Do mapping logic by iterating over all the pixels in mappedFrameBuffer
     // and then editing the pixels in place if needed.
     
-    int numPixels = mappedFrameBuffer.width * mappedFrameBuffer.height;
+    int numPixels = (int)(mappedFrameBuffer.width * mappedFrameBuffer.height);
     
     uint32_t *pixel32Ptr = (uint32_t*)mappedFrameBuffer.pixels;
     
@@ -4910,7 +4910,7 @@ void alphaMapMvid(NSString *inMvidPath,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+    process_frame_file(fileWriter, NULL, frameImage, (int)frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -4996,7 +4996,7 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
   
   NSUInteger compressedNumFrames = [frameDecoderCompressed numFrames];
   if (numFrames != compressedNumFrames) {
-    fprintf(stderr, "rdelta failed: original mvid contains %d frames while compressed mvid contains %d frames\n", numFrames, compressedNumFrames);
+    fprintf(stderr, "rdelta failed: original mvid contains %d frames while compressed mvid contains %d frames\n", (int)numFrames, (int)compressedNumFrames);
     exit(1);    
   }
   
@@ -5016,11 +5016,11 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
     exit(1);
   }
   
-  int width = [frameDecoderOriginal width];
-  int height = [frameDecoderOriginal height];
+  int width = (int) [frameDecoderOriginal width];
+  int height = (int) [frameDecoderOriginal height];
   
-  int compressedWidth = [frameDecoderCompressed width];
-  int compressedHeight = [frameDecoderCompressed height];
+  int compressedWidth = (int) [frameDecoderCompressed width];
+  int compressedHeight = (int) [frameDecoderCompressed height];
   
   if ((compressedWidth != width) || (compressedHeight != height)) {
     fprintf(stderr, "rdelta failed: original mvid width x height %d x %d while compressed mvid width x height %d x %d\n", width, height, compressedWidth, compressedHeight);
@@ -5144,7 +5144,7 @@ void rdeltaMvidMovie(char *inOriginalMvidPathCstr,
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+    process_frame_file(fileWriter, NULL, frameImage, (int)frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);
@@ -5196,8 +5196,8 @@ flattenMvidMovie(char *inOriginalMvidFilename, char *outFlatPNGFilename)
   
   int bpp = [frameDecoder header]->bpp;
   
-  int width = [frameDecoder width];
-  int height = [frameDecoder height];
+  int width = (int) [frameDecoder width];
+  int height = (int) [frameDecoder height];
   
   // Verify that the input color data has been mapped to the sRGB colorspace.
   
@@ -5208,7 +5208,7 @@ flattenMvidMovie(char *inOriginalMvidFilename, char *outFlatPNGFilename)
   
   // Allocate framebuffer large enought to hold all the output frames in a single image
   
-  int outHeight = height * numFrames;
+  int outHeight = (int)(height * numFrames);
   
   CGFrameBuffer *outFrameBuffer = [CGFrameBuffer cGFrameBufferWithBppDimensions:bpp width:width height:outHeight];
   uint32_t *outPixelsPtr = (uint32_t*)outFrameBuffer.pixels;
@@ -5234,7 +5234,7 @@ flattenMvidMovie(char *inOriginalMvidFilename, char *outFlatPNGFilename)
     
     // Append pixels to outFrameBuffer
     
-    int numBytes = numPixels * sizeof(uint32_t);
+    int numBytes = (int) (numPixels * sizeof(uint32_t));
     memcpy(outPixelsPtr, pixels, numBytes);
     outPixelsPtr += numPixels;
     
@@ -5289,8 +5289,8 @@ unflattenMvidMovie(char *inOriginalMvidFilename, char *inFlatPNGFilename, char *
   
   int bpp = [frameDecoder header]->bpp;
   
-  int width = [frameDecoder width];
-  int height = [frameDecoder height];
+  int width = (int)[frameDecoder width];
+  int height = (int)[frameDecoder height];
   
   // Verify that the input color data has been mapped to the sRGB colorspace.
   
@@ -5315,7 +5315,7 @@ unflattenMvidMovie(char *inOriginalMvidFilename, char *inFlatPNGFilename, char *
   
   // Copy all pixels in input to a framebuffer
   
-  int inHeight = height * numFrames;
+  int inHeight = (int)(height * numFrames);
   
   // Verify height of PNG
 
@@ -5394,7 +5394,7 @@ unflattenMvidMovie(char *inOriginalMvidFilename, char *inFlatPNGFilename, char *
       isKeyframe = TRUE;
     }
     
-    process_frame_file(fileWriter, NULL, frameImage, frameIndex, mvidFileMetaData, isKeyframe, NULL);
+    process_frame_file(fileWriter, NULL, frameImage, (int)frameIndex, mvidFileMetaData, isKeyframe, NULL);
     
     if (frameImage) {
       CGImageRelease(frameImage);

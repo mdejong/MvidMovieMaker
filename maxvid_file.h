@@ -212,7 +212,7 @@ int maxvid_frame_check_max_size(uint32_t width, uint32_t height, int bpp) {
 
 // Check that the W x H for a specific frame fits into a 32 bit word.
 // This size will basically support any rational size, the upper limit
-// is somethign like (4096*10)^2 which is insane.
+// is something like (4096*10)^2 which is insane.
 
 static inline
 int maxvid_v3_frame_check_max_size(uint32_t width, uint32_t height, int bpp) {

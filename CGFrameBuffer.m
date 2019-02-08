@@ -399,8 +399,8 @@ uint16_t abgr_to_rgb15(uint32_t pixel)
     // FIXME: Do something with raw bitmap data
     
     void *bitmapData = [bitmapImage bitmapData];
-    int bytesPerRow = [bitmapImage bytesPerRow];
-    int totalBytesInBuffer = bytesPerRow * self.height;
+    int bytesPerRow = (int)[bitmapImage bytesPerRow];
+    int totalBytesInBuffer = (int)(bytesPerRow * self.height);
     
     assert(totalBytesInBuffer == self.numBytes);
     memcpy(self.pixels, bitmapData, bytesPerRow * self.height);

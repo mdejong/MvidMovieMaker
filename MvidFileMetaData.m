@@ -199,7 +199,7 @@
     
     // Finally we have a deduped list of keys in descending sorted order
     
-    NSLog(@"pixelsSortedByDescendingCount table has %d entries", [pixelsSortedByDescendingCount count]);
+    NSLog(@"pixelsSortedByDescendingCount table has %d entries", (int)[pixelsSortedByDescendingCount count]);
     
     for (NSNumber *pixelKey in pixelsSortedByDescendingCount) {
       NSNumber *countThisPixel = [self.allPixelOccurances objectForKey:pixelKey];
